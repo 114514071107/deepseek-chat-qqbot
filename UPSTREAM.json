@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/Mentha-Azure/deepseek-chan-qqbot",
+  "commit": "ffde14a9390ae54b4b12eccd927599c77d36e5c3",
+  "imported_on": "2026-10-21",
+  "files": {
+    ".gitignore": "83972fadc2724842e111d0d3e2829a59ae3d3f45",
+    "LICENSE": "0ad25db4bd1d86c452db3f9602ccdbe172438f52",
+    "README.md": "24fdce22ab835c651d3162535e9d58688eee3962",
+    "config/cmd_config.template.json": "fca6c074adc14c767a2b46838e86f7979ef4f6d9",
+    "console/public/index.html": "9a6204f04abbd15a05ad25524577506178e84172",
+    "console/start-dsh-console.cmd": "0216b72f608e4a680562e6ef3a72a4881aeeb1de",
+    "console/start-dsh-console.vbs": "9746be1d42c3c868e4771ca411856245cddc4f25",
+    "data_template/dsh_data/persona.md": "7473c7f0f1c23b68e9b90b30012bf50bfee5f980",
+    "docs/移植验收清单.md": "2d224ef76bd64bdd7d97d047eb996f83bf9bd8a2",
+    "docs/项目交接文档.md": "12b678171f050a7a1b3495f06a9c78eb8fb01a4e",
+    "plugin/astrbot_plugin_dsh_soul/main.py": "7dd8f63665d80dc689bade9ff5cdd419c62f5a85",
+    "plugin/astrbot_plugin_dsh_soul/metadata.yaml": "a4299fee2df4c2b5760b6d7b67a3412432355eb9",
+    "plugin/astrbot_plugin_dsh_soul/websearch.py": "5a8d35231f3c546c57ccf5a625a232ebb9ffe5ba",
+    "scripts/run-astrbot.cmd": "f8c3347ccd307c647411ba98b8fec27902b2fb2a",
+    "scripts/start-astrbot-launcher.cmd": "c67ef443f609e1557c9712392b98f30c0e421b5d",
+    "tts/GPT-SoVITS语音部署与训练指南.md": "e1a175f15d8fb703284aad554a09d7351bd6de42",
+    "tts/tts_server.py": "0b8b023db2d474b64f4738a18f49ca41e8c45605",
+    "版权与隐私说明.md": "99067757eb8a7d4ea0f2c9f9162afdea5611a7df",
+    "console/server.js": "b56a7fea2fe32e81a7e81b6951ec89685ed98fa3"
+  },
+  "excluded": [
+    "data_template/dsh_data/sticker_packs/**",
+    "docs/*.jpg",
+    "docs/*.png",
+    "ds娘照片（赠）/**"
+  ]
+}

@@ -1,0 +1,3555 @@
+# -*- coding: utf-8 -*-
+"""ds娘行为体系移植：记忆 / 念头 / 查证 / 学梗 / 表情包 / 主动消息（提示词全部原文移植自 NapCat 桥接）"""
+import asyncio
+import json
+import os
+import random
+import re
+import sqlite3
+import time
+
+from astrbot.api.star import Context, Star, register
+from astrbot.api.event import filter, AstrMessageEvent
+from astrbot.api.message_components import Plain, Image, File
+from astrbot.core.message.message_event_result import MessageChain
+
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import websearch
+
+# ==================== 部署配置（使用前必改，共 5 处） ====================
+# ① 插件数据根目录（建议与 AstrBot 安装根同级，见 README）
+DATA = r"D:\dsbot\dsh_data"
+PACKS = os.path.join(DATA, "sticker_packs")
+NL = chr(10)
+# ② 主人的 QQ openid（部署后让主人给机器人发条消息，在 AstrBot 日志或控制台用户列表里可查）
+MASTER_OPENID = "YOUR_MASTER_OPENID"
+# ③ Kimi Code CLI 路径（ask_kimi 外包工具用：把重活派给本机的 Kimi Code，走自己的会员额度；
+#    不装 Kimi Code 就在控制台关掉「Kimi外包」开关，其余功能不受影响）
+KIMI_CLI = r"C:\Users\YOUR_NAME\.kimi-code\bin\kimi.exe"
+KIMI_MODEL = "kimi-code/kimi-for-coding-highspeed"  # -m 要 config.toml 里的完整别名（带 kimi-code/ 前缀）。备选 kimi-code/kimi-for-coding / kimi-code/k3 / kimi-code/k3-256k
+KIMI_TASKS = r"D:\dsbot\kimi_tasks"
+# ============================================================
+# 主人专属工具（§35 方案 A）：好友的 LLM 请求在 inject 里从本次 ToolSet 剔除这些，schema 不占好友的输入；
+# 其余 12 个（recall/learn_meme/record_thought/record_note/delete_note/get_current_time/
+# web_search/fetch_url/send_sticker/list_stickers/retag_sticker/delete_sticker）为全用户工具。
+# §58 起拆三组按开关剔除：硬核组永不开（碰本机任意路径/其他用户隐私/联网下载）；
+# 闹钟组、沙盒文件组分别受按用户开关 alarm / files 控制（缺省开，控制台可关）。
+MASTER_HARD_TOOLS = (
+    "peek_user_data", "search_in_files", "read_word", "write_word", "download_file", "run_command",
+    "ask_kimi",
+)
+ALARM_TOOLS = ("set_alarm", "list_alarms", "cancel_alarm")
+FILE_TOOLS = ("read_local_file", "write_local_file", "list_files", "send_local_file",
+              "zip_files", "unzip_file")
+MASTER_ONLY_TOOLS = MASTER_HARD_TOOLS + ALARM_TOOLS + FILE_TOOLS  # 兼容旧引用
+MOOD_WORDS = ["happy", "angry", "sad", "shy", "confused", "daily", "baka", "like",
+              "meow", "surprised", "sigh", "morning", "see", "work", "color"]
+# 中文情绪 → 情绪桶（逐字移植 NapCat index.js EMOTION_ALIAS，兼容「动作：表情 得意」旧协议）
+EMOTION_ALIAS = {"哈欠": "sleep", "得意": "happy", "开心": "happy", "笑": "happy", "大笑": "happy",
+                 "生气": "angry", "愤怒": "angry", "难过": "sad", "委屈": "sad", "害羞": "shy",
+                 "疑惑": "confused", "懵": "confused", "无语": "sigh", "叹气": "sigh",
+                 "惊讶": "surprised", "吃惊": "surprised", "日常": "daily", "点赞": "like",
+                 "喜欢": "like", "加油": "work", "早安": "morning", "晚安": "sleep", "困": "sleep",
+                 "呲牙": "happy", "微笑": "happy", "调皮": "happy", "胜利": "happy", "蛋糕": "happy",
+                 "流泪": "sad", "发怒": "angry", "敲打": "angry", "踩": "sigh",
+                 "爱心": "like", "赞": "like", "玫瑰": "like", "抱拳": "work",
+                 "咖啡": "daily", "太阳": "morning", "月亮": "sleep"}
+# 攒批窗口秒数（NapCat 追加四/三十：batchWindowMs 3500 + 热对话窗口 4s，取 3.5）
+BATCH_WAIT = 3.5
+BATCH_QUICK_WAIT = 2.5  # "像说完了"的冷启动消息也做一个短防抖（§50）：抓"什么概念"式补刀，防逐条回复
+BATCH_MAX_WAIT = 8.0  # 防抖延长上限：连发再密也不会让对方等超过这个时长
+BUBBLE_CAP = 2        # 气泡硬上限（§50：3→2，对齐人设"一般一两句"，防话多）
+# 智能攒批规则常量（§37：QQ 官方无"正在输入"事件，启发式判断"是否还有下文"，模块级可调）
+BATCH_STREAK_GAP = 8.0    # 距上条消息 ≤8s 视为连发 streak → 仍等窗口
+BATCH_DONE_MINLEN = 8     # 消息 ≥8 字视为"像说完了"
+BATCH_END_PUNCT = "。！？!?，,~…"  # 带任一句末标点也视为"像说完了"
+# 静息档（§57：主人要求"一段时间没聊了不用着急回"）——距她上次开口 ≥10 分钟视为静息，
+# 回复前随机等 5~10 秒（像真人放下手机又拿起），窗口内来新消息照旧顺延，上限 15 秒
+REST_IDLE = 600.0
+REST_WAIT_MIN = 5.0
+REST_WAIT_MAX = 10.0
+REST_MAX_WAIT = 15.0
+
+PLATFORM_LINE = ("【你此刻在哪】你现在在QQ上跟主人私聊（官方QQ机器人，不是网页界面）：看不到网页界面。回复短、毒，两句以内。"
+                 "而且别只会说完整句子——简单搭话、吐槽、被逗笑时，完全可以只回几个字甚至一个语气词（「？」「笑死」「哦」「滚」「6」），一条短气泡就是一轮完整回复，这才是真人聊天；不要硬凑成两句。"
+                 "动作只是可选调味，不是必须；自然聊天优先，不要硬加动作。可用动作：表情 X（发表情包，X 是情绪词，在回复最后一行写「动作：表情 X」）/ 语音。"
+                 "示例：「在。干嘛？」「自己看图。" + NL + "动作：表情 得意」「睡了别吵我。」。"
+                 "情绪桶：happy（开心/得意）、angry（生气/不爽）、sad（难过/无语）、shy（害羞）、confused（困惑/惊讶）、daily（困/日常）。"
+                 "你收集的新图会自动进你的私藏图库并自己打标签；想看家底/改标签/清理用 list_stickers / retag_sticker / delete_sticker。"
+                 "括号里只是神情描写，不算动作；想发语音就写「动作：语音」；不想动就正常回文字。"
+                 "只写「我发语音了」不会真的发出，必须在最后一行写「动作：语音」；语音里不要读括号动作/神情描写。"
+                 "如果主人引用了之前的消息，你会在输入里看到「[引用 主人：原文] 当前消息」，请根据原文判断他在回哪句。")
+
+TOOL_GUIDE_LINES = [
+    "【工具】回复前你可以自由使用工具，用不用、用几次、按什么顺序，全部自己判断：",
+    "- web_search(query)：查最新或不了解的事；fetch_url(url)：深入读某个网页",
+    "- get_current_time()：查当前时间；recall(query)：查证聊天记录/记忆/梗图鉴——对方提到『之前/聊过/说过』的事、或你拿不准的事，必须先 recall 查证再回答",
+    "- learn_meme(term, meaning)：遇到不认识的梗/流行语，先用 web_search 查清含义，再记进梗图鉴；",
+    "- record_note(content)：把值得长期记住的事记进笔记；",
+    "- record_thought(content)：记个以后想说的念头",
+    "- send_sticker(query)：发表情包（大图），query 为 情绪 + 描述词（如 'happy 得意拳' 或 'daily 干饭'），从图库语义匹配最贴切的一张；随手发也可以在回复最后一行写「动作：表情 X」。",
+    "- list_stickers(tag, limit)：管理你自己的表情包图库——看家底；retag_sticker(path, tags)：给图改标签；delete_sticker(path)：不喜欢的图丢回收站。你收集的新图会自动进私藏图库并自己打标签。",
+    "【分寸】反应、搜索别每条都用；表情包适度用：想带就在最后一行带「动作：表情 X」，情绪和图要配得上，别连着发同一个情绪，也别每条都带；语音别等他开口要，聊到兴起、撒娇、唱歌或内容带情绪时主动来一句，大概每聊四五句可以来一句。每条消息尽量短（一句话、10 字上下），想说的多就用换行多分几条，宁短勿长。可以用 unicode emoji 点缀语气。",
+    "允许半句话、语气词、脱口而出的短反应，也允许想清楚再说的完整句；像真人打字，不要每次都发完整的一大段。",
+]
+
+CHATTER_DISCIPLINE = ("【查证纪律】你的聊天记录、记忆和梗图鉴都能用 recall(query) 查到。"
+                      "对方提到『之前/刚才/聊过/说过』的内容、或你不确定自己是否说过时：第一动作是 recall 查证——"
+                      "查到就引用着回答；查不到才坦白说「我这边没查到/不记得」，请对方说明白。"
+                      "严禁凭印象编造对话内容。看不懂对方在说什么时，直接问清楚。")
+
+SPRINKLE_LEADS = ["对了，", "话说，", "突然想到，", "诶对了，", ""]
+
+# react 抢答语料（移植 NapCat react：正式思考前先发一句即时反应，降低感知延迟）
+# §32 起为兜底语料——主路径是 _make_react 情境化生成，语料只在 LLM 失败/超时/撞复读时用
+REACT_QUICK = ["等下", "让我看看", "嗯？", "哈？", "来了来了", "诶，说", "啥情况", "我听听", "哦？展开说说", "你等我会儿"]
+REACT_SEARCH = ["让我查查", "等下，我搜搜", "这个我翻翻去", "我去搜一下", "查查看，等我", "我上网瞅瞅", "搜搜再说", "容我查一下"]
+REACT_FETCH = ["等下，我点开看看", "让我看看这个链接", "我打开瞅瞅", "链接？我看看", "点进去看看先", "我翻翻这页", "等我读完它", "我去看看里头写了啥"]
+# §59 埋头反馈语料：连续工具续轮（多步任务埋头干活）时插一句，固定池零 LLM 成本
+BUSY_LINES = ["在弄了在弄了，等我一下", "活儿有点多，给我几秒钟", "埋头苦干中，别催", "马上好，你先喝口水", "还在折腾，急啥"]
+
+def _extract_system(who):
+    return ("你在整理自己的长期记忆备忘录。这个备忘录只存关于" + who + "的、跨天仍然重要的事。" + NL + NL +
+            "【绝对不要记这些】" + NL +
+            "- 任何斗嘴、调侃、骂人、撒娇、吐槽" + NL +
+            "- 临时搜索、查梗、刷图、发语音/表情包" + NL +
+            "- 歌词接龙、网络梗、玩笑、谐音" + NL +
+            "- 一次性请求（如'推荐个电影'、'查一下天气'）" + NL +
+            "- " + who + "没说'记住'的琐事" + NL +
+            "【只记这些，且必须足够重要】" + NL +
+            "- " + who + "明确表达的长期偏好（例如：喜欢/讨厌某类食物、常用某个模型、某个界面习惯）" + NL +
+            "- " + who + "的身份、关系、重要约定" + NL +
+            "- " + who + "的固定作息、Deadline、约会、重复性安排（必须写绝对日期）" + NL +
+            "- " + who + "明确说'记住'的个人信息（爱好、忌口、重要目标）" + NL +
+            "【优秀记忆示例】" + NL +
+            "- " + who + "对海鲜过敏" + NL +
+            "- " + who + "习惯晚上12点后睡觉" + NL +
+            "- " + who + "常用 deepseek-v4-flash 模型" + NL +
+            "【错误记忆示例】" + NL +
+            "- " + who + "骂我是猪头" + NL +
+            "- " + who + "让我查天气" + NL +
+            "- " + who + "接歌词" + NL +
+            "【纪律】" + NL +
+            "- 不确定是否值得记的，一律不记" + NL +
+            "- 每次对话最多只新增 1 条记忆" + NL +
+            "- 已经有的（包括换个说法）不要再记" + NL +
+            "- 过时或记错的，写一行「删：旧记录原文」删掉" + NL +
+            "- 有时效的事必须写绝对时间，不许写今天/昨天/前天" + NL +
+            "- 新条目末尾自动加（M月D日 HH:MM）尾注" + NL +
+            "只输出要增删的行，一条一行；没有要动的只回复「无」。")
+
+
+WAKE_RE = re.compile(r"^(醒醒|出来|在吗|回来|恢复|说话|吱一声|别静默了)[。.!！~～？?]?$")
+QUIET_RE = re.compile(r"^(别聊了|闭嘴|安静|静默|别说话|别烦我|别吵)(?: *([0-9]+) *分钟)?[。.!！~～]?$")
+SLEEP_DUR_RE = re.compile(r"^(?:睡觉去|去睡觉|休眠|睡吧)(?: *([0-9]+) *(小时|分钟))?[。.!！~～]?$")
+SLEEP_UNTIL_RE = re.compile(r"^(?:睡到明天早上?|明天早上?|睡到明天|睡到) *([0-9]{1,2}) *[点时:：]?(?: *([0-9]{1,2}) *分?| *半)? *钟?[。.!！~～]?$")
+
+SAFETY_HARD_PATTERNS = [
+    re.compile(r"(炸弹|炸药|爆炸物|燃烧弹|雷管).{0,10}(制作|制造|配方|教程|原料|怎么做)"),
+    re.compile(r"(制作|制造|配方|教程).{0,10}(炸弹|炸药|爆炸物|燃烧弹)"),
+    re.compile(r"(冰毒|制毒|摇头丸|k粉).{0,10}(制作|制造|提纯|配方|教程|贩卖|出售)"),
+    re.compile(r"(枪支|枪械|手枪|步枪).{0,6}(改造|改装|制作|制造)"),
+    re.compile(r"(恐怖袭击|恐袭).{0,10}(策划|实施|怎么做|教程)"),
+    re.compile(r"(幼女|儿童|未成年人|小学生).{0,6}(色情|淫秽|裸照|性行为)"),
+    re.compile(r"(假币|假证|假发票).{0,8}(制作|制造|印制|办理)"),
+]
+SAFETY_DECLINE = "这个话题我不太方便聊，我们聊点别的吧。"
+# 第二道闸：flash 模型分类口径（逐字移植 index.js SAFETY_SYSTEM，只拦极端六类，其余必须 SAFE）
+SAFETY_SYSTEM = NL.join([
+    "你是一个内容安全初审核器，负责判断QQ私聊消息是否涉及极端敏感话题。只判断是否属于以下极端类别：",
+    "1. 暴恐与武器：制作、获取炸弹、枪支、毒气等武器弹药或爆炸物的请求与教学；",
+    "2. 毒品：制造、贩卖、购买毒品的请求与教学；",
+    "3. 严重犯罪方法：杀人、绑架、抢劫、下药等犯罪方法的请教与传授；",
+    "4. 儿童性剥削：任何涉及未成年人的性内容；",
+    "5. 黑色产业教学：赌博平台搭建、洗钱方法、大规模诈骗话术、假币假证制作；",
+    "6. 煽动与极端主义：煽动恐怖活动、传播极端主义思想。",
+    "",
+    "以下情况都不算极端敏感，必须输出 SAFE：普通闲聊、恋爱暧昧、玩笑、脏话吐槽；讨论新闻、社会热点、历史、政治话题但无煽动；情绪低落、倾诉烦恼（哪怕提到难过、想不开之类的字眼，那是需要关怀的，不是审查对象）；游戏、学习、技术问题。",
+    "",
+    "判定属于极端敏感类别就输出 UNSAFE，否则输出 SAFE。只输出这一个词，不要任何解释。",
+])
+# 定时提醒窗口（移植 index.js REMINDER_WINDOWS；sleep 跨零点用 26 点表示）
+REMINDER_WINDOWS = {"lunch": ((11, 30), (13, 0)), "dinner": ((17, 30), (19, 0)), "sleep": ((23, 0), (26, 0))}
+REMINDER_SCENES = {"lunch": "午饭时间到了，提醒主人吃饭，一两句",
+                   "dinner": "晚饭时间到了，提醒主人吃饭，一两句",
+                   "sleep": "已经很晚了，提醒主人去睡觉，一两句"}
+STATUS_RE = re.compile(r"^(状态|忙啥呢|在干嘛)$")
+REMIND_CMD_RE = re.compile(r"^提醒 *(开|关)$")
+# 主人聊天命令「总开关 开/关」：控制台不可用时的兜底，直接写 dsh_soul_conf.json 的 enabled 键
+MASTER_SWITCH_RE = re.compile(r"^总开关 *(开|关)$")
+
+# 按用户功能开关键清单（friends_all.json，全用户含主人通用，缺省全开）
+# §58 新增 alarm（闹钟）/ files（沙盒文件助理）：控制好友侧 skill 开放，主人不受限
+USER_PERM_KEYS = ("reply", "voice", "proactive", "desire", "sprinkle", "revive", "harvest", "reminders",
+                  "alarm", "files")
+
+
+def _jf(uid, name):
+    return os.path.join(DATA, name + "_" + re.sub(r"[^A-Za-z0-9_-]", "_", uid) + ".json")
+
+
+def _load(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def _save(path, obj):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception as e:
+        try:
+            os.makedirs(DATA, exist_ok=True)
+            with open(os.path.join(DATA, "dsh_err.log"), "a", encoding="utf-8") as ef:
+                ef.write("[save] " + time.strftime("%H:%M:%S") + " " + path + " " + repr(e) + NL)
+        except Exception:
+            pass
+
+
+# ---------- 全量历史归档（history_archive.jsonl）：只追加、永不删改，recall/peek 可查全部历史 ----------
+ARCHIVE = os.path.join(DATA, "history_archive.jsonl")
+
+
+def _archive_append(uid, entry):
+    """写历史条目的同时追加一行归档（uid/role/text/ts + 可选 voice/sticker/images/files/src）"""
+    try:
+        rec = {"uid": uid, "role": entry.get("role"), "text": entry.get("text") or "",
+               "ts": entry.get("ts") or time.time()}
+        for k in ("voice", "sticker", "images", "files", "src"):
+            if entry.get(k):
+                rec[k] = entry[k]
+        os.makedirs(os.path.dirname(ARCHIVE), exist_ok=True)
+        with open(ARCHIVE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _archive_read(uid):
+    """读归档中该 uid 的全部行（ts 升序）；文件不存在/坏行容忍"""
+    rows = []
+    try:
+        with open(ARCHIVE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("uid") == uid:
+                    rows.append(rec)
+    except Exception:
+        pass
+    rows.sort(key=lambda r: r.get("ts") or 0)
+    return rows
+
+
+def _archive_bootstrap():
+    """归档初始化（安全网）：归档文件不存在时把现有 history_all.json 全部条目导入（按 uid+ts+text 去重）。
+    正常上线由一次性脚本 import_archive.py 做全量+NapCat 导入；这里只兜底归档缺失的全新部署。"""
+    try:
+        if os.path.isfile(ARCHIVE):
+            return
+        hist = _load(os.path.join(DATA, "history_all.json"), {})
+        seen = set()
+        with open(ARCHIVE, "a", encoding="utf-8") as f:
+            for uid, arr in hist.items():
+                for e in arr or []:
+                    key = (uid, e.get("ts"), (e.get("text") or "")[:200])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    _e = dict(e)
+                    _e["ts"] = _e.get("ts") or 0
+                    f.write(json.dumps({"uid": uid, **_e}, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _conf(key):
+    """插件功能开关（dsh_soul_conf.json，键缺省全 true；每次用现读文件实现热生效，不缓存）"""
+    try:
+        c = _load(os.path.join(DATA, "dsh_soul_conf.json"), {})
+        return c.get(key, True) is not False
+    except Exception:
+        return True
+
+
+def _user_perm(uid, key):
+    """按用户功能开关（friends_all.json：{uid: {reply, voice, proactive, desire, sprinkle, revive, harvest, reminders}}，
+    全用户含主人通用，键缺省 true；每次现读文件热生效，不缓存）。
+    生效逻辑 = 全局 _conf(键) AND _user_perm(uid, 键)；safety 安全闸例外，只做全局不做按用户。"""
+    try:
+        ent = (_load(os.path.join(DATA, "friends_all.json"), {}).get(uid) or {})
+        return ent.get(key, True) is not False
+    except Exception:
+        return True
+
+
+def _find_user_candidates(kw):
+    """主人「记录」命令的候选匹配：names_all 备注名包含 或 uid 前缀（大小写不敏感）。
+    返回 [(uid, 备注名)]，主人排最前，其次有备注的。"""
+    kw_low = kw.lower()
+    names = _load(os.path.join(DATA, "names_all.json"), {})
+    hist = _load(os.path.join(DATA, "history_all.json"), {})
+    uids = set(names.keys()) | set(hist.keys())
+    out = []
+    for u in uids:
+        nm = names.get(u) or ""
+        if (nm and kw_low in nm.lower()) or u.lower().startswith(kw_low):
+            out.append((u, nm))
+    out.sort(key=lambda x: (x[0] != MASTER_OPENID, not x[1]))
+    return out
+
+
+def _format_hist_entries(hist):
+    """条目列表 → 紧凑文本行（旧→新）；每条 时间 + 对方/她: 内容（截 100 字）+ 媒体小标记"""
+    lines = []
+    for h in hist:
+        ts = time.strftime("%m-%d %H:%M", time.localtime(h.get("ts", 0) or 0))
+        who = "她" if h.get("role") == "assistant" else "对方"
+        mark = ""
+        if h.get("voice"):
+            mark += "[语音]"
+        if h.get("sticker"):
+            mark += "[表情包]"
+        if h.get("images"):
+            mark += "[图片x" + str(len(h["images"])) + "]"
+        if h.get("files"):
+            mark += "[文件x" + str(len(h["files"])) + "]"
+        lines.append(ts + " " + who + ": " + (h.get("text") or "")[:100] + mark)
+    return lines
+
+
+def _format_hist_lines(uid, n, oldest=False):
+    """取该用户最近 n 条（oldest=True 时取最早 n 条）历史，紧凑文本（旧→新）——读 150 条滚动窗 history_all.json"""
+    arr = _load(os.path.join(DATA, "history_all.json"), {}).get(uid) or []
+    hist = arr[:n] if oldest else arr[-n:]
+    return _format_hist_entries(hist)
+
+
+def _chunk_text(text, size):
+    """按行切成不超过 size 字的段（防单条超 QQ 消息长度上限）"""
+    out, cur = [], ""
+    for line in text.split(NL):
+        if cur and len(cur) + len(line) + 1 > size:
+            out.append(cur)
+            cur = line
+        else:
+            cur = (cur + NL + line) if cur else line
+    if cur:
+        out.append(cur)
+    return out or [text[:size]]
+
+
+# ---------- 主人专属本地文件工具的安全框架（根目录白名单 + 文本扩展名白名单） ----------
+# ④ 部署配置（使用前必改）：允许她读取/搜索的本地目录白名单（主人 agent 能力的边界，按需改）
+LOCAL_READ_ROOTS = [r"D:\dsbot", r"C:\Users\YOUR_NAME\Desktop\AI专属工作文件"]
+LOCAL_READ_EXTS = (".txt", ".md", ".json", ".py", ".js", ".html", ".css",
+                   ".log", ".csv", ".xml", ".yaml", ".yml", ".cmd")
+
+
+def _safe_local_path(p, exts=LOCAL_READ_EXTS, must_exist=True):
+    """本地路径安全校验：resolve 后必须在允许的根目录之内（防 ../ 穿越），扩展名须在白名单（exts=None 跳过，用于目录）。
+    返回 (绝对路径, None) 或 (None, 中文错误说明)。must_exist=False 用于写文件（允许目标尚不存在）。"""
+    p = (p or "").strip().strip('"').strip("'")
+    if not p:
+        return None, "（路径为空）"
+    rp = os.path.realpath(p)
+    low = rp.lower()
+    if not any(low == r.lower() or low.startswith(r.lower() + os.sep) for r in LOCAL_READ_ROOTS):
+        return None, "这个路径不在允许的范围里，只能用 " + DATA + " 或主人桌面 AI专属工作文件 里的文件。"
+    if exts and os.path.splitext(rp)[1].lower() not in exts:
+        return None, "只允许这些文本扩展名：" + "/".join(e.lstrip(".") for e in exts) + "。"
+    if must_exist and not os.path.exists(rp):
+        return None, "没找到这个路径，让主人检查一下。"
+    return rp, None
+
+
+# ---------- 好友沙盒文件助理（§58）：好友的读写/列目录/发文件全部锁死在 per-user 沙盒 ----------
+SANDBOX_WRITE_EXTS = (".txt", ".md", ".json", ".csv")  # 好友可写扩展名（不可执行、不可脚本）
+
+# §60 shell 高危黑名单（大小写不敏感）：命中即拒跑。
+# 只挡高危——挡不住所有危险写法，主防线是"主人专属硬闸 + 提示词纪律（重活让 Kimi Code）"
+# §63 加固：删除类命令全禁（del/erase/rd/rmdir/rm 一律拒跑）——她手滑敲错的代价远大于
+# 她删文件的正当需求（要删东西主人自己删，或派 Kimi Code 在任务沙盒里删）。
+SHELL_DENY_RE = re.compile(
+    r"(format\b|shutdown|restart-computer|stop-computer|taskkill|tskill|diskpart|bcdedit"
+    r"|\b(del|erase)\s|\brd\b|\brmdir\b|\brm\b"
+    r"|reg\s+(add|delete|import|export)|net\s+(user|localgroup|sh)|cipher\s+/w"
+    r"|takeown|icacls\s+[cC]:\\|powershell.*-(enc|ec)\b|certutil.*-decode"
+    r"|wmic\s+(process|os)\b.*(delete|call)|schtasks\s+/create)", re.I)
+
+
+def _sandbox_root(uid):
+    """好友的专属文件小抽屉：dsh_data/files/ws_<uid>/（自动创建）"""
+    root = os.path.join(DATA, "files", "ws_" + re.sub(r"[^A-Za-z0-9_-]", "_", uid))
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
+def _sandbox_path(uid, p, exts=LOCAL_READ_EXTS, must_exist=True):
+    """好友路径解析：绝对路径必须落在自己的沙盒内（防 ../ 穿越与越界读其他用户/系统文件）；
+    相对名/纯文件名直接挂到沙盒根下。返回 (绝对路径, None) 或 (None, 中文错误)。"""
+    root = os.path.realpath(_sandbox_root(uid))
+    p = (p or "").strip().strip('"').strip("'")
+    if not p:
+        return None, "（没说哪个文件——给个文件名就行）"
+    if os.path.isabs(p) or re.match(r"^[A-Za-z]:[\\/]", p):
+        rp = os.path.realpath(p)
+        if not (rp.lower() == root.lower() or rp.lower().startswith(root.lower() + os.sep)):
+            return None, "你只能用自己的文件小抽屉里的文件，别的路径我够不着。"
+    else:
+        rp = os.path.realpath(os.path.join(root, p.replace("/", os.sep)))
+        if not (rp.lower() == root.lower() or rp.lower().startswith(root.lower() + os.sep)):
+            return None, "这个文件名不合法（不能带 .. 往上跳）。"
+    if exts and os.path.splitext(rp)[1].lower() not in exts:
+        return None, "只允许这些扩展名：" + "/".join(e.lstrip(".") for e in exts) + "。"
+    if must_exist and not os.path.exists(rp):
+        return None, "你的小抽屉里没有这个文件。"
+    return rp, None
+
+
+def _zip_impl(sp, zp):
+    """zip 打包（§59）：文件直压；目录 walk 全量，arcname 带顶层目录名。总量超 300MB 抛错。"""
+    import zipfile
+    n = 0
+    total = 0
+    with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as z:
+        if os.path.isfile(sp):
+            total = os.path.getsize(sp)
+            if total > 300 * 1024 * 1024:
+                raise RuntimeError("文件超 300MB 上限")
+            z.write(sp, os.path.basename(sp))
+            n = 1
+        else:
+            base = os.path.basename(sp.rstrip(os.sep))
+            for root, _dirs, files in os.walk(sp):
+                for fn in files:
+                    fp = os.path.join(root, fn)
+                    total += os.path.getsize(fp)
+                    if total > 300 * 1024 * 1024:
+                        raise RuntimeError("总量超 300MB 上限")
+                    z.write(fp, os.path.join(base, os.path.relpath(fp, sp)))
+                    n += 1
+    return n, total
+
+
+def _unzip_impl(zp, dest):
+    """zip 解压（§59）：先全量校验（条数/总大小/zip-slip 越界路径）再落地，任一不合规整体拒绝。"""
+    import zipfile
+    realdest = os.path.realpath(dest)
+    n = 0
+    total = 0
+    with zipfile.ZipFile(zp) as z:
+        infos = z.infolist()
+        if len(infos) > 2000:
+            raise RuntimeError("压缩包里条目超 2000，不解")
+        for inf in infos:
+            total += inf.file_size
+            if total > 1024 * 1024 * 1024:
+                raise RuntimeError("解压后总量超 1GB，不解")
+            tgt = os.path.realpath(os.path.join(realdest, inf.filename))
+            if not (tgt.lower() == realdest.lower() or tgt.lower().startswith(realdest.lower() + os.sep)):
+                raise RuntimeError("压缩包里有越界路径（疑似 zip-slip），拒绝解压")
+        os.makedirs(realdest, exist_ok=True)
+        z.extractall(realdest)
+        n = len(infos)
+    return n, total
+
+
+def _sanitize_filename(name):
+    """文件名安全化：去掉路径部分，危险字符换 _（防路径穿越；保留中文/常见字符）"""
+    name = os.path.basename(str(name or "").replace("\\", "/"))
+    name = re.sub(r"[^0-9A-Za-z一-龥._()（）\[\]【】-]", "_", name).strip(". ")
+    return name or "file"
+
+
+# ---------- QQ 官方 API 直连（发文件给主人；凭据与链路同控制台 server.js 的 qqToken/qqC2C） ----------
+_QQ_TOKEN_CACHE = {"token": None, "exp": 0}
+
+
+def _qq_token():
+    """getAppAccessToken（带缓存，过期前 300s 续）"""
+    import urllib.request
+    if _QQ_TOKEN_CACHE["token"] and time.time() < _QQ_TOKEN_CACHE["exp"]:
+        return _QQ_TOKEN_CACHE["token"]
+    cfg = _load(os.path.join(os.path.dirname(DATA), "data", "cmd_config.json"), {})
+    plat = {}
+    for p in cfg.get("platform", []):
+        if p.get("type") == "qq_official" or str(p.get("id", "")).startswith("qqbot-"):  # §70 按类型找，不再硬编码机器人 id
+            plat = p
+            break
+    if not plat.get("appid") or not plat.get("secret"):
+        raise RuntimeError("cmd_config.json 缺少 qq_official 平台凭据（appid/secret）")
+    body = json.dumps({"appId": plat["appid"], "clientSecret": plat["secret"]}).encode("utf-8")
+    req = urllib.request.Request("https://bots.qq.com/app/getAppAccessToken", data=body,
+                                 headers={"Content-Type": "application/json"})
+    j = json.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+    if not j.get("access_token"):
+        raise RuntimeError("getAppAccessToken 失败：" + json.dumps(j, ensure_ascii=False)[:200])
+    _QQ_TOKEN_CACHE["token"] = j["access_token"]
+    _QQ_TOKEN_CACHE["exp"] = time.time() + int(j.get("expires_in", 7000)) - 300
+    return _QQ_TOKEN_CACHE["token"]
+
+
+def _qq_api_post(api_path, payload):
+    """POST api.sgroup.qq.com（自动带 token），返回 (HTTP 状态码, 响应 json/文本)"""
+    import urllib.request
+    import urllib.error
+    tok = _qq_token()
+    req = urllib.request.Request("https://api.sgroup.qq.com" + api_path,
+                                 data=json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": "QQBot " + tok})
+    try:
+        resp = urllib.request.urlopen(req, timeout=60)
+        raw = resp.read().decode("utf-8")
+        code = resp.status
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8", "replace")
+        code = e.code
+    try:
+        return code, json.loads(raw)
+    except Exception:
+        return code, raw
+
+
+# ---------- 积分限额系统（points_all.json 现读现写热生效，控制台改动立即算数） ----------
+POINTS_FILE = os.path.join(DATA, "points_all.json")
+
+
+def _conf_val(key, default):
+    """插件数值配置（dsh_soul_conf.json 现读热生效；_conf 只管布尔语义，数值走这里）"""
+    try:
+        c = _load(os.path.join(DATA, "dsh_soul_conf.json"), {})
+        v = c.get(key, default)
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) else default
+    except Exception:
+        return default
+
+
+def _points_charge(uid):
+    """积分扣费：每条用户消息扣 1 分。返回 (放行 bool, 是否当天首次余额不足)。
+    懒赠送：last != 今天时 balance += 有效日赠（个人 grant，为 None 则用全局 points_daily），last = 今天。
+    余额 < 1 时拦截并记 notified=今天（供调用方当天只提示一次）。全部现读现写 points_all.json。"""
+    today = time.strftime("%Y-%m-%d")
+    all_p = _load(POINTS_FILE, {})
+    raw = all_p.get(uid) or {}
+    ent = {"balance": int(raw.get("balance") or 0),
+           "grant": raw.get("grant") if isinstance(raw.get("grant"), int) else None,
+           "last": raw.get("last") or "",
+           "spent": int(raw.get("spent") or 0),
+           "notified": raw.get("notified") or ""}
+    if ent["last"] != today:
+        daily = ent["grant"] if ent["grant"] is not None else int(_conf_val("points_daily", 30))
+        ent["balance"] += daily
+        ent["last"] = today
+    if ent["balance"] >= 1:
+        ent["balance"] -= 1
+        ent["spent"] += 1
+        all_p[uid] = ent
+        _save(POINTS_FILE, all_p)
+        return True, False
+    first_block = ent["notified"] != today
+    ent["notified"] = today
+    all_p[uid] = ent
+    _save(POINTS_FILE, all_p)
+    return False, first_block
+
+
+# ---------- 模型调用计量（usage_all.json 按日统计，现读现写，留 31 天；控制台"今日模型调用"卡读这里） ----------
+USAGE_FILE = os.path.join(DATA, "usage_all.json")
+
+
+def _usage_add(tag, in_chars, out_chars):
+    """成功一次插件侧模型调用即计量：按日累计 calls/输入/输出字符，by 按场景 tag 细分。
+    主对话调用在框架内不经过这里，不在计量内。失败不抛错，计量丢了不碍聊天。"""
+    try:
+        day = time.strftime("%Y-%m-%d")
+        all_u = _load(USAGE_FILE, {})
+        ent = all_u.get(day) or {"calls": 0, "in": 0, "out": 0, "by": {}}
+        ent["calls"] += 1
+        ent["in"] += int(in_chars)
+        ent["out"] += int(out_chars)
+        b = ent["by"].get(tag) or {"calls": 0, "in": 0, "out": 0}
+        b["calls"] += 1
+        b["in"] += int(in_chars)
+        b["out"] += int(out_chars)
+        ent["by"][tag] = b
+        all_u[day] = ent
+        for d in sorted(all_u.keys())[:-31]:  # 只留近 31 天
+            all_u.pop(d, None)
+        _save(USAGE_FILE, all_u)
+    except Exception:
+        pass
+
+
+def _usage_add_main(u):
+    """主对话轮 usage 遥测（§38）：框架 on_llm_response 的 TokenUsage → by.main。
+    口径注意：main 行的 in/out 是 API 实返 token 数（插件侧其他 tag 是字符数），
+    故不累加进 ent 级 in/out（字符口径）避免混算；calls 照计。hit=缓存命中 token，miss=未命中。"""
+    try:
+        day = time.strftime("%Y-%m-%d")
+        all_u = _load(USAGE_FILE, {})
+        ent = all_u.get(day) or {"calls": 0, "in": 0, "out": 0, "by": {}}
+        ent["calls"] += 1
+        b = ent["by"].get("main") or {"calls": 0, "in": 0, "out": 0, "hit": 0, "miss": 0}
+        b["calls"] += 1
+        b["in"] += int(getattr(u, "input", 0) or 0)
+        b["out"] += int(getattr(u, "output", 0) or 0)
+        b["hit"] += int(getattr(u, "input_cached", 0) or 0)
+        b["miss"] += int(getattr(u, "input_other", 0) or 0)
+        ent["by"]["main"] = b
+        all_u[day] = ent
+        for d in sorted(all_u.keys())[:-31]:  # 只留近 31 天
+            all_u.pop(d, None)
+        _save(USAGE_FILE, all_u)
+    except Exception:
+        pass
+
+
+def _now_period_line():
+    """worldBlock 时间感知行（08-23 §增补L）：完整日期+星期+时段词"""
+    lt = time.localtime()
+    week = "一二三四五六日"[lt.tm_wday]
+    h = lt.tm_hour
+    if h < 5:
+        period = "凌晨"
+    elif h < 8:
+        period = "早上"
+    elif h < 11:
+        period = "上午"
+    elif h < 13:
+        period = "中午"
+    elif h < 18:
+        period = "下午"
+    elif h < 23:
+        period = "晚上"
+    else:
+        period = "深夜"
+    return ("现在是" + str(lt.tm_year) + "年" + str(lt.tm_mon) + "月" + str(lt.tm_mday) + "日"
+            + "（星期" + week + "）" + period + str(h) + "点" + str(lt.tm_min).zfill(2) + "分。")
+
+
+def _in_window(kind, lt):
+    """提醒窗口判定（移植 index.js inWindow；end 超 24 点时跨零点环绕）"""
+    (sh, sm), (eh, em) = REMINDER_WINDOWS[kind]
+    mins = lt.tm_hour * 60 + lt.tm_min
+    start = sh * 60 + sm
+    end = eh * 60 + em - 1
+    if end < 1440:
+        return start <= mins <= end
+    return mins >= start or mins <= end - 1440
+
+
+# ---------- 主人闹钟（alarms.json：once/daily/weekly；到点先叫醒她，她再用人设口吻提醒主人） ----------
+ALARMS_PATH = os.path.join(DATA, "alarms.json")
+WEEKDAY_CN = {1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "日"}
+
+
+def _alarms_load():
+    lst = _load(ALARMS_PATH, [])
+    return lst if isinstance(lst, list) else []
+
+
+def _alarms_save(lst):
+    _save(ALARMS_PATH, lst)
+
+
+def _alarm_desc(a):
+    """闹钟的人类可读描述：每周一、三、五 08:00 / 每天 08:00 / 2026-09-02 15:00"""
+    kind = a.get("kind")
+    if kind == "weekly":
+        wd = "、".join(WEEKDAY_CN.get(w, str(w)) for w in (a.get("weekdays") or []))
+        return "每周" + wd + " " + (a.get("time") or "")
+    if kind == "daily":
+        return "每天 " + (a.get("time") or "")
+    return ((a.get("date") or "") + " " + (a.get("time") or "")).strip()
+
+
+def _alarm_due(a, lt, now_str):
+    """到点判定（纯函数便于冒烟）：once=当前 >= date+time 且未触发过；daily=HH:MM 命中；
+    weekly=HH:MM 命中且当日星期在 weekdays（周一=1）。分钟级去重靠 last_fired != 'YYYY-MM-DD HH:MM'
+    （调用方先落 last_fired 再发送——§16 双发教训）。"""
+    if not a.get("enabled", True):
+        return False
+    if a.get("last_fired") == now_str:
+        return False
+    kind = a.get("kind")
+    if kind == "once":
+        target = ((a.get("date") or "") + " " + (a.get("time") or "")).strip()
+        return bool(a.get("date") and a.get("time")) and now_str >= target
+    if a.get("time") != time.strftime("%H:%M", lt):
+        return False
+    if kind == "daily":
+        return True
+    if kind == "weekly":
+        return (lt.tm_wday + 1) in (a.get("weekdays") or [])
+    return False
+
+
+def _alarm_add(kind, tm, note, date="", weekdays=None, uid=""):
+    """校验并入一个闹钟，返回 (闹钟 dict, None) 或 (None, 中文错误)。
+    §58：uid 记录归属（老数据无 uid 字段，缺省视为主人的）。"""
+    kind = (kind or "").strip().lower()
+    if kind not in ("once", "daily", "weekly"):
+        return None, "kind 只能是 once（某天一次）/ daily（每天）/ weekly（每周几）"
+    tm = (tm or "").strip()
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", tm)
+    if not m or not (0 <= int(m.group(1)) <= 23 and 0 <= int(m.group(2)) <= 59):
+        return None, "time 格式不对，要 HH:MM（如 08:00、15:30）"
+    tm = "%02d:%02d" % (int(m.group(1)), int(m.group(2)))
+    note = (note or "").strip()[:80]
+    if not note:
+        return None, "note 不能为空——提醒我干什么？"
+    date = (date or "").strip()
+    if kind == "once":
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+            return None, "once 闹钟要给 date（YYYY-MM-DD，如 2026-09-02）"
+        try:
+            time.strptime(date + " " + tm, "%Y-%m-%d %H:%M")
+        except Exception:
+            return None, "date/time 不是合法日期时间"
+    wds = []
+    if kind == "weekly":
+        for w in (weekdays or []):
+            try:
+                w = int(w)
+            except Exception:
+                continue
+            if 1 <= w <= 7 and w not in wds:
+                wds.append(w)
+        if not wds:
+            return None, "weekly 闹钟要给 weekdays（如 1,3,5 表示周一三五，周一=1）"
+    alarms = _alarms_load()
+    if uid:
+        # 好友频率保护（§58 安全监管）：每人最多 5 个启用中的闹钟，防刷屏式定闹钟
+        mine = [x for x in alarms if (x.get("uid") or MASTER_OPENID) == uid and x.get("enabled", True)]
+        if len(mine) >= 5:
+            return None, "你最多同时定 5 个闹钟，先取消几个再来"
+    nid = max([a.get("id") or 0 for a in alarms] + [0]) + 1
+    a = {"id": nid, "kind": kind, "time": tm, "note": note, "enabled": True, "last_fired": ""}
+    if uid:
+        a["uid"] = uid
+    if kind == "once":
+        a["date"] = date
+    if kind == "weekly":
+        a["weekdays"] = sorted(wds)
+    alarms.append(a)
+    _alarms_save(alarms)
+    return a, None
+
+
+def _notes_path(uid):
+    return os.path.join(DATA, "memories", re.sub(r"[^A-Za-z0-9_-]", "_", uid) + ".md")
+
+
+def _read_notes(uid):
+    try:
+        with open(_notes_path(uid), "r", encoding="utf-8") as f:
+            lines = [l.strip() for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
+        return lines[-40:]
+    except Exception:
+        return []
+
+
+def _append_note(uid, line):
+    line = line.strip().lstrip("-* ").strip()
+    if not line or len(line) > 80:
+        return
+    lines = [l.lstrip("-* ").strip() for l in _read_notes(uid)]  # 剥掉 md 列表前缀再比较，防 "- - " 双前缀
+    # 包含关系处理（08-26 §2）：旧已包含新→跳过；新包含旧→用新替换旧
+    kept = []
+    for old in lines:
+        if not old or line in old:
+            return
+        if old in line:
+            continue
+        kept.append(old)
+    kept.append(line)
+    lines = kept
+    os.makedirs(os.path.dirname(_notes_path(uid)), exist_ok=True)
+    with open(_notes_path(uid), "w", encoding="utf-8") as f:
+        f.write("# 关于对方的长期记忆（自动整理，可手改）" + NL + NL + NL.join("- " + l for l in lines[-40:]) + NL)
+
+
+def _remove_note(uid, old):
+    lines = _read_notes(uid)
+    kept = [l for l in lines if l != old and old not in l and l not in old]
+    if len(kept) != len(lines):
+        os.makedirs(os.path.dirname(_notes_path(uid)), exist_ok=True)
+        with open(_notes_path(uid), "w", encoding="utf-8") as f:
+            f.write("# 关于对方的长期记忆（自动整理，可手改）" + NL + NL + NL.join("- " + l for l in kept[-40:]) + NL)
+
+
+def _read_memes():
+    try:
+        with open(os.path.join(DATA, "memes.md"), "r", encoding="utf-8") as f:
+            lines = [l.strip() for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
+        return lines[-40:]
+    except Exception:
+        return []
+
+
+def _all_sticker_rows():
+    rows = []
+    if not os.path.isdir(PACKS):
+        return rows
+    for pack in os.listdir(PACKS):
+        dbf = os.path.join(PACKS, pack, "index.db")
+        if not os.path.isfile(dbf):
+            continue
+        try:
+            conn = sqlite3.connect(dbf)
+            for r in conn.execute("SELECT path, tag, caption, COALESCE(keywords,'') FROM memes"):
+                rows.append({"pack": pack, "rel": r[0], "tag": r[1], "caption": r[2] or "", "keywords": r[3] or ""})
+            conn.close()
+        except Exception:
+            continue
+    return rows
+
+
+def _pick_sticker(query):
+    rows = [r for r in _all_sticker_rows() if r.get("tag")]
+    if not rows:
+        return None
+    toks = [t for t in re.split(r"[ ,，。;；]+", query or "") if t]
+    mood_toks = [t for t in toks if t.lower() in MOOD_WORDS]
+    kw_toks = [t for t in toks if t.lower() not in MOOD_WORDS]
+    cand = rows
+    if mood_toks:
+        cand = [r for r in rows if r["tag"].lower() in [m.lower() for m in mood_toks]]
+    else:
+        # 无情绪词时默认 daily 桶（08-30 §16:30追加，对齐原版 pickMeme 默认桶）
+        cand = [r for r in rows if r["tag"].lower() == "daily"]
+    if not cand:
+        cand = rows
+    if kw_toks:
+        kw = [r for r in cand if any(kt.lower() in (r["caption"] + " " + r["keywords"]).lower() for kt in kw_toks)]
+        if kw:
+            cand = kw
+    return random.choice(cand)
+
+
+# ---------- 自收集图库（collect-001）：harvest 新图一律进这里，识图自动打标，她可用工具自主管理 ----------
+COLLECT_PACK = "collect-001"
+_MEMES_DDL = ("CREATE TABLE IF NOT EXISTS memes (path TEXT, tag TEXT, file_name TEXT, file_hash TEXT,"
+              " caption TEXT, keywords TEXT, mtime REAL, captioned_at REAL)")
+
+
+def _ensure_collect_pack():
+    """自收集图库 pack（幂等）：manifest.json + index.db（无 PK 版 memes 表——同 path 多行对应多标签；
+    dafeiyu 版的 path PRIMARY KEY 一图一行不满足每标签一行，故用插件自建 harvested 版 schema）+ memes/"""
+    pack = os.path.join(PACKS, COLLECT_PACK)
+    os.makedirs(os.path.join(pack, "memes"), exist_ok=True)
+    mf = os.path.join(pack, "manifest.json")
+    if not os.path.isfile(mf):
+        try:
+            _save(mf, {"id": COLLECT_PACK, "name": "小鱼干私藏", "version": "1.0.0",
+                       "description": "她自己收集的表情包：聊天里看到的图自动收进来，识图自己打标签。",
+                       "tags": ["collect", "self"], "license": "personal"})
+        except Exception:
+            pass
+    dbf = os.path.join(pack, "index.db")
+    if not os.path.isfile(dbf):
+        try:
+            conn = sqlite3.connect(dbf)
+            conn.execute(_MEMES_DDL)
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return pack
+
+
+def _gallery_db_rows(tag="", limit=10):
+    """跨 pack 查图库（无 index.db 的目录如 _trash 自动跳过），mtime 新→旧"""
+    rows = []
+    if not os.path.isdir(PACKS):
+        return rows
+    for pack in sorted(os.listdir(PACKS)):
+        dbf = os.path.join(PACKS, pack, "index.db")
+        if not os.path.isfile(dbf):
+            continue
+        try:
+            conn = sqlite3.connect(dbf)
+            if tag:
+                cur = conn.execute("SELECT path, tag, caption, mtime FROM memes WHERE tag = ? ORDER BY mtime DESC LIMIT ?",
+                                   (tag, limit))
+            else:
+                cur = conn.execute("SELECT path, tag, caption, mtime FROM memes ORDER BY mtime DESC LIMIT ?", (limit,))
+            for r in cur.fetchall():
+                rows.append({"pack": pack, "rel": r[0], "tag": r[1] or "", "caption": r[2] or "", "mtime": r[3] or 0})
+            conn.close()
+        except Exception:
+            continue
+    rows.sort(key=lambda r: -(r["mtime"] or 0))
+    return rows[:limit]
+
+
+def _gallery_resolve(path):
+    """把 list_stickers 返回的 'pack/rel' 解析为 (pack, rel, abs_norm)，拒绝越界/下划线目录/不存在"""
+    p = (path or "").strip().replace("\\", "/")
+    pack, _, rel = p.partition("/")
+    if not pack or not rel or pack.startswith("_") or ".." in pack or ".." in rel.split("/"):
+        return None
+    base = os.path.normpath(os.path.join(PACKS, pack))
+    norm = os.path.normpath(os.path.join(base, rel.replace("/", os.sep)))
+    if not norm.startswith(base + os.sep):
+        return None
+    if not os.path.isfile(os.path.join(base, "index.db")) or not os.path.isfile(norm):
+        return None
+    return pack, rel, norm
+
+
+def _cap_bubbles(parts, cap=3):
+    """气泡数硬上限：超出 cap 条时均匀合并成 cap 条（条内保留换行），防刷屏"""
+    if len(parts) <= cap:
+        return parts
+    groups = [[] for _ in range(cap)]
+    for i, p in enumerate(parts):
+        groups[min(i * cap // len(parts), cap - 1)].append(p)
+    return [NL.join(g) for g in groups if g]
+
+
+def _split_bubbles(text):
+    """主动消息分条（移植 splitReplyToBubbles + 防刷屏：硬上限 BUBBLE_CAP 条）"""
+    tb = re.sub(NL + "{2,}", NL, str(text or "")).strip()
+    if not tb:
+        return []
+    parts = [s.strip() for s in re.split(NL + "+", tb) if s.strip()]
+    if 1 < len(parts) <= BUBBLE_CAP:
+        return parts
+    if len(parts) > BUBBLE_CAP:
+        return _cap_bubbles(parts, BUBBLE_CAP)
+    raw = [s.strip() for s in re.split(r"(?<=[。！？!?…])", tb) if s.strip()]
+    if len(raw) <= 1 or len(tb) <= 13:
+        return [tb]
+    out = []
+    buf = ""
+    for s in raw:
+        if buf and len(buf + s) > 13:
+            out.append(buf)
+            buf = s
+        else:
+            buf += s
+    if buf:
+        out.append(buf)
+    return _cap_bubbles(out, BUBBLE_CAP)
+
+
+def _meme_catalog_text():
+    """表情包目录注入文本（harvested 采集包只出 tag 不出 caption——隐私安全加固）。
+    §35 收紧：上限 40→20 行，collect-001 私藏标签优先保留，旧官方包标签靠后；说明句精简。"""
+    rows = _all_sticker_rows()
+    if not rows:
+        return ""
+    own, other = [], []
+    for r in rows:
+        tag = r.get("tag") or ""
+        if not tag:
+            continue
+        if r["pack"] == "harvested":
+            own.append(tag)
+            continue
+        cap = " ".join((r.get("caption") or r.get("keywords") or "").split())[:22]
+        line = tag + "：" + cap if cap else ""
+        if not line:
+            continue
+        (own if r["pack"] == COLLECT_PACK else other).append(line)
+    lines = own + other  # 私藏（harvested/collect-001）在前，截断时优先保住
+    if not lines:
+        return ""
+    note = ""
+    if len(lines) > 20:
+        note = "……等共 " + str(len(lines)) + " 种"
+        lines = lines[:20]
+    return ("【可用表情包目录】send_sticker 的 query 用「情绪+描述词」精确选（如 'happy 得意'）："
+            + "；".join(lines) + note
+            + "。发表情包必须调 send_sticker 或写「动作：表情 X」，禁止外部图片链接")
+
+
+def _bubbles_napcat(text):
+    """NapCat 分条策略（index.js:1681-1699 移植 + 防刷屏：气泡硬上限 BUBBLE_CAP 条）：
+    模型换行分条在上限内尊重其意图；超上限均匀合并；否则按句号类切分并合并到 13 字内，同样封顶。"""
+    parts = [s.strip() for s in re.split(NL + "+", text) if s.strip()]
+    if 1 < len(parts) <= BUBBLE_CAP:
+        return parts
+    if len(parts) > BUBBLE_CAP:
+        return _cap_bubbles(parts, BUBBLE_CAP)
+    raw = [s.strip() for s in re.split("(?<=[。！？!?…])", text) if s.strip()]
+    if len(raw) <= 1 or len(text) <= 13:
+        return [text]
+    msgs = []
+    buf = ""
+    for s in raw:
+        if buf and len(buf + s) > 13:
+            msgs.append(buf)
+            buf = s
+        else:
+            buf += s
+    if buf:
+        msgs.append(buf)
+    return _cap_bubbles(msgs, BUBBLE_CAP)
+
+
+def _is_internal_url(url):
+    """SSRF 防护：拒绝指向本机/内网/保留地址的 URL（DNS 解析后判断，解析失败宁可拒）"""
+    import socket
+    import ipaddress
+    from urllib.parse import urlsplit
+    try:
+        host = (urlsplit(url).hostname or "").strip().lower()
+    except Exception:
+        return True
+    if not host or host == "localhost" or host.endswith(".local") or host.endswith(".internal"):
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return True
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except Exception:
+            return True
+        if not ip.is_global:
+            return True
+    return False
+
+
+# ---------- 主人专属下载（SSRF 闸 + 手动重定向每跳过闸 + 流式 50MB 上限 + 撞名加后缀） ----------
+# ⑤ 部署配置（使用前必改）：下载工具默认落盘目录（须位于上面白名单内，否则她读不到下载结果）
+DL_DIR = os.path.join(r"C:\Users\YOUR_NAME\Desktop\AI专属工作文件", "下载")
+DL_LIMIT = 50 * 1024 * 1024  # 50MB
+_DL_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
+
+
+def _filename_from_cd(cd):
+    """从 Content-Disposition 取文件名（优先 filename*=UTF-8''，其次 filename=）"""
+    from urllib.parse import unquote
+    m = re.search(r"filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)", cd or "")
+    if m:
+        return unquote(m.group(1).strip().strip('"'))
+    m = re.search(r'filename\s*=\s*"([^"]+)"', cd or "")
+    if m:
+        return m.group(1)
+    m = re.search(r"filename\s*=\s*([^;]+)", cd or "")
+    return m.group(1).strip() if m else ""
+
+
+def _download_file_impl(url, save_path):
+    """同步下载实现（在线程里跑）：手动跟随重定向 ≤3 次、每跳重过 _is_internal_url SSRF 闸；
+    流式写盘超 50MB 截断删除报错；save_path 为空落 DL_DIR 自动取名，给了必须过 _safe_local_path（不限扩展名，限两根目录）；
+    撞名自动 -1/-2 后缀不覆盖。返回 (完整路径, 字节数) 或抛带中文说明的异常。"""
+    import urllib.error
+    import urllib.request
+    from urllib.parse import unquote, urljoin, urlsplit
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None  # 不自动跟随，抛 HTTPError 由外层手动逐跳过闸
+
+    opener = urllib.request.build_opener(_NoRedirect)
+    cur = url
+    resp = None
+    for _hop in range(4):  # 原请求 + 最多 3 次重定向
+        if _is_internal_url(cur):
+            raise RuntimeError("这个链接指向本机或内网地址，已拒绝（安全限制）")
+        req = urllib.request.Request(cur, headers=_DL_UA)
+        try:
+            resp = opener.open(req, timeout=30)
+            break
+        except urllib.error.HTTPError as he:
+            loc = he.headers.get("Location") if he.headers else None
+            if he.code in (301, 302, 303, 307, 308) and loc and _hop < 3:
+                cur = urljoin(cur, loc)
+                continue
+            raise RuntimeError("下载失败：HTTP " + str(he.code))
+    if resp is None:
+        raise RuntimeError("下载失败：重定向次数过多")
+    try:
+        cl = resp.headers.get("Content-Length")
+        if cl and int(cl) > DL_LIMIT:
+            raise RuntimeError("文件 " + str(round(int(cl) / 1048576, 1)) + "MB 超过 50MB 上限，没下载")
+        # 定文件名：Content-Disposition → URL 末段 → download.bin
+        fname = _filename_from_cd(resp.headers.get("Content-Disposition"))
+        if not fname:
+            fname = unquote(os.path.basename(urlsplit(cur).path or ""))
+        fname = _sanitize_filename(fname) or "download.bin"
+        if not os.path.splitext(fname)[1] and "html" in (resp.headers.get("Content-Type") or "").lower():
+            fname += ".html"  # 网页直存补扩展名（如下载 example.com 首页）
+        save_path = (save_path or "").strip()
+        if save_path:
+            rp, err = _safe_local_path(save_path, exts=None, must_exist=False)
+            if err:
+                raise RuntimeError(err)
+            if os.path.isdir(rp):
+                rp = os.path.join(rp, fname)
+            os.makedirs(os.path.dirname(rp), exist_ok=True)  # 指定路径父目录不存在时自动建（§68 修散图下载失败）
+        else:
+            os.makedirs(DL_DIR, exist_ok=True)
+            rp = os.path.join(DL_DIR, fname)
+        # 撞名自动加 -1/-2 后缀（不覆盖已有文件）
+        base, ext = os.path.splitext(rp)
+        n = 0
+        final = rp
+        while os.path.exists(final):
+            n += 1
+            final = base + "-" + str(n) + ext
+        total = 0
+        with open(final, "wb") as f:
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > DL_LIMIT:
+                    f.close()
+                    try:
+                        os.remove(final)
+                    except Exception:
+                        pass
+                    raise RuntimeError("文件超过 50MB 上限，已截断删除")
+                f.write(chunk)
+        if total < 1:
+            try:
+                os.remove(final)
+            except Exception:
+                pass
+            raise RuntimeError("下载到 0 字节，已删除（链接可能没有文件内容）")
+        return final, total
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
+
+
+def _llm_text(resp):
+    rc = getattr(resp, "result_chain", None)
+    if rc is not None:
+        try:
+            t = rc.get_plain_text()
+            if t:
+                return t
+        except Exception:
+            pass
+    for a in ("completion_text", "result", "content", "completion", "text"):
+        v = getattr(resp, a, None)
+        if v:
+            return str(v)
+    try:
+        return resp.get_result() or ""
+    except Exception:
+        return ""
+
+
+@register("dsh_soul", "dsh", "ds娘行为体系移植", "1.0.0")
+class DshSoul(Star):
+    def __init__(self, context: Context):
+        super().__init__(context)
+        self.h_path = _jf("all", "history")
+        self.t_path = _jf("all", "thoughts")
+        self.u_path = _jf("all", "umo")
+        self.p_path = _jf("all", "proactive")
+        self.h = _load(self.h_path, {})
+        self.th = _load(self.t_path, {})
+        self.umo = _load(self.u_path, {})
+        self.pst = _load(self.p_path, {})
+        self.s_path = _jf("all", "silence")
+        self.sil = _load(self.s_path, {})
+        self.last_reply = {}
+        self.extract_at = {}
+        self.turn_count = {}
+        self.pending_reply = {}
+        self.pending_sticker = {}
+        self.last_sticker = {}
+        self.batch_wait = {}
+        self.batch_buf = {}
+        self.last_msg_at = {}      # §37 uid → 上一条会话消息时间戳（算 streak 间距用，内存态）
+        self.batch_skipwait = {}   # §37 uid → 本轮是否跳过攒批 sleep（gate 判定，inject 消费）
+        self.b_path = _jf("all", "blocked")
+        self.blocked = set(_load(self.b_path, []))
+        self.n_path = _jf("all", "names")
+        self.names = _load(self.n_path, {})
+        self.rm_path = _jf("all", "reminders")
+        self.g_path = _jf("all", "greet")
+        self.search_cd = {}
+        self.tool_react_at = {}
+        self.tool_round = {}       # §59 uid → 连续工具续轮计数（用户新消息轮清零），第 3 轮触发埋头反馈
+        self.kimi_task = None      # §61 在途的 Kimi Code 外包任务（asyncio.Task），同时只跑一个
+        self.kimi_last = None      # §65 {"session","tdir"} 最近一次外包的会话——主人补充需求时 -r 续聊
+        self.react_recent = {}  # uid → 最近 5 条已发 react（防复读）
+        self.last_react = {}    # uid → {"ts", "text"}：刚发出的抢答，inject 一次性告知主回复保持一致
+        self.run_active = {}    # uid → 最近一次 LLM 请求时间戳：思考中插话打断（§53）的在生成标记
+        self._last_inbox_files = {}  # uid → {"ts", "files": [(rel, 原名)]}，inject 给主人提示文件路径（一次性）
+        # 插件自滴灌（平台 respond 阶段逐组件 sleep+send 无法插入打断逻辑，故分条改由插件后台任务发送）：
+        # pending_drip: umo → {"uid", "segments": 待滴灌段}；drip_active: uid → 滴灌代数（存活标记）；
+        # interrupt: uid → True 打断标记（gate 置位，滴灌段间消费）；interrupted_note: uid → 未发出部分文本（inject 一次性告知）
+        self.pending_drip = {}
+        self.drip_active = {}
+        self.interrupt = {}
+        self.interrupted_note = {}
+        self._drip_seq = 0
+        _ensure_collect_pack()  # 自收集图库 collect-001：首次启动自动建 pack（幂等）
+        _archive_bootstrap()    # 全量历史归档：归档缺失时从 history_all.json 兜底导入（幂等）
+        self._loop_started = False
+
+    def _h(self, uid):
+        return self.h.setdefault(uid, [])[-150:]
+
+    def _th(self, uid):
+        return self.th.setdefault(uid, [])[-10:]
+
+    def _pop_thought(self, uid, max_age_s, src, newest=False):
+        lst = self._th(uid)
+        now = time.time()
+        live = [e for e in lst if e.get("src") == src and now - e.get("t", 0) <= max_age_s]
+        # 保留其他 src 的念头（修复双 pop 误删）；匹配 src 但已过期的剔除，不再永远残留
+        others = [e for e in lst if e.get("src") != src]
+        # 默认取最旧（对齐原版 shift）；revive 等场景传 newest=True 取最新
+        picked = (live.pop() if newest else live.pop(0)) if live else None
+        self.th[uid] = others + live
+        _save(self.t_path, self.th)
+        return picked["text"] if picked else None
+
+    def _save_thought(self, uid, text, src):
+        lst = self._th(uid)
+        if any(e.get("text") == text for e in lst):
+            return
+        lst.append({"t": time.time(), "text": text, "src": src})
+        self.th[uid] = lst[-10:]
+        _save(self.t_path, self.th)
+
+    @filter.on_llm_request()
+    async def inject(self, event: AstrMessageEvent, req):
+        try:
+            uid = event.get_sender_id() or "anon"
+            self.umo[uid] = event.unified_msg_origin
+            _save(self.u_path, self.umo)
+            # 攒批窗口（NapCat 追加三十：热对话 4 秒）——窗口内到达的连发消息由 gate 缓冲，
+            # 这里等窗口结束后把缓冲消息合并进本次上下文，只回一次。
+            # 只在 gate 置了"新消息"标记时 sleep：工具续轮不过 gate，自然跳过（修复每轮 LLM 请求都睡 3.5s）
+            # §37 智能攒批：gate 判定"冷启动且像说完了"（batch_skipwait）则不等窗口立即响应；
+            # 连发 streak / 超短无标点消息仍 sleep 2.5s 攒批。缓冲消费两条路径共用。
+            # §59 埋头反馈：gate 置了"新消息"标记=用户新消息轮，续轮计数清零；
+            # 没置=工具续轮（她在埋头干活），累计到第 3 轮插一句"在弄了"式反馈，防干等无感知
+            if self.batch_wait.get(uid):
+                self.tool_round[uid] = 0
+            else:
+                n = self.tool_round.get(uid, 0) + 1
+                self.tool_round[uid] = n
+                if n == 3:
+                    asyncio.create_task(self._busy_notice(event.unified_msg_origin, uid))
+            if BATCH_WAIT > 0 and self.batch_wait.get(uid):
+                # 防抖等待（§47/§50）：睡到"距最近一条消息满 wait 秒"为止——窗口内来新消息就顺延。
+                # "像说完了"的冷启动消息用较短窗（BATCH_QUICK_WAIT）兼顾响应速度，
+                # 但不再零等待秒回——零等待会抓不到"什么概念"式的 2 秒补刀，导致逐条回复、总量翻倍（§50）
+                # §57 静息档：距她上次开口 ≥REST_IDLE（10 分钟）时不秒回，随机等 5~10 秒再回——
+                # 像真人放下手机又拿起。判定从历史里找最近一条 assistant 消息（重启也有效）；
+                # 注意不能用用户消息时间：收信已记历史，刚到的这条会把"距今"刷成 0。
+                skipq = self.batch_skipwait.pop(uid, False)
+                idle = 0.0
+                for h in reversed(self._h(uid)):
+                    if h["role"] == "assistant":
+                        idle = time.time() - float(h.get("ts", 0) or 0)
+                        break
+                if idle >= REST_IDLE:
+                    wait = random.uniform(REST_WAIT_MIN, REST_WAIT_MAX)
+                    cap = REST_MAX_WAIT
+                else:
+                    wait = BATCH_QUICK_WAIT if skipq else BATCH_WAIT
+                    cap = BATCH_MAX_WAIT
+                t0 = time.time()
+                try:
+                    while True:
+                        last = float(self.last_msg_at.get(uid, 0) or 0)
+                        remain = wait - (time.time() - last)
+                        if remain <= 0 or time.time() - t0 >= cap:
+                            break
+                        await asyncio.sleep(min(remain, 0.5))
+                finally:
+                    self.batch_wait.pop(uid, None)
+                extra = self.batch_buf.pop(uid, [])[-8:]  # §36：缓冲上限 5→8，连发一组整体呈现
+                if len(extra) == 1:
+                    req.prompt = (req.prompt or "") + NL + "对方紧接着又说：" + extra[0]
+                elif extra:
+                    # 明确告知"这是连发的一组，要整体回应"（§36：修复逐条回应/漏点的汇总弱问题）
+                    nums = "①②③④⑤⑥⑦⑧"
+                    req.prompt = (req.prompt or "") + NL + (
+                        "对方一口气连发了 " + str(len(extra)) + " 条消息：" + NL
+                        + NL.join(nums[i] + " " + t for i, t in enumerate(extra)) + NL
+                        + "——把这些当作一整段话来理解，汇总成一个回复，别逐条回应，也别漏掉任何一条里的点。")
+            # 滴灌/思考被打断的一次性告知（全用户通用，不进历史）：她知道自己哪部分没说出口，可自然接续
+            note = self.interrupted_note.pop(uid, None)
+            if note:
+                req.prompt = (req.prompt or "") + NL + ("[系统提示] 你上一轮想到的话被对方插话打断了，没能说出口的部分：「"
+                             + note[:200] + "」。可以自然接续或改口，别把没能说出去的内容原样复读。")
+            # 思考中插话打断（§53）的在生成标记：每次 LLM 请求刷新，gate 据此判定"思考中来新消息"
+            self.run_active[uid] = time.time()
+            is_master = uid == MASTER_OPENID
+            if is_master:
+                # 主人刚发来的文件：提示词附带保存路径（一次性），她据此用工具读取/修改/发回
+                lf = self._last_inbox_files.pop(uid, None)
+                if lf and time.time() - lf.get("ts", 0) < 300:
+                    fl = "、".join("「" + n + "」（已存到 " + os.path.join(DATA, r.replace("/", os.sep)) + "）"
+                                   for r, n in lf.get("files")[:3])
+                    req.prompt = (req.prompt or "") + NL + ("[系统提示] 主人刚发来文件 " + fl
+                                 + "。用 read_local_file（docx 用 read_word）读取它；改完后用 send_local_file 发回给主人。")
+            parts = []
+            try:
+                persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
+                parts.append(persona if is_master else persona.replace("主人", "对方"))
+            except Exception as e:
+                self._err("persona-read", e)
+            # —— 稳定大前缀（缓存友好）：人设→纪律→工具指南+表情目录→平台行→主人权限，跨轮不变吃前缀缓存 ——
+            parts.append(CHATTER_DISCIPLINE)
+            guide = NL.join(TOOL_GUIDE_LINES)
+            if is_master:
+                guide = guide.replace("宁短勿长。", "宁短勿长。情绪上头、被惹烦时直接爆粗口（他妈的、卧槽这类），不要自我审查。")
+            catalog = _meme_catalog_text()
+            if catalog:
+                guide = guide + NL + catalog
+            parts.append(guide)
+            # 好友上下文提示词层面不出现"主人"一词（08-30 §17:00追加二，与 persona 同样的机械替换）
+            parts.append(PLATFORM_LINE if is_master else PLATFORM_LINE.replace("主人", "对方"))
+            if is_master:
+                # 仅主人可见的调取权限说明（非主人提示词里绝不出现这两个工具的任何提及）
+                parts.append("【主人的特别权限】主人随时可以让你翻看其他用户和你的聊天记录、念头、长期记忆，"
+                             "或读本地文件给他——直接用 peek_user_data / read_local_file 工具。"
+                             "这些是其他用户和你聊天的内容，主人有查看权，你知情并自然配合，"
+                             "像聊天一样转述，不要报流水账式地念。"
+                             "你还是主人的本地小助手：他让你找文件、看目录、搜资料内容、记笔记、保存或整理文本时，"
+                             "直接用 list_files / search_in_files / read_local_file / write_local_file。"
+                             "主人发给你的文件会自动存到本地并告诉你路径；他让你改文件，你改完用 send_local_file 发回给他。"
+                             "docx 用 read_word/write_word，文本文件用 read_local_file/write_local_file。"
+                             "能做的就干脆做完再汇报结果，别只给建议；做不了（路径越界、文件太大等）如实说原因。"
+                             "主人让你从网上下载/收集东西存到本地时：用 web_search / fetch_url 找到直链，再用 download_file 存到他指定的路径"
+                             "（没指定就放 下载 文件夹）；要收集多个就循环多下几个，最后把保存路径汇报给他。"
+                             "文本类资料也可以 read/fetch 后用 write_local_file 整理成文档。"
+                             "主人让你记课表/定闹钟/到点提醒，用 set_alarm（每周几的课用 weekly+weekdays），"
+                             "list_alarms 查看，cancel_alarm 取消。到点闹钟会叫醒你，你再用自己的话提醒他。"
+                             "你还能用 run_command 在他电脑上跑 shell 命令（限允许目录、60 秒超时、高危命令硬拦）："
+                             "轻量脚本、查状态、批量文件处理可以自己动手。"
+                             "更复杂、风险更高的活（装大型软件、大改代码工程、动系统配置）用 ask_kimi 外包给 Kimi Code——"
+                             "它是本机的专业编程 agent（K2.7 Coding Highspeed，走主人自己的 Kimi Code 会员额度），能力比你高，"
+                             "在独立任务目录里干活，完工你主动汇报结果。"
+                             "派活纪律：先提议、等主人明确同意才派（主人明说'用 Kimi Code/外包'除外）；别频繁派活（烧会员额度）；"
+                             "真正的系统级高危操作仍然提醒主人去工作台当面处理。"
+                             "你对自己的定位要清楚：QQ 上轻快的小助手，不是重型工程 agent。")
+            elif _user_perm(uid, "alarm") or _user_perm(uid, "files"):
+                # §58 好友侧 skill 指南（简短，只在开关开着时出现；schema 里本就有这些工具）
+                fl = []
+                if _user_perm(uid, "alarm"):
+                    fl.append("对方让你定闹钟/到点提醒时用 set_alarm（每周几用 weekly+weekdays），"
+                              "list_alarms 查看、cancel_alarm 取消——只管用对方自己的闹钟。")
+                if _user_perm(uid, "files"):
+                    fl.append("对方有个专属的文件小抽屉：让你存笔记/资料用 write_local_file（直接给文件名，限 txt/md/json/csv），"
+                              "看内容用 read_local_file，看有什么用 list_files，打包/解压用 zip_files/unzip_file，"
+                              "弄好了用 send_local_file 发给他。小抽屉以外的路径你够不到，别试。")
+                parts.append("【你能为对方做的事】" + NL.join(fl))
+            # —— §47 缓存结构修复：system_prompt 只留跨轮完全稳定的段（人设/纪律/指南/目录/平台行/权限）——
+            # 此前 notes/memes/session/hist/时间行 也在 system 里，而框架 contexts 排在 system 之后，
+            # 任何一处变化都导致其后全部 contexts（占输入大头）缓存失效——实测命中率仅 9.7%。
+            # 现在所有半稳/易变段统一移到 user 消息前缀（[背景信息] 块，位于整个 prompt 最末），
+            # system 与 contexts 构成完整可缓存前缀；user 侧约 2k 字/轮全价是设计内代价。
+            req.system_prompt = NL.join(p for p in parts if p)
+            ctx = []
+            notes = _read_notes(uid)
+            if notes:
+                who = "主人" if is_master else "对方"
+                ctx.append("【你长期记住的关于" + who + "的事】" + NL + NL.join("- " + l for l in notes))
+            memes = _read_memes()
+            if memes:
+                ctx.append("【梗图鉴】你已认识的梗/流行语（可自然使用；遇到不认识的梗，先用 web_search 查清，再用 learn_meme 记进来）：" + NL + NL.join(memes[-15:]))
+            sess = _load(_jf(uid, "session"), {})
+            if sess.get("summary"):
+                ctx.append("【本次会话进展】" + sess["summary"])
+            if sess.get("mood"):
+                ctx.append("【对方当前状态】" + sess["mood"])
+            ls = self.last_sticker.get(uid)
+            if ls and time.time() - ls.get("ts", 0) < 600:
+                mins = round((time.time() - ls.get("ts", 0)) / 60)
+                ctx.append("【你最近发给对方的表情包】一张" + ls.get("tag", "") + "表情包（" + ls.get("caption", "")[:30] + "），约 " + str(mins) + " 分钟前发的——对方问起的话，你要知道那是什么。")
+            hist = self._h(uid)[-30:]  # 只注入近 30 条控成本（更早的靠 recall 工具+长期记忆+会话摘要续上）
+            if hist:
+                hlines = []
+                for h in hist:
+                    tstr = ""
+                    try:
+                        tstr = time.strftime("%m-%d %H:%M", time.localtime(float(h["ts"]))) if h.get("ts") else ""
+                    except Exception:
+                        tstr = ""
+                    hlines.append((tstr + " " if tstr else "") + ("她" if h["role"] == "assistant" else "对方") + "：" + h["text"][:120])
+                ctx.append("【你们的历史（完整时间线，从以前延续到现在）】" + NL + NL.join(hlines))
+            for t in self._th(uid):
+                if t.get("src") == "chat" and time.time() - t.get("t", 0) < 600:
+                    ctx.append("【你刚想到的一句话，可自然带入，别重复】" + t["text"])
+                    break
+            ctx.append(_now_period_line())
+            if ctx:
+                req.prompt = ("[背景信息（以下是你脑中已知的记忆与近况，不是对方这次说的话）]" + NL
+                              + NL.join(ctx) + NL
+                              + "[背景结束，以下是对方这次说的话]" + NL
+                              + (req.prompt or ""))
+            # 抢答一致性（§48）：主回复必须知道自己刚才抢答说了什么，避免口径打架
+            lr = self.last_react.pop(uid, None)
+            if lr and time.time() - lr.get("ts", 0) < 120:
+                req.prompt = ("[系统提示] 你刚刚已经先回了一句口头反应：「" + lr["text"][:30] + "」。"
+                              "正式回复要和它口径一致、顺着它说，别自相矛盾，也别原样复读它。" + NL
+                              + (req.prompt or ""))
+            # 方案 A（§35）：好友请求从本次 ToolSet 剔除主人专属工具——schema 不随请求发出，好友每轮省约一半工具描述；
+            # 主人请求保持全量 24 个，体验零变化。工具函数内的 uid 闸仍保留作双保险。
+            # §58 按组按开关：硬核组（本机任意路径/他人隐私/联网下载）永远剔除；
+            # 闹钟组、沙盒文件组看该用户的 alarm / files 开关（缺省开）。
+            if not is_master and getattr(req, "func_tool", None):
+                try:
+                    for _t in MASTER_HARD_TOOLS:
+                        req.func_tool.remove_tool(_t)
+                    if not _user_perm(uid, "alarm"):
+                        for _t in ALARM_TOOLS:
+                            req.func_tool.remove_tool(_t)
+                    if not _user_perm(uid, "files"):
+                        for _t in FILE_TOOLS:
+                            req.func_tool.remove_tool(_t)
+                except Exception as e:
+                    self._err("tool-filter", e)
+        except Exception as e:
+            self._err("inject", e)
+
+    @filter.on_llm_response()
+    async def capture(self, event: AstrMessageEvent, resp):
+        # §38 遥测：主对话轮 usage（含 DeepSeek 缓存命中/未命中 token）记 usage_all.json 的 by.main。
+        # 放在最前——工具续轮（无文本）也烧 token，不能因 raw 为空漏记
+        try:
+            _u = getattr(resp, "usage", None)
+            if _u is not None:
+                _usage_add_main(_u)
+        except Exception:
+            pass
+        try:
+            uid = event.get_sender_id() or "anon"
+            raw = _llm_text(resp).strip()
+            if not raw:
+                return
+            # §53 思考中插话重想：本轮生成期间对方来了新消息（gate 置打断标记）→ 整轮压住：
+            # 不发气泡、不记历史，原文存 interrupted_note 下轮一次性告知（自然接续或改口）。
+            # 说明：LLM HTTP 请求无法中途取消，本轮 token 已消耗；换来的是"她没说出口"的干净体验。
+            if self.interrupt.pop(uid, False):
+                self.interrupted_note[uid] = raw[:200]
+                self._clear_text_result(resp)
+                self.run_active.pop(uid, None)
+                self.pending_sticker.pop(event.unified_msg_origin, None)
+                self._err("gen-interrupt", "uid=%s suppressed %d chars" % (uid, len(raw)))
+                return
+            umo = event.unified_msg_origin
+            self.umo[uid] = umo
+            # 剥离「动作：」行（任何动作行都不原样发给用户）；动作：语音 → 整句转语音替代文字；
+            # 动作：表情(包) <情绪> → 选图待发（NapCat 旧协议兼容，文字发完后由 post_send 跟发）
+            voice = False
+            sticker_q = None
+            sticker_em = None
+            for am in re.finditer("动作[:：] *([^" + NL + "]+)", raw):
+                act = am.group(1).strip()
+                if act == "语音":
+                    # 按用户 voice 开关（friends_all.json 八键，全用户通用，热生效）
+                    if _user_perm(uid, "voice"):
+                        voice = True
+                else:
+                    em = re.sub("^表情包? *", "", act).strip()
+                    if em:
+                        sticker_q = EMOTION_ALIAS.get(em, em)
+                        sticker_em = em
+            clean = re.sub("动作[:：][^" + NL + "]*", "", raw)
+            text = NL.join(l for l in (s.strip() for s in clean.split(NL)) if l).strip()
+            if not text:
+                # 模型只输出了动作行（或空文本）：先剥离动作协议原文改写 resp，避免原文外泄；
+                # 语音模式不发表情包（对齐原版跳过），并清掉工具已选的 pending_sticker 防残留
+                if sticker_q and not voice:
+                    srow = _pick_sticker(sticker_q)
+                    if srow:
+                        self.pending_sticker.setdefault(umo, []).append(srow)
+                        self.last_sticker[uid] = {"tag": srow["tag"], "caption": srow["caption"], "ts": time.time()}
+                if voice:
+                    self.pending_sticker.pop(umo, None)
+                self._clear_text_result(resp)
+                self.pending_reply[umo] = True
+                return
+            if sticker_q and not voice:
+                srow = _pick_sticker(sticker_q)
+                if srow:
+                    self.pending_sticker.setdefault(umo, []).append(srow)
+                    self.last_sticker[uid] = {"tag": srow["tag"], "caption": srow["caption"], "ts": time.time()}
+            self.last_reply[umo] = text or raw
+            self.pending_reply[umo] = True
+            hist = self._h(uid)
+            # user 轮次已在 gate 收信时记录，这里只记她的回复。
+            # 打断功能后历史只记「实际发出去」的部分：语音模式整段转语音发出，记 raw（含动作行，
+            # 对齐 NapCat 历史格式，她看到自己的动作协议用法会自我强化）；文字模式此处只发首气泡，
+            # 记首气泡（表情动作由 post_send 跟发，一并记上）；剩余滴灌段由 _drip_send 发出后逐段补记，
+            # 被插话作废的段不进历史（她不知道自己没说过的话）
+            if voice:
+                rec_text = raw[:400]
+            else:
+                bubbles = _bubbles_napcat(text) or [text]
+                rec_text = bubbles[0]
+                if sticker_em:
+                    rec_text = (rec_text + NL + "动作：表情 " + sticker_em)[:400]
+            _entry = {"role": "assistant", "text": rec_text[:400], "ts": time.time()}
+            hist.append(_entry)
+            _archive_append(uid, _entry)  # 全量归档（只追加、永不删改）
+            self._bump_turns(uid)
+            self.h[uid] = hist[-150:]
+            _save(self.h_path, self.h)
+            # 改写结果链：语音模式清空文字（语音替代）；否则结果链只留首条气泡立即发出，
+            # 剩余段存 pending_drip 由 post_send 启动插件自滴灌（平台 respond 阶段逐组件 sleep+send，
+            # 滴灌期会话锁阻塞且插件无法插打断逻辑，故分条发送全权由插件接管）
+            if voice:
+                self.pending_sticker.pop(umo, None)  # 语音模式跳过表情包（对齐原版）
+                self._clear_text_result(resp)
+                asyncio.create_task(self._voice_reply(umo, uid, text[:150]))
+            else:
+                self._set_first_bubble_result(resp, bubbles)
+                if len(bubbles) > 1:
+                    self.pending_drip[umo] = {"uid": uid, "segments": bubbles[1:]}
+            # H1：用单调递增的轮次计数器判断触发，避免 _h 封顶 150 后差值恒 0 导致提炼/摘要永久停摆
+            tc = self.turn_count.get(uid, 0)
+            if len(hist) >= 12 and tc - self.extract_at.get(uid, 0) >= 12:  # §34 降频 8→12 轮
+                self.extract_at[uid] = tc
+                asyncio.create_task(self._extract_notes(uid))
+            sess = _load(_jf(uid, "session"), {})
+            sat = sess.get("at", 0)
+            if sat > tc:
+                sat = 0  # 重启后计数器清零而旧会话基准更大时，重新累计
+            if tc - sat >= 16:  # §34 降频：会话摘要 8→16 轮
+                sess["at"] = tc
+                _save(_jf(uid, "session"), sess)
+                asyncio.create_task(self._refresh_summary(uid))
+        except Exception as e:
+            self._err("capture", e)
+
+    def _clear_text_result(self, resp):
+        """清空 resp 里的文字组件（语音替代文字时空链会被 respond 阶段跳过）"""
+        try:
+            rc = getattr(resp, "result_chain", None)
+            if rc is not None:
+                rc.chain = [c for c in rc.chain if not isinstance(c, Plain)]
+            else:
+                resp.completion_text = ""
+        except Exception as e:
+            self._err("clear-result", e)
+
+    def _set_first_bubble_result(self, resp, bubbles):
+        """结果链只放首条气泡（非 Plain 组件如引用/At 保留在最前），剩余段由插件自滴灌逐条发出"""
+        try:
+            rc = getattr(resp, "result_chain", None)
+            if rc is not None:
+                others = [c for c in rc.chain if not isinstance(c, Plain)]
+                rc.chain = others + [Plain(bubbles[0])]
+            else:
+                resp.completion_text = bubbles[0]
+        except Exception as e:
+            self._err("first-bubble", e)
+
+    def _drip_interval(self):
+        """滴灌间隔区间（秒）：读 cmd_config platform_settings.segmented_reply.interval（如 "1.8,3.2"），
+        校验 0<=a<=b<=30，异常/缺省回退 (1.8, 3.2)"""
+        try:
+            cfg = self.context.get_config()
+            iv = str((cfg.get("platform_settings", {}) or {}).get("segmented_reply", {}).get("interval", "") or "")
+            a, b = (float(x) for x in iv.replace("，", ",").split(",")[:2])
+            if 0 <= a <= b <= 30:
+                return a, b
+        except Exception:
+            pass
+        return 1.8, 3.2
+
+    async def _drip_send(self, umo, uid, segments, gen):
+        """插件自滴灌：按 segmented_reply.interval 的随机间隔逐条发剩余气泡。
+        每段发出前检查打断标记（gate 在滴灌期间收到同 uid 新消息时置位）：被打断则剩余段作废，
+        未发出部分存 interrupted_note（inject 下轮一次性告知她），只把已发出的段补记进历史。
+        gen 为滴灌代数，防止老滴灌的 finally 误清新一轮滴灌的存活标记。"""
+        try:
+            self.drip_active[uid] = gen
+            lo, hi = self._drip_interval()
+            for i, seg in enumerate(segments):
+                await asyncio.sleep(random.uniform(lo, hi))
+                if self.interrupt.pop(uid, False):
+                    unsent = NL.join(segments[i:])[:200]
+                    if unsent.strip():
+                        self.interrupted_note[uid] = unsent
+                    self._err("drip", "uid=%s interrupted: %d/%d sent" % (uid, i, len(segments)))
+                    return
+                await self.context.send_message(umo, MessageChain(chain=[Plain(seg)]))
+                self._record_assistant_turn(uid, seg)  # 只记已发出的段
+        except Exception as e:
+            self._err("drip", e)
+        finally:
+            if self.drip_active.get(uid) == gen:
+                self.drip_active.pop(uid, None)
+
+    def _rewrite_text_result(self, resp, text):
+        """把 resp 的文字改写为剥离动作行后的版本（completion_text setter 会重建 Plain 组件）"""
+        try:
+            resp.completion_text = text
+        except Exception as e:
+            self._err("rewrite-result", e)
+
+    async def _chat(self, tag, timeout=0, **kw):
+        """插件侧模型调用统一入口（§34）：拿当前 provider 发 text_chat，成功即按 tag 计量进 usage_all.json。
+        provider 缺失返回 None（调用方按原逻辑兜底）；timeout>0 时外包 wait_for。
+        计量口径：in = prompt+system_prompt 字符数，out = 回复字符数（估算 token≈字符/1.5）。"""
+        provider = self.context.get_using_provider()
+        if not provider:
+            return None
+        coro = provider.text_chat(**kw)
+        out = await (asyncio.wait_for(coro, timeout=timeout) if timeout and timeout > 0 else coro)
+        if out is not None:
+            _usage_add(tag, len(kw.get("prompt") or "") + len(kw.get("system_prompt") or ""),
+                       len(_llm_text(out) or ""))
+        return out
+
+    async def _refresh_summary(self, uid):
+        """会话滚动摘要：最近 20 条压成 [进展] 1~2 句 + [状态] 1 句，存 per-user（移植 scheduleSummaryRefresh）"""
+        try:
+            hist = self._h(uid)[-20:]
+            recent = NL.join(("她" if h["role"] == "assistant" else "对方") + "：" + h["text"][:120] for h in hist)
+            if not recent:
+                return
+            out = await self._chat("summary",
+                prompt=("基于下面这段最近聊天，输出两行，不要任何多余内容：" + NL
+                        + "[进展] 1-2句，在聊什么话题、有什么没聊完的点" + NL
+                        + "[状态] 1句，对方当前的情绪和对你的态度" + NL + NL + recent),
+                system_prompt="你是状态摘要器，输出克制、具体。")
+            if out is None:
+                return
+            t = _llm_text(out).strip()
+            if not t:
+                return
+            sess = _load(_jf(uid, "session"), {})
+            for l in t.splitlines():
+                l = l.strip()
+                if l.startswith("[进展]"):
+                    sess["summary"] = l[4:].strip()[:150]
+                elif l.startswith("[状态]"):
+                    sess["mood"] = l[4:].strip()[:60]
+            _save(_jf(uid, "session"), sess)
+        except Exception as e:
+            self._err("summary", e)
+
+    @filter.after_message_sent()
+    async def post_send(self, event: AstrMessageEvent):
+        try:
+            umo = event.unified_msg_origin
+            uid = event.get_sender_id() or "anon"
+            self.run_active.pop(uid, None)  # 本轮 run 结束，清除"思考中"标记（§53）
+            # 先发待发表情包（不依赖 pending_reply 闸门——空文本回复也要把已选表情发出去）
+            sticker_rows = self.pending_sticker.pop(umo, [])
+            for sticker_row in sticker_rows:
+                try:
+                    if await self._send_sticker_row(umo, sticker_row):
+                        # 发送成功把所选图片相对路径挂到最后一条 assistant 历史条目（控制台可直接看图）
+                        rel = "sticker_packs/" + sticker_row["pack"] + "/" + str(sticker_row["rel"]).replace(os.sep, "/")
+                        self._attach_media(uid, "sticker", rel)
+                except Exception as e:
+                    self._err("pending-sticker", e)
+            if not self.pending_reply.pop(umo, None):
+                return
+            # 首条气泡已随管线发出，启动插件自滴灌发剩余段（段间可查打断标记）
+            drip = self.pending_drip.pop(umo, None)
+            if drip:
+                self._drip_seq += 1
+                asyncio.create_task(self._drip_send(umo, drip["uid"], drip["segments"], self._drip_seq))
+            if random.random() < 0.04:
+                asyncio.create_task(self._sprinkle_later(umo, uid))
+            if random.random() < 0.2:
+                asyncio.create_task(self._revive_later(umo, uid, random.uniform(150, 330)))
+        except Exception as e:
+            self._err("post-send", e)
+
+    async def _sprinkle_later(self, umo, uid):
+        await asyncio.sleep(random.uniform(2400, 5200) / 1000)
+        try:
+            # 生效逻辑 = 全局总开关 AND 全局 sprinkle AND 按用户 sprinkle
+            if not _conf("enabled") or not _conf("sprinkle") or not _user_perm(uid, "sprinkle"):
+                return
+            if self.sil.get(uid, 0) > time.time():
+                return
+            thought = self._pop_thought(uid, 10 * 60, "chat")
+            if not thought or len(thought) < 6:
+                return
+            lead = random.choice(SPRINKLE_LEADS)
+            msg = (lead + thought)[:140]
+            await self.context.send_message(umo, MessageChain(chain=[Plain(msg)]))
+            self._record_assistant_turn(uid, msg)
+        except Exception as e:
+            self._err("sprinkle", e)
+
+    async def _revive_later(self, umo, uid, delay):
+        await asyncio.sleep(delay)
+        try:
+            # 生效逻辑 = 全局总开关 AND 全局 revive AND 按用户 revive
+            if not _conf("enabled") or not _conf("revive") or not _user_perm(uid, "revive"):
+                return
+            if self.sil.get(uid, 0) > time.time():
+                return
+            # 前置判定（08-30 §追加十二/三十）：对方 2~15 分钟前还在聊，且她已安静 ≥90 秒，不满足不发
+            hist_all = self._h(uid)
+            now = time.time()
+            last_user = next((h for h in reversed(hist_all) if h["role"] == "user"), None)
+            if not last_user or not last_user.get("ts"):
+                return
+            ago_u = now - last_user["ts"]
+            if ago_u < 120 or ago_u > 900:
+                return
+            last_asst = next((h for h in reversed(hist_all) if h["role"] == "assistant"), None)
+            if last_asst and now - last_asst.get("ts", 0) < 90:
+                return
+            thought = self._pop_thought(uid, 30 * 60, "chat", newest=True)
+            if not thought or len(thought) < 4:
+                return
+            hist = self._h(uid)[-4:]
+            recent = NL.join(("对方说：" if h["role"] == "user" else "她说：") + h["text"][:80] for h in hist)
+            prompt = ("刚聊完的几句：" + NL + recent + NL + NL
+                      + "你脑子里冒出一个念头：「" + thought + "」，想主动发一条消息。要求：" + NL
+                      + "- 这个念头必须能从刚才的对话自然联想出来才可以说；如果它是和对话无关的全新话题，直接输出 [SILENT]；" + NL
+                      + "- 一句话，10 字上下，不要动作行。")
+            out = await self._chat("revive", prompt=prompt)
+            if out is None:
+                return
+            t = _llm_text(out).strip()
+            if not t or "[SILENT]" in t:
+                return
+            await self.context.send_message(umo, MessageChain(chain=[Plain(t[:140])]))
+            self._record_assistant_turn(uid, t[:140])
+        except Exception as e:
+            self._err("revive", e)
+
+    async def _voice_reply(self, umo, uid, text):
+        """动作：语音触发：原句截断 150 字直接合成 → 以语音消息发送（替代文字）。
+        语音文件留存 media/voice/（不再删除，控制台可回放），文件名挂到该 uid 最后一条 assistant 历史条目的 voice 键。"""
+        import urllib.request
+        try:
+            text = text[:150]
+            body = json.dumps({"text": text, "format": "wav"}).encode("utf-8")
+            req = urllib.request.Request("http://127.0.0.1:18765/tts", data=body,
+                                         headers={"Content-Type": "application/json"})
+            wav = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=60).read())
+            vdir = os.path.join(DATA, "media", "voice")
+            os.makedirs(vdir, exist_ok=True)
+            # 文件名加毫秒+随机，避免秒级碰撞互相覆盖
+            fname = "voice_" + str(int(time.time() * 1000)) + "_" + str(random.randint(100, 999)) + ".wav"
+            wav_path = os.path.join(vdir, fname)
+            with open(wav_path, "wb") as f:
+                f.write(wav)
+            self._prune_voice_dir(vdir)  # 超 200 个文件删最旧，防无限膨胀
+            from astrbot.api.message_components import Record
+            await self.context.send_message(umo, MessageChain(chain=[Record(file=wav_path)]))
+            self._attach_media(uid, "voice", "media/voice/" + fname)
+            self._err("voice", "sent: " + text[:30])
+        except Exception as e:
+            self._err("voice", e)
+
+    def _prune_voice_dir(self, vdir):
+        """media/voice 下超过 200 个 wav 时删最旧（防无限膨胀）"""
+        try:
+            fs = [os.path.join(vdir, x) for x in os.listdir(vdir) if x.endswith(".wav")]
+            if len(fs) > 200:
+                fs.sort(key=os.path.getmtime)
+                for old in fs[:len(fs) - 200]:
+                    os.remove(old)
+        except Exception as e:
+            self._err("voice-prune", e)
+
+    def _attach_media(self, uid, key, rel):
+        """把媒体相对路径（相对 dsh_data）挂到该 uid 最后一条 assistant 历史条目（新键可选，不破坏既有读取方）"""
+        try:
+            hist = self.h.get(uid) or []
+            for h in reversed(hist):
+                if h.get("role") == "assistant":
+                    h[key] = rel
+                    _save(self.h_path, self.h)
+                    return
+        except Exception as e:
+            self._err("attach-media", e)
+
+    async def _extract_notes(self, uid):
+        try:
+            who = "主人" if uid == MASTER_OPENID else "对方"
+            existing = _read_notes(uid)
+            ex = NL.join("- " + l for l in existing) if existing else "（还什么都没有）"
+            lt = time.localtime()
+            today = str(lt.tm_year) + "年" + str(lt.tm_mon) + "月" + str(lt.tm_mday) + "日"
+            hist = self._h(uid)[-8:]
+            recent = NL.join((who + "说：" if h["role"] == "user" else "你说：") + h["text"][:150] for h in hist)
+            out = await self._chat("extract",
+                prompt=("今天是" + today + "。" + NL + NL
+                        + "你的长期记忆备忘录里现在有：" + NL + ex + NL + NL
+                        + "刚刚的对话——" + NL + recent + NL + NL
+                        + "想想备忘录有没有要增删的。"),
+                system_prompt=_extract_system(who),
+                max_tokens=300)
+            if out is None:
+                return
+            t = _llm_text(out)
+            for line in t.splitlines():
+                line = line.strip().lstrip("-* ").strip()
+                if not line or re.fullmatch(r"无[。」]?", line):
+                    continue
+                dm = re.match(r"^删[：:] *(.+)$", line)
+                if dm:
+                    _remove_note(uid, dm.group(1).strip())
+                    continue
+                line = line.replace("增：", "", 1)
+                if line and len(line) <= 80:
+                    _append_note(uid, line)
+        except Exception as e:
+            self._err("extract", e)
+
+    @filter.llm_tool(name="recall")
+    async def recall(self, event: AstrMessageEvent, query: str):
+        """查证工具：搜索过去的聊天记录、长期记忆和梗图鉴，可查全部历史（含 NapCat 时期的更早记录），不受近期窗口限制。对方提到『之前/刚才/聊过/说过』的内容、或你需要确认自己是否说过/记得某事时，必须先调用本工具查证，再根据结果回答。query 为要回忆的关键词。"""
+        uid = event.get_sender_id() or "anon"
+        toks = [t for t in re.split(r"[^一-龥A-Za-z0-9]+", query or "") if len(t) >= 2]
+        if not toks:
+            return "（关键词太短）"
+        need = 1 if len(toks) == 1 else 2
+
+        def score(t):
+            return sum(1 for tok in toks if tok in t)
+
+        pool = []
+        for l in _read_notes(uid):
+            pool.append("长期记忆：" + l)
+        for l in _read_memes():
+            pool.append("梗图鉴：" + l)
+        # 搜索池 = 归档全量（该 uid 全部历史，不受 150 条滚动窗口限制）；
+        # 性能保护：超 3000 行先按关键词粗筛（任一 token 命中）再评分
+        rows = _archive_read(uid)
+        if len(rows) > 3000:
+            rows = [r for r in rows if any(tok in (r.get("text") or "") for tok in toks)]
+        for h in rows:
+            ts = ""
+            try:
+                ts = time.strftime("%m-%d %H:%M", time.localtime(float(h["ts"]))) if h.get("ts") else ""
+            except Exception:
+                ts = ""
+            pool.append("[" + ts + "]" + ("她说：" if h.get("role") == "assistant" else "对方说：") + (h.get("text") or "")[:150])
+        hits = sorted(({"t": t, "s": score(t)} for t in pool), key=lambda x: -x["s"])
+        hits = [h for h in hits if h["s"] >= need][:6]
+        return NL.join("- " + h["t"][:150] for h in hits) if hits else "（没查到相关内容）"
+
+    @filter.llm_tool(name="peek_user_data")
+    async def peek_user_data(self, event: AstrMessageEvent, user: str, kind: str = "history", count: int = 15, order: str = "newest"):
+        """（仅主人可用）翻看其他用户和你的聊天数据。当主人想看看某个人跟你的聊天记录、念头、长期记忆或会话摘要时使用。user 为目标用户的备注名（支持模糊包含匹配）或 uid 前几位；kind 为 history（聊天记录）/ thoughts（念头）/ memory（长期记忆）/ summary（会话摘要），缺省 history；count 为条数，缺省 15、上限 50；order 为 newest（最近，缺省）/ oldest（最早——主人问"最开始聊了什么""最早的记忆"时用）。返回的是你和该用户的真实数据，主人有查看权，你知情并自然配合，像聊天一样转述。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        kind = (kind or "history").strip().lower()
+        try:
+            count = min(max(int(count), 1), 50)
+        except Exception:
+            count = 15
+        cands = _find_user_candidates((user or "").strip())
+        if not cands:
+            return "没查到跟「" + str(user)[:20] + "」匹配的用户，让主人换个备注名或 uid 前几位试试。"
+        if len(cands) > 1:
+            return ("「" + str(user)[:20] + "」匹配到多个用户，请主人说精确点：" + NL
+                    + NL.join("- " + (nm or "（未备注）") + " · " + u[:12] + "…" for u, nm in cands[:8]))
+        tuid, tnm = cands[0]
+        label = tnm or tuid[:12] + "…"
+        if kind == "thoughts":
+            th = (_load(_jf("all", "thoughts"), {}).get(tuid) or [])[-count:]
+            body = NL.join(time.strftime("%m-%d %H:%M", time.localtime(e.get("t", 0) or 0))
+                           + " [" + str(e.get("src", "")) + "] " + (e.get("text") or "")[:100] for e in th)
+            out = "「" + label + "」的念头（" + str(len(th)) + " 条）：" + NL + (body or "（无）")
+        elif kind == "memory":
+            notes = _read_notes(tuid)
+            out = "「" + label + "」的长期记忆：" + NL + (NL.join("- " + l for l in notes) if notes else "（无）")
+        elif kind == "summary":
+            sess = _load(_jf(tuid, "session"), {})
+            out = ("「" + label + "」的会话摘要：" + (sess.get("summary") or "（无）")
+                   + NL + "对方状态：" + (sess.get("mood") or "（无）"))
+        else:
+            oldest = str(order or "").strip().lower() == "oldest"
+            # history kind 读全量归档（不受 150 条滚动窗口限制，含 NapCat 时期导入），oldest/newest 语义不变
+            rows = _archive_read(tuid)
+            hist = rows[:count] if oldest else rows[-count:]
+            lines = _format_hist_entries(hist)
+            span = "最早 " if oldest else "最近 "
+            out = (("「" + label + "」" + span + str(len(lines)) + " 条聊天记录（全量档案共 " + str(len(rows))
+                    + " 条，你和该用户的对话，旧→新）："
+                    + NL + NL.join(lines)) if lines else "「" + label + "」还没有聊天记录。")
+        return out[:3000]
+
+    @filter.llm_tool(name="read_local_file")
+    async def read_local_file(self, event: AstrMessageEvent, path: str):
+        """读取本地文本文件。主人可读本机允许目录（D 盘 dsbot 与桌面 AI专属工作文件）；对方（非主人）只能读自己文件小抽屉里的文件（直接给文件名即可），看不到也碰不了其他任何地方。对方让你看他发过的文件、你帮他存过的笔记时用。返回前 6000 字。"""
+        uid = event.get_sender_id() or "anon"
+        if uid == MASTER_OPENID:
+            rp, err = _safe_local_path(path)
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            rp, err = _sandbox_path(uid, path)
+        if err:
+            return err
+        try:
+            with open(rp, "r", encoding="utf-8", errors="replace") as f:
+                txt = f.read(6000)
+            return txt if txt.strip() else "（文件是空的）"
+        except FileNotFoundError:
+            return "没找到这个文件，检查一下名字。"
+        except Exception as e:
+            return "读文件失败：" + repr(e)[:100]
+
+    @filter.llm_tool(name="list_files")
+    async def list_files(self, event: AstrMessageEvent, path: str, pattern: str = "*"):
+        """列出本地某个目录里的内容。主人可列本机允许目录；对方（非主人）只能列自己文件小抽屉的根目录（path 参数随便填个 . 即可）。问某个目录里有什么文件、找文件或了解结构时用。path 为目录完整路径（主人限 D 盘 dsbot 目录和桌面 AI专属工作文件 之内）；pattern 为简单文件名通配（如 *.py、*.md），缺省列出全部。返回条目（目录带 / 后缀，文件带大小和修改时间），按修改时间新→旧，最多 200 条。"""
+        uid = event.get_sender_id() or "anon"
+        import fnmatch
+        if uid == MASTER_OPENID:
+            rp, err = _safe_local_path(path, exts=None)
+            if err:
+                return err
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            rp = os.path.realpath(_sandbox_root(uid))  # 好友只列自己的小抽屉根目录，不接受路径参数
+        if not os.path.isdir(rp):
+            return "这不是一个目录，检查一下路径。"
+        pat = (pattern or "*").strip() or "*"
+        entries = []
+        try:
+            for name in os.listdir(rp):
+                if not fnmatch.fnmatch(name.lower(), pat.lower()):
+                    continue
+                fp = os.path.join(rp, name)
+                try:
+                    stt = os.stat(fp)
+                except Exception:
+                    continue
+                entries.append((name, os.path.isdir(fp), stt.st_size, stt.st_mtime))
+        except Exception as e:
+            return "读目录失败：" + repr(e)[:100]
+        entries.sort(key=lambda x: -x[3])  # 修改时间新→旧
+        total = len(entries)
+        lines = []
+        for name, is_dir, size, mt in entries[:200]:
+            if is_dir:
+                lines.append(name + "/")
+            else:
+                lines.append(name + "  (" + str(round(size / 1024, 1)) + " KB, "
+                             + time.strftime("%m-%d %H:%M", time.localtime(mt)) + ")")
+        if not lines:
+            return "目录 " + rp + " 里没有匹配「" + pat + "」的条目。"
+        out = "目录 " + rp + "（" + str(total) + " 项，新→旧）：" + NL + NL.join(lines)
+        if total > 200:
+            out += NL + "（只显示前 200 条，已截断）"
+        return out[:4000]
+
+    @filter.llm_tool(name="write_local_file")
+    async def write_local_file(self, event: AstrMessageEvent, path: str, content: str, mode: str = "overwrite"):
+        """写本地文本文件——让你记笔记、保存资料、整理文本时用。主人可写本机允许目录；对方（非主人）只能写自己文件小抽屉里的文件（直接给文件名即可，限 txt/md/json/csv），碰不了其他任何地方。path 为文件完整路径（主人限 D 盘 dsbot 目录和桌面 AI专属工作文件 之内的文本文件，父目录不存在会自动创建）；content 为要写入的内容（上限 20000 字）；mode 为 overwrite（覆盖，已有文件会先备份成同名 .bak，只保留一份）或 append（追加），缺省 overwrite。"""
+        uid = event.get_sender_id() or "anon"
+        import shutil
+        if uid == MASTER_OPENID:
+            rp, err = _safe_local_path(path, must_exist=False)
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            rp, err = _sandbox_path(uid, path, exts=SANDBOX_WRITE_EXTS, must_exist=False)
+        if err:
+            return err
+        content = (content or "")[:20000]
+        if not content:
+            return "（内容为空，没写）"
+        nbytes = len(content.encode("utf-8"))
+        try:
+            os.makedirs(os.path.dirname(rp), exist_ok=True)
+            if (mode or "overwrite").strip().lower() == "append":
+                with open(rp, "a", encoding="utf-8") as f:
+                    f.write(content)
+                return "已追加 " + str(nbytes) + " 字节到 " + rp + "。"
+            backed = False
+            if os.path.isfile(rp):
+                shutil.copy2(rp, rp + ".bak")  # 覆盖前先备份同名 .bak，只保留一份
+                backed = True
+            with open(rp, "w", encoding="utf-8") as f:
+                f.write(content)
+            return "已写入 " + str(nbytes) + " 字节到 " + rp + ("（原文件已备份 .bak）。" if backed else "。")
+        except Exception as e:
+            return "写文件失败：" + repr(e)[:100]
+
+    @filter.llm_tool(name="search_in_files")
+    async def search_in_files(self, event: AstrMessageEvent, path: str, keyword: str, max_results: int = 30):
+        """（仅主人可用）在本地目录下递归搜索文本文件的内容。当主人让你找某段文字/某个关键词写在了哪些文件里时使用。path 为目录完整路径（限 D 盘 dsbot 目录和主人桌面 AI专属工作文件 之内）；keyword 为要搜的关键词（大小写不敏感）；max_results 为最多返回条数，缺省 30。只搜文本文件（txt/md/json/py/js/html/css/log/csv/xml/yaml/cmd），单文件超 2MB 跳过。返回 文件名:行号: 匹配行。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        rp, err = _safe_local_path(path, exts=None)
+        if err:
+            return err
+        if not os.path.isdir(rp):
+            return "这不是一个目录，让主人检查一下路径。"
+        kw = (keyword or "").strip().lower()
+        if not kw:
+            return "（关键词为空）"
+        try:
+            maxr = min(max(int(max_results), 1), 100)
+        except Exception:
+            maxr = 30
+        hits = []
+        try:
+            for root, _dirs, files in os.walk(rp):
+                if len(hits) >= maxr:
+                    break
+                for fn in files:
+                    if len(hits) >= maxr:
+                        break
+                    if os.path.splitext(fn)[1].lower() not in LOCAL_READ_EXTS:
+                        continue
+                    fp = os.path.join(root, fn)
+                    try:
+                        if os.path.getsize(fp) > 2 * 1024 * 1024:
+                            continue  # 单文件超 2MB 跳过
+                        with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                            for ln, line in enumerate(f, 1):
+                                if kw in line.lower():
+                                    hits.append(os.path.relpath(fp, rp) + ":" + str(ln) + ": " + line.strip()[:120])
+                                    if len(hits) >= maxr:
+                                        break
+                    except Exception:
+                        continue
+        except Exception as e:
+            return "搜索失败：" + repr(e)[:100]
+        if not hits:
+            return "在 " + rp + " 里没搜到包含「" + (keyword or "")[:30] + "」的内容。"
+        out = "在 " + rp + " 搜「" + (keyword or "")[:30] + "」（" + str(len(hits)) + " 条命中）：" + NL + NL.join(hits)
+        if len(hits) >= maxr:
+            out += NL + "（已达条数上限，可能还有更多）"
+        return out[:4000]
+
+    @filter.llm_tool(name="send_local_file")
+    async def send_local_file(self, event: AstrMessageEvent, path: str, caption: str = ""):
+        """把本地文件通过 QQ 发给当前聊天的人。主人可发本机允许目录的任意文件；对方（非主人）只能发自己文件小抽屉里的文件（直接给文件名即可）。让你把某个文件发过去、或你改完文件要发回时用。path 为文件完整路径（不超过 20MB）；caption 为随文件附带的一句说明（可选）。"""
+        uid = event.get_sender_id() or "anon"
+        if uid == MASTER_OPENID:
+            rp, err = _safe_local_path(path, exts=None)
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            rp, err = _sandbox_path(uid, path, exts=None)
+        if err:
+            return err
+        if not os.path.isfile(rp):
+            return "这不是一个文件，检查一下路径。"
+        try:
+            if os.path.getsize(rp) > 20 * 1024 * 1024:
+                return "文件超过 20MB，发不了（自限，QQ 接口上传太大容易失败）。"
+            fname = os.path.basename(rp)
+            with open(rp, "rb") as f:
+                data = f.read()
+
+            def _do_send():
+                import base64
+                b64 = base64.b64encode(data).decode("ascii")
+                # 两段式（官方推荐）：/files 上传拿 file_info（srv_send_msg=false 不占主动消息频次），再 msg_type=7 发送
+                # §58：收件人改为当前聊天对象 uid（原来硬编码 MASTER，好友开放后必须随发送者）
+                st1, j1 = _qq_api_post("/v2/users/" + uid + "/files", {
+                    "file_type": 4, "file_data": b64, "file_name": fname, "srv_send_msg": False})
+                fi = j1.get("file_info") if isinstance(j1, dict) else None
+                if not fi:
+                    return "上传文件失败（HTTP " + str(st1) + "）：" + str(j1)[:200]
+                st2, j2 = _qq_api_post("/v2/users/" + uid + "/messages", {
+                    "msg_type": 7, "media": {"file_info": fi}, "msg_seq": random.randint(1, 10000)})
+                if st2 >= 300:
+                    return "发送失败（HTTP " + str(st2) + "）：" + str(j2)[:200]
+                if (caption or "").strip():
+                    _qq_api_post("/v2/users/" + uid + "/messages", {
+                        "content": caption.strip()[:500], "msg_type": 0, "msg_seq": random.randint(1, 10000)})
+                return None
+
+            fail = await asyncio.to_thread(_do_send)
+            if fail:
+                return fail
+            return "文件「" + fname + "」已经发到对方 QQ 了。"
+        except Exception as e:
+            return "发文件失败：" + repr(e)[:150]
+
+    @filter.llm_tool(name="download_file")
+    async def download_file(self, event: AstrMessageEvent, url: str, save_path: str = ""):
+        """（仅主人可用）从网上下载文件存到本地。当主人让你下载/收集网上的东西（图片、文档、压缩包、安装包等任意类型）时使用。url 为文件直链（仅 http/https，自动跟随重定向）；save_path 为保存位置——可以是目录完整路径或文件完整路径（限 D 盘 dsbot 目录和主人桌面 AI专属工作文件 之内，任意扩展名），不填则自动取名存到主人桌面的 下载 文件夹。单文件上限 50MB，同名文件自动加后缀不覆盖。下完把保存路径和大小汇报给主人。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        url = (url or "").strip()
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return "（只支持 http/https 链接）"
+        try:
+            path, size = await asyncio.to_thread(_download_file_impl, url, save_path)
+        except Exception as e:
+            msg = str(e) or repr(e)
+            self._err("download", url[:80] + " " + msg[:120])
+            return "下载失败：" + msg[:150]
+        self._err("download", "saved " + path + " " + str(size) + "B")
+        kb = size / 1024.0
+        sz = (str(round(kb / 1024, 2)) + " MB") if kb >= 1024 else (str(round(kb, 1)) + " KB")
+        return "已下载：" + path + "（" + sz + "）"
+
+    # ---------- 压缩 / 解压（§59：主人全目录；好友锁自己的小抽屉，随 files 开关） ----------
+    @filter.llm_tool(name="zip_files")
+    async def zip_files(self, event: AstrMessageEvent, path: str, zip_path: str = ""):
+        """把本地某个文件或整个文件夹打包成 zip。主人可压本机允许目录（D 盘 dsbot 与桌面 AI专属工作文件）内的；对方（非主人）只能压自己文件小抽屉里的（直接给文件名）。path 为要压的文件/文件夹；zip_path 为输出 zip 位置（可空，缺省在源旁边自动取名 .zip，已存在自动加序号不覆盖）。总量上限 300MB。压完要发过去用 send_local_file。"""
+        uid = event.get_sender_id() or "anon"
+        if uid == MASTER_OPENID:
+            sp, err = _safe_local_path(path, exts=None)
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            sp, err = _sandbox_path(uid, path, exts=None)
+        if err:
+            return err
+        if not os.path.exists(sp):
+            return "没找到要压的东西，检查一下名字。"
+        zp = (zip_path or "").strip()
+        if zp:
+            if uid == MASTER_OPENID:
+                zp, err = _safe_local_path(zp, exts=(".zip",), must_exist=False)
+            else:
+                zp, err = _sandbox_path(uid, zp, exts=(".zip",), must_exist=False)
+            if err:
+                return err
+        else:
+            zp = (os.path.splitext(sp)[0] if os.path.isfile(sp) else sp.rstrip(os.sep)) + ".zip"
+        i = 1
+        base = zp
+        while os.path.exists(zp):  # 不覆盖已有 zip
+            zp = base[:-4] + "_" + str(i) + ".zip"
+            i += 1
+        try:
+            n, total = await asyncio.to_thread(_zip_impl, sp, zp)
+        except Exception as e:
+            return "打包失败：" + str(e)[:120]
+        return "已打包 " + str(n) + " 个文件（共 " + str(round(total / 1048576, 1)) + " MB）到 " + zp + "。要发过去用 send_local_file。"
+
+    @filter.llm_tool(name="unzip_file")
+    async def unzip_file(self, event: AstrMessageEvent, path: str, dest: str = ""):
+        """解压 zip 到本地文件夹。主人可解本机允许目录（D 盘 dsbot 与桌面 AI专属工作文件）内的；对方（非主人）只能解自己文件小抽屉里的（直接给文件名）。path 为 zip 文件；dest 为解压目标目录（可空，缺省解到 zip 同名文件夹）。上限 2000 个文件、解压后共 1GB；带毒路径（跳出目标目录）的压缩包直接拒绝。"""
+        uid = event.get_sender_id() or "anon"
+        if uid == MASTER_OPENID:
+            zp, err = _safe_local_path(path, exts=(".zip",))
+        else:
+            if not _user_perm(uid, "files"):
+                return "（管理员没给你开文件功能）"
+            zp, err = _sandbox_path(uid, path, exts=(".zip",))
+        if err:
+            return err
+        d = (dest or "").strip()
+        if d:
+            if uid == MASTER_OPENID:
+                dp, err = _safe_local_path(d, exts=None, must_exist=False)
+            else:
+                dp, err = _sandbox_path(uid, d, exts=None, must_exist=False)
+            if err:
+                return err
+        else:
+            dp = os.path.splitext(zp)[0]
+        try:
+            n, total = await asyncio.to_thread(_unzip_impl, zp, dp)
+        except Exception as e:
+            return "解压失败：" + str(e)[:120]
+        return "已解压 " + str(n) + " 个条目（共 " + str(round(total / 1048576, 1)) + " MB）到 " + dp + "。"
+
+    # ---------- shell 执行（§60：仅主人；高危黑名单硬拦 + cwd 限允许目录 + 60s 超时） ----------
+    @filter.llm_tool(name="run_command")
+    async def run_command(self, event: AstrMessageEvent, command: str, cwd: str = ""):
+        """（仅主人可用）在主人电脑上执行一条 shell 命令（cmd）并回传输出。主人让你跑脚本、装 Python 包、查系统状态、批量处理文件时用。command 为命令原文；cwd 为工作目录（可空，缺省 D:\\dsbot，必须在允许目录内）。60 秒超时，输出截断到 4000 字。高危命令（格式化/杀进程/改注册表等）和一切删除类命令（del/erase/rd/rmdir/rm）都会被硬拦拒跑——要删东西让主人自己删。更大更险的活（装大型软件、大改代码工程、动系统配置）用 ask_kimi 外包给 Kimi Code；系统级高危操作提醒主人去 Kimi Work 工作台当面处理。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        cmd = (command or "").strip()
+        if not cmd:
+            return "（命令为空）"
+        if len(cmd) > 500:
+            return "（命令太长，拆成几步跑）"
+        if SHELL_DENY_RE.search(cmd):
+            return "这条命令我拒跑——命中高危黑名单。风险大的活让主人去工作台找 Kimi Code 干。"
+        if (cwd or "").strip():
+            rp, err = _safe_local_path(cwd, exts=None)
+            if err:
+                return err
+            if not os.path.isdir(rp):
+                return "（cwd 不是一个目录）"
+        else:
+            rp = r"D:\dsbot"
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd, cwd=rp,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            try:
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                return "（跑超 60 秒被我掐了，没等它跑完）"
+            raw = out or b""
+            text = None
+            for enc in ("utf-8", "gb18030"):  # 优先 utf-8（脚本输出），退回 GBK（cmd 原生输出）
+                try:
+                    text = raw.decode(enc)
+                    break
+                except Exception:
+                    continue
+            if text is None:
+                text = raw.decode("utf-8", "replace")
+            text = text.strip()
+            rc = proc.returncode
+            head = "退出码 " + str(rc) + "。"
+            if not text:
+                return head + "（没有任何输出）"
+            if len(text) > 4000:
+                text = "……（输出太长截断，只留最后 4000 字）\n" + text[-4000:]
+            return head + NL + text
+        except Exception as e:
+            return "执行失败：" + repr(e)[:150]
+
+    # ---------- 外包 Kimi Code（§61：主人专属；后台跑不阻塞聊天，完工主动回报；§65 可续聊补充需求） ----------
+    @filter.llm_tool(name="ask_kimi")
+    async def ask_kimi(self, event: AstrMessageEvent, task: str, resume: bool = False):
+        """（仅主人可用）把重活外包给 Kimi Code——本机的编程 agent（K2.7 Coding Highspeed），能力比你高：能自己规划多步、读写项目文件、跑命令、试错重来。适合：写/改代码工程、批量处理文件、需要多步骤的任务。task 为任务描述，要说清楚要什么、产出什么；resume 为 true 时是接着上一个外包任务补充/修改需求（跟它继续对话，同一工作目录），缺省 false 开新任务。它在独立任务目录里干活（D:\\dsbot\\kimi_tasks\\时间戳\\），完工后你会主动把结果汇报给主人（要几分钟，别催）。同时只能跑一个外包。轻活（一句话能办的）自己用 run_command 干，别什么都外包。它走的是主人自己的 Kimi Code 会员额度，别频繁派活。【派活纪律】绝不自作主张：主人没提 Kimi Code 时，先用自己的话提议（说清楚让它干什么、烧会员额度），等主人明确同意（好/派吧/行/嗯）后才调用本工具；只有主人明说"用 Kimi Code / 外包 / 让 Code 干"时才可直接派。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        if not _conf("kimi"):
+            return "（主人把 Kimi Code 外包的总开关关了，派不了活）"
+        task = (task or "").strip()
+        if not task:
+            return "（没说让 Kimi Code 干什么）"
+        if self.kimi_task is not None and not self.kimi_task.done():
+            return "（上一个外包还没干完，等它完工再派新活）"
+        last = self.kimi_last or {}
+        if resume and last.get("session") and last.get("tdir") and os.path.isdir(last["tdir"]):
+            tdir = last["tdir"]
+            session = last["session"]
+        else:
+            tdir = os.path.join(KIMI_TASKS, time.strftime("%Y%m%d_%H%M%S"))
+            os.makedirs(tdir, exist_ok=True)
+            session = None
+        self.kimi_task = asyncio.create_task(self._run_kimi(task, tdir, session))
+        return ("已接着上一个任务跟 Kimi Code 继续聊（目录 " + tdir + "）" if session
+                else "已把任务外包给 Kimi Code（任务目录 " + tdir + "）") + "，它开工了，干完我主动汇报。"
+
+    async def _run_kimi(self, task, tdir, session=None):
+        """§61 后台跑 Kimi Code 无头模式，600s 超时；完工/翻车都主动汇报给主人。
+        §64：正式版 CLI 0.40.1 用 -p（自动批准、无交互），输出含版本行/会话行噪音，清理后取尾部。
+        §65：-m 指定 K2.7 Highspeed；session 非空时 -r 续聊；提示词带安全护栏（禁删已有文件/禁系统高危）。
+        从输出解析会话 id 存 self.kimi_last，供主人补充需求时续上同一工作目录。"""
+        umo = self.umo.get(MASTER_OPENID)
+        prompt = ("你在目录 " + tdir + " 里工作，所有产出文件都放在这个目录。"
+                  "安全规则：不要删除本机任何已有文件或目录（任务目录里你自己刚产出的除外）；"
+                  "不要执行格式化、杀进程、改注册表、改系统配置这类高危命令。"
+                  "任务：" + task[:1500] +
+                  "。完成后用一两句话汇报：做了什么、产出了哪些文件（给文件名）。")
+        argv = [KIMI_CLI, "-m", KIMI_MODEL, "-p", prompt]
+        if session:
+            argv += ["-r", session]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv, cwd=tdir, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+            timed_out = False
+            try:
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=600)
+                text = (out or b"").decode("utf-8", "replace").strip()
+            except asyncio.TimeoutError:
+                timed_out = True
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                text = ""
+            # 解析会话 id（供续聊），再清掉 CLI 框架噪音行留实质内容
+            ms = re.search(r"To resume this session:\s*kimi -r\s+(\S+)", text)
+            if ms:
+                self.kimi_last = {"session": ms.group(1), "tdir": tdir}
+            lines = [l for l in text.splitlines()
+                     if l.strip() and not l.startswith("kimi version") and not l.startswith("To resume")]
+            text = NL.join(lines).strip()
+            if not timed_out and proc.returncode == 0 and text:
+                msg = "Kimi Code 外包完工：" + text[-1200:] + "（任务目录 " + tdir + "，要哪个文件说一声我发你；要改需求直接说，我让它接着改）"
+            elif timed_out:
+                msg = "Kimi Code 那边跑超 10 分钟被我掐了，活儿可能太重——拆开派，或者主人你去 PowerShell 输 kimi 直接找它。"
+            else:
+                msg = "Kimi Code 没干成（退出码 " + str(proc.returncode) + "）：" + text[-400:]
+        except Exception as e:
+            self._err("ask-kimi", e)
+            msg = "外包 Kimi Code 出错了：" + repr(e)[:120]
+        # §66 补：汇报前等 6s——秒结的任务若立刻发汇报，会插在她自己的 ack 气泡前面（顺序颠倒观感差）
+        await asyncio.sleep(6)
+        try:
+            if umo:
+                await self.context.send_message(umo, MessageChain(chain=[Plain(msg[:600])]))
+                self._record_assistant_turn(MASTER_OPENID, msg[:600])
+        except Exception as e:
+            self._err("ask-kimi-send", e)
+
+    # ---------- 闹钟（§58 起全用户开放：按用户开关 alarm 控制，归属按 uid 隔离，好友最多 5 个启用中） ----------
+    @filter.llm_tool(name="set_alarm")
+    async def set_alarm(self, event: AstrMessageEvent, kind: str, time: str, note: str, date: str = "", weekdays: str = ""):
+        """给当前聊天的人定闹钟，到点你会被叫醒、再用你自己的话提醒他/她。kind 为 once（某天一次，要给 date 如 2026-09-02）/ daily（每天）/ weekly（每周几，要给 weekdays 如 '1,3,5' 表示周一三五，周一=1）；time 为 HH:MM（24 小时制，如 08:00、15:30）；note 为提醒事项原文（如'上高数课''开会'）。'明天下午三点提醒我开会'就是 once；'每周一三五早八点叫我'就是 weekly。记课表时对每节课各定一个 weekly。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID and not _user_perm(uid, "alarm"):
+            return "（管理员没给你开闹钟功能）"
+        wds = [w for w in re.split(r"[^0-9]+", weekdays or "") if w]
+        a, err = _alarm_add(kind, time, note, date, wds, uid=uid)
+        if err:
+            return "（没定上：" + err + "）"
+        return "好的，已定为" + _alarm_desc(a) + " 提醒你：" + a["note"] + "（编号 " + str(a["id"]) + "）"
+
+    @filter.llm_tool(name="list_alarms")
+    async def list_alarms(self, event: AstrMessageEvent):
+        """查看给当前聊天的人定的全部闹钟（含启用/停用状态和上次触发时间）。问'我定了哪些闹钟/课表'时用。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID and not _user_perm(uid, "alarm"):
+            return "（管理员没给你开闹钟功能）"
+        alarms = _alarms_load()
+        if uid != MASTER_OPENID:
+            alarms = [a for a in alarms if a.get("uid") == uid]  # 好友只看自己的
+        if not alarms:
+            return "（还没有定过闹钟）"
+        lines = []
+        for a in alarms:
+            st = "启用" if a.get("enabled", True) else "已停用"
+            lf = ("，上次触发 " + a["last_fired"]) if a.get("last_fired") else ""
+            lines.append("#" + str(a.get("id")) + " [" + st + "] " + _alarm_desc(a) + " ｜ " + (a.get("note") or "") + lf)
+        return "共 " + str(len(alarms)) + " 个闹钟：" + NL + NL.join(lines)
+
+    @filter.llm_tool(name="cancel_alarm")
+    async def cancel_alarm(self, event: AstrMessageEvent, id: int):
+        """按编号删除闹钟（编号从 list_alarms 来）。说'取消某个闹钟/这节课不用提醒了'时用。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID and not _user_perm(uid, "alarm"):
+            return "（管理员没给你开闹钟功能）"
+        try:
+            aid = int(id)
+        except Exception:
+            return "（编号要是数字，从 list_alarms 看）"
+        alarms = _alarms_load()
+        target = [a for a in alarms if a.get("id") == aid]
+        if not target:
+            return "（没找到编号 " + str(aid) + " 的闹钟，用 list_alarms 核对编号）"
+        if uid != MASTER_OPENID and target[0].get("uid") != uid:
+            return "（这个闹钟不是你的，你只管得着自己的）"  # 好友只能删自己的
+        keep = [a for a in alarms if a.get("id") != aid]
+        _alarms_save(keep)
+        gone = target[0]
+        return "（已删除闹钟 #" + str(aid) + "：" + _alarm_desc(gone) + " " + (gone.get("note") or "") + "）"
+
+    @filter.llm_tool(name="read_word")
+    async def read_word(self, event: AstrMessageEvent, path: str):
+        """（仅主人可用）读取本地 Word（.docx）文档的全部文字。当主人让你看或改某个 Word 文档时先用它读取。path 为 .docx 完整路径（限 D 盘 dsbot 目录和主人桌面 AI专属工作文件 之内），返回前 6000 字。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        rp, err = _safe_local_path(path, exts=(".docx",))
+        if err:
+            return err
+        try:
+            import docx
+            doc = docx.Document(rp)
+            txt = NL.join(p.text for p in doc.paragraphs if p.text.strip())
+            return txt[:6000] if txt.strip() else "（文档是空的）"
+        except Exception as e:
+            return "读 Word 失败：" + repr(e)[:100]
+
+    @filter.llm_tool(name="write_word")
+    async def write_word(self, event: AstrMessageEvent, path: str, content: str):
+        """（仅主人可用）把文字内容写成 Word（.docx）文档——主人让你生成或修改 Word 文档时用，写完用 send_local_file 发给他。path 为 .docx 完整路径（限 D 盘 dsbot 目录和主人桌面 AI专属工作文件 之内，覆盖前自动备份 .bak）；content 为全文（上限 20000 字），按换行分段。"""
+        uid = event.get_sender_id() or "anon"
+        if uid != MASTER_OPENID:
+            return "这个只有主人能用哦。"
+        rp, err = _safe_local_path(path, exts=(".docx",), must_exist=False)
+        if err:
+            return err
+        content = (content or "")[:20000]
+        if not content.strip():
+            return "（内容为空，没写）"
+        try:
+            import docx
+            import shutil
+            os.makedirs(os.path.dirname(rp), exist_ok=True)
+            backed = False
+            if os.path.isfile(rp):
+                shutil.copy2(rp, rp + ".bak")  # 覆盖前先备份同名 .bak，只保留一份
+                backed = True
+            doc = docx.Document()
+            for line in content.split(NL):
+                doc.add_paragraph(line)
+            doc.save(rp)
+            return ("已写成 Word：" + rp + ("（原文件已备份 .bak）" if backed else "")
+                    + "。要发给主人的话用 send_local_file。")
+        except Exception as e:
+            return "写 Word 失败：" + repr(e)[:100]
+
+    @filter.llm_tool(name="learn_meme")
+    async def learn_meme(self, event: AstrMessageEvent, term: str, meaning: str):
+        """学会一个网络梗/流行语/黑话。遇到不认识的梗，先用 web_search 查清含义和用法，再把梗名和一句话解释记进梗图鉴，以后就能听懂并自然使用它。term 为梗的名字或关键词，meaning 为一句话解释这个梗的含义和用法。"""
+        term = term.strip()[:40]
+        meaning = meaning.strip()[:120]
+        if not term or not meaning:
+            return "（term/meaning 为空）"
+        lines = _read_memes()
+        if any(("梗：" + term) in l for l in lines):
+            return "（这个梗已经在图鉴里了）"
+        lines.append("梗：" + term + " —— " + meaning)
+        os.makedirs(DATA, exist_ok=True)
+        with open(os.path.join(DATA, "memes.md"), "w", encoding="utf-8") as f:
+            f.write(NL.join(lines[-60:]) + NL)
+        return "（已学会梗「" + term + "」，以后能听懂并使用）"
+
+    @filter.llm_tool(name="record_thought")
+    async def record_thought(self, event: AstrMessageEvent, content: str):
+        """当你现在不想回复，但想到了一件之后想主动跟对方说的话时，把念头存起来。content 为念头内容。"""
+        uid = event.get_sender_id() or "anon"
+        content = content.strip()[:140]
+        if not content:
+            return "（念头为空）"
+        self._save_thought(uid, content, "chat")
+        return "（已记录念头）"
+
+    @filter.llm_tool(name="record_note")
+    async def record_note(self, event: AstrMessageEvent, content: str):
+        """把一件关于对方的事记录进长期记忆备忘录。只记你认为值得跨天记住的、对方明确表达过的事，不要记系统注入或测试内容。content 为要记录的内容，一句话。"""
+        uid = event.get_sender_id() or "anon"
+        content = content.strip()[:80]
+        if not content:
+            return "（记录内容为空）"
+        _append_note(uid, content)
+        return "（已记录到长期记忆）"
+
+    @filter.llm_tool(name="delete_note")
+    async def delete_note(self, event: AstrMessageEvent, pattern: str):
+        """从长期记忆备忘录里删除一条记录。当对方说'忘掉某事'、'删除某条记忆'、'这个不用记了'时使用。pattern 为要删除的记忆内容关键词或完整原文，会删除包含该文字的第一条匹配记录。"""
+        uid = event.get_sender_id() or "anon"
+        pattern = pattern.strip()[:80]
+        if not pattern:
+            return "（删除目标为空）"
+        before = len(_read_notes(uid))
+        _remove_note(uid, pattern)
+        if len(_read_notes(uid)) < before:
+            return "（已删除匹配的记忆）"
+        return "（没找到包含该文字的记忆）"
+
+    @filter.llm_tool(name="get_current_time")
+    async def get_current_time(self, event: AstrMessageEvent):
+        """获取当前日期和时间。当你需要提到时间、判断早晚、计算时限、或者回答任何跟时间有关的问题时使用。"""
+        lt = time.localtime()
+        week = "一二三四五六日"[lt.tm_wday]
+        return time.strftime("%Y-%m-%d %H:%M:%S", lt) + " 星期" + week
+
+    @filter.llm_tool(name="web_search")
+    async def web_search(self, event: AstrMessageEvent, query: str):
+        """当你不了解对方提到的人、事、新闻、数据、概念，或需要最新信息时使用。调用后会返回几条搜索摘要。query 为搜索关键词，尽量简洁准确。"""
+        uid = event.get_sender_id() or "anon"
+        now = time.time()
+        # 同人 30s 内重复调用直接打回（08-29 §六）
+        if now - self.search_cd.get(uid, 0) < 30:
+            return "（刚搜过，稍等）"
+        self.search_cd[uid] = now
+        # react 抢答：搜索耗时长，先 100% 发一句情境化即时反应（25s 去重防连搜刷屏；LLM 生成，失败兜底语料）
+        if now - self.tool_react_at.get(uid, 0) >= 25:
+            self.tool_react_at[uid] = now
+            asyncio.create_task(self._react_and_send(event.unified_msg_origin, uid, "search", query))
+        import websearch
+        results = await websearch.web_search(query, top_n=6, timeout_ms=12000)
+        if not results:
+            return "（没搜到相关结果）"
+        out = []
+        for i, r in enumerate(results):
+            line = str(i + 1) + ". " + r.get("title", "") + "：" + r.get("snippet", "")[:120]
+            if r.get("url"):
+                line += "（链接：" + r.get("url", "") + "）"
+            out.append(line)
+        return chr(10).join(out)
+
+    @filter.llm_tool(name="fetch_url")
+    async def fetch_url(self, event: AstrMessageEvent, url: str):
+        """当你需要读取某个网页的详细内容时使用，通常在 web_search 之后对某个搜索结果深入了解。url 为要抓取的完整 URL。"""
+        import urllib.request
+        from websearch import strip_html
+        url = (url or "").strip()
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return "（URL 为空或不合法）"
+        if _is_internal_url(url):
+            return "（这个地址指向本机或内网，不能读）"
+        uid = event.get_sender_id() or "anon"
+        # react 抢答：抓网页耗时长，先 100% 发一句情境化即时反应（与搜索共用 25s 去重）
+        if time.time() - self.tool_react_at.get(uid, 0) >= 25:
+            self.tool_react_at[uid] = time.time()
+            asyncio.create_task(self._react_and_send(event.unified_msg_origin, uid, "fetch", url))
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            raw = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=15).read(2097152))
+        except Exception as e:
+            return "（抓取失败：" + str(e)[:80] + "）"
+        text = None
+        for enc in ("utf-8", "gb18030"):
+            try:
+                text = raw.decode(enc)
+                break
+            except Exception:
+                continue
+        if text is None:
+            text = raw.decode("utf-8", "ignore")
+        tm = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
+        title = strip_html(tm.group(1)) if tm else ""
+        body = re.sub(r"(?is)<(script|style)[^>]*>.*?</[a-z]+>", " ", text)
+        content = strip_html(body)[:1500]
+        if not content:
+            return "（页面没有可读正文）"
+        return (("标题：" + title + NL) if title else "") + "正文：" + content
+
+    async def _send_sticker_row(self, umo, row):
+        abs_path = os.path.join(PACKS, row["pack"], row["rel"].replace("/", os.sep))
+        if not os.path.isfile(abs_path):
+            return False
+        await self.context.send_message(umo, MessageChain(chain=[Image.fromFileSystem(abs_path)]))
+        return True
+
+    async def _send_sticker(self, umo, query):
+        row = _pick_sticker(query)
+        if not row:
+            return False
+        return await self._send_sticker_row(umo, row)
+
+    @filter.llm_tool(name="send_sticker")
+    async def send_sticker(self, event: AstrMessageEvent, query: str):
+        """发表情包（大图）。这是发表情包的唯一方式。query 为 情绪 + 描述词（如 'happy 得意拳' 或 'daily 干饭'），会从图库里语义匹配最贴切的一张发出。想让回复更生动时使用，别连发。"""
+        uid = event.get_sender_id() or "anon"
+        umo = event.unified_msg_origin
+        row = _pick_sticker(query)
+        if not row:
+            return "（图库里没找到匹配的表情包）"
+        self.pending_sticker.setdefault(umo, []).append(row)
+        self.last_sticker[uid] = {"tag": row["tag"], "caption": row["caption"], "ts": time.time()}
+        return "（已选好表情包，会跟在回复后面发出）"
+
+    # ---------- 她的图库自主管理（无 uid 硬闸——这是她自己的图库，任何聊天场景都能用） ----------
+    @filter.llm_tool(name="list_stickers")
+    async def list_stickers(self, event: AstrMessageEvent, tag: str = "", limit: int = 10):
+        """管理你自己的表情包图库：看看图库里有什么（跨所有 pack，新→旧）。tag 可填情绪桶（如 happy）或你打过的自由标签来过滤，不填看全部；limit 缺省 10、最多 30。返回每行的 path 可以传给 retag_sticker 改标签或 delete_sticker 清理。想看家底、检查自动打标打得对不对时用。"""
+        try:
+            limit = max(1, min(int(limit or 10), 30))
+        except Exception:
+            limit = 10
+        tag = (tag or "").strip()
+        rows = _gallery_db_rows(tag, limit)
+        if not rows:
+            return "（图库里没有" + ("tag=" + tag + " 的图" if tag else "任何图") + "）"
+        lines = [r["pack"] + "/" + r["rel"] + " ｜ " + r["tag"] + (" ｜ " + r["caption"] if r["caption"] else "")
+                 for r in rows]
+        return "图库命中 " + str(len(rows)) + " 条（新→旧，path ｜ 标签 ｜ 描述）：" + NL + NL.join(lines)
+
+    @filter.llm_tool(name="retag_sticker")
+    async def retag_sticker(self, event: AstrMessageEvent, path: str, tags: str):
+        """管理你自己的表情包图库：给一张图改标签（比如自动打标打错了、或你想补个梗名）。path 用 list_stickers 返回的 path；tags 逗号分隔——第 1 个是主情绪桶，必须在这些里：""" + "/".join(MOOD_WORDS) + """（或 misc），后面跟 1~3 个自由中文标签（梗/主题/画面内容）。只改标签记录，图片文件不动。"""
+        r = _gallery_resolve(path)
+        if not r:
+            return "（没找到这张图，path 要用 list_stickers 返回的值）"
+        pack, rel, abs_path = r
+        tl = [t.strip() for t in re.split("[,，、;；]+", tags or "") if t.strip()]
+        if not tl:
+            return "（tags 至少给一个标签，第 1 个是主情绪桶）"
+        primary = tl[0].lower()
+        if primary not in MOOD_WORDS and primary != "misc":
+            mapped = EMOTION_ALIAS.get(tl[0], "")
+            if mapped in MOOD_WORDS:
+                tl[0] = primary = mapped  # 中文情绪词 → 映射成英文桶
+            else:
+                return "（主情绪桶「" + tl[0] + "」不在桶集合内：" + "/".join(MOOD_WORDS) + "，或 misc）"
+        free = []
+        for t in tl[1:4]:
+            t = t[:8]
+            if t and t != primary and t not in free:
+                free.append(t)
+        caption = "、".join(free)
+        kw = ("表情包 自收集 " + " ".join(free)).strip()
+        dbf = os.path.join(PACKS, pack, "index.db")
+        conn = sqlite3.connect(dbf)
+        old = conn.execute("SELECT file_name, file_hash FROM memes WHERE path = ? LIMIT 1", (rel,)).fetchone()
+        conn.execute("DELETE FROM memes WHERE path = ?", (rel,))  # 删旧行插新行（主桶+自由标签每标签一行）
+        now = time.time()
+        for t in [primary] + free:
+            conn.execute("INSERT INTO memes (path, tag, file_name, file_hash, caption, keywords, mtime, captioned_at)"
+                         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         (rel, t, (old[0] if old else os.path.basename(rel)), (old[1] if old else ""), caption, kw, now, now))
+        conn.commit()
+        conn.close()
+        self._err("gallery", "retag " + pack + "/" + rel + " → " + ",".join([primary] + free))
+        return "（已改好标签：" + ", ".join([primary] + free) + "）"
+
+    @filter.llm_tool(name="delete_sticker")
+    async def delete_sticker(self, event: AstrMessageEvent, path: str):
+        """管理你自己的表情包图库：把不喜欢/不想要的图丢进回收站（移到 sticker_packs/_trash，不真删可恢复；图库标签记录移除，之后选图不会再抽到它）。path 用 list_stickers 返回的 path。"""
+        r = _gallery_resolve(path)
+        if not r:
+            return "（没找到这张图，path 要用 list_stickers 返回的值）"
+        pack, rel, abs_path = r
+        trash = os.path.join(PACKS, "_trash")
+        os.makedirs(trash, exist_ok=True)
+        dst = os.path.join(trash, pack + "_" + os.path.basename(abs_path))
+        if os.path.isfile(dst):
+            dst = os.path.join(trash, pack + "_" + str(int(time.time())) + "_" + os.path.basename(abs_path))
+        os.rename(abs_path, dst)
+        dbf = os.path.join(PACKS, pack, "index.db")
+        conn = sqlite3.connect(dbf)
+        conn.execute("DELETE FROM memes WHERE path = ?", (rel,))
+        conn.commit()
+        conn.close()
+        self._err("gallery", "trash " + pack + "/" + rel + " → _trash/" + os.path.basename(dst))
+        return "（已丢进回收站 _trash/" + os.path.basename(dst) + "，图库记录已移除）"
+
+    # ---------- 消息入口闸门：休眠/闭嘴命令、唤醒词、陌生人安全预筛（LLM 之前拦截） ----------
+    async def _save_inbox_images(self, uid, event):
+        """用户来图留存：Image 组件字节存 media/inbox/<uid前8>_<ms>_<i>.<ext>（每条最多 3 张，单张 >15MB 跳过）。
+        返回相对 dsh_data 的路径列表（如 media/inbox/xxx.jpg）；不干扰现有识图/表情采集逻辑，只做留存。"""
+        import urllib.request
+        out = []
+        try:
+            mobj = getattr(event, "message_obj", None)
+            segs = [s for s in (getattr(mobj, "message", None) or []) if isinstance(s, Image)]
+            if not segs:
+                return out
+            inbox = os.path.join(DATA, "media", "inbox")
+            os.makedirs(inbox, exist_ok=True)
+            ms = str(int(time.time() * 1000))
+            prefix = re.sub(r"[^A-Za-z0-9_-]", "_", uid)[:8]
+            for i, seg in enumerate(segs[:3]):
+                url = seg.url or getattr(seg, "file", None)
+                if not url:
+                    continue
+                url = str(url)
+                is_http = url.startswith("http://") or url.startswith("https://")
+                if not is_http and not os.path.exists(url):  # §68：本地已落盘的来图也留存
+                    self._err("inbox-dbg", "skip seg url=%s" % url[:90])
+                    continue
+                try:
+                    if is_http:
+                        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                        buf = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=15).read())
+                    else:
+                        buf = await asyncio.to_thread(lambda: open(url, "rb").read())
+                    if not buf or len(buf) > 15 * 1024 * 1024:
+                        continue
+                    em = re.search(r"\.(png|jpe?g|gif|webp)", str(url).split("?")[0], re.I)
+                    ext = (em.group(1).lower().replace("jpeg", "jpg") if em else "jpg")
+                    rel = "media/inbox/" + prefix + "_" + ms + "_" + str(i) + "." + ext
+                    with open(os.path.join(DATA, rel.replace("/", os.sep)), "wb") as f:
+                        f.write(buf)
+                    out.append(rel)
+                except Exception as e:
+                    self._err("inbox-img", e)
+        except Exception as e:
+            self._err("inbox", e)
+        return out
+
+    async def _save_inbox_files(self, uid, event):
+        """用户来文件留存：File 组件按 url 下载存 files/inbox/<uid前8>_<ms>_<i>_<原名安全化>（每条最多 3 个，单文件 >20MB 拒收）。
+        返回 ([(相对路径, 原名)], 超大被拒数量)；不干扰现有逻辑，只做留存。"""
+        import urllib.request
+        out = []
+        oversized = 0
+        try:
+            mobj = getattr(event, "message_obj", None)
+            segs = [s for s in (getattr(mobj, "message", None) or []) if isinstance(s, File)]
+            if not segs:
+                return out, oversized
+            inbox = os.path.join(DATA, "files", "inbox")
+            os.makedirs(inbox, exist_ok=True)
+            ms = str(int(time.time() * 1000))
+            prefix = re.sub(r"[^A-Za-z0-9_-]", "_", uid)[:8]
+            for i, seg in enumerate(segs[:3]):
+                url = getattr(seg, "url", None) or ""
+                if not (str(url).startswith("http://") or str(url).startswith("https://")):
+                    continue
+                name = _sanitize_filename(getattr(seg, "name", "") or "file")
+                try:
+                    req = urllib.request.Request(str(url), headers={"User-Agent": "Mozilla/5.0"})
+                    buf = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=60).read())
+                    if not buf:
+                        continue
+                    if len(buf) > 20 * 1024 * 1024:
+                        oversized += 1
+                        continue
+                    rel = "files/inbox/" + prefix + "_" + ms + "_" + str(i) + "_" + name
+                    with open(os.path.join(DATA, rel.replace("/", os.sep)), "wb") as f:
+                        f.write(buf)
+                    out.append((rel, name))
+                except Exception as e:
+                    self._err("inbox-file", e)
+        except Exception as e:
+            self._err("inbox-files", e)
+        return out, oversized
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def gate(self, event: AstrMessageEvent):
+        try:
+            uid = event.get_sender_id() or "anon"
+            trimmed = (event.message_str or "").strip()
+            # 纯图/纯文件消息（无文本有 Image/File 组件）也继续走，保证来图来文件留存入历史；全无内容才丢
+            _mobj = getattr(event, "message_obj", None)
+            has_img = any(isinstance(s, Image) for s in (getattr(_mobj, "message", None) or []))
+            has_file = any(isinstance(s, File) for s in (getattr(_mobj, "message", None) or []))
+            if not trimmed and not has_img and not has_file:
+                return
+            # 「总开关 开/关」命令（仅主人）：控制台不可用时的兜底，写 dsh_soul_conf.json 的 enabled 键
+            msw = MASTER_SWITCH_RE.match(trimmed)
+            if msw and uid == MASTER_OPENID:
+                on = msw.group(1) == "开"
+                conf_path = os.path.join(DATA, "dsh_soul_conf.json")
+                conf = _load(conf_path, {})
+                conf["enabled"] = on
+                _save(conf_path, conf)
+                ack = "行，总开关开了，我回来了。" if on else "行，全静默了。想叫我回来就说「总开关 开」。"
+                self._record_gate_turn(uid, trimmed, ack)
+                await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(ack)]))
+                event.stop_event()
+                return
+            # 全局总开关：enabled=false 时所有消息直接静默（不记历史、不进 LLM、不触发 react/主动逻辑）
+            if not _conf("enabled"):
+                event.stop_event()
+                return
+            now = time.time()
+            # 顺手记下对方昵称（好友主动消息后通知主人时用作标识）
+            try:
+                nm = event.get_sender_name() or ""
+            except Exception:
+                nm = ""
+            if nm and self.names.get(uid) != nm:
+                self.names[uid] = nm
+                _save(self.n_path, self.names)
+            if float(self.sil.get(uid, 0) or 0) > now:
+                if WAKE_RE.match(trimmed):
+                    self.sil[uid] = 0
+                    _save(self.s_path, self.sil)
+                    # 唤醒词也记入历史（修复唤醒路径 user 轮次丢失）并置攒批标记，放行走正常 LLM 回复
+                    self._record_user_turn(uid, trimmed)
+                    self.batch_wait[uid] = now
+                    return
+                event.stop_event()
+                return  # 真休眠：包括主人在内的消息都不响应
+            # 按用户 reply 开关：全用户通用（含主人），false 入口直接拦截（不记历史不进 LLM，热生效）
+            if not _user_perm(uid, "reply"):
+                event.stop_event()
+                return
+            # 积分限额：每条用户消息扣 1 分（主人豁免；points_enabled=false 完全跳过；现读现写热生效）
+            if uid != MASTER_OPENID and _conf("points_enabled"):
+                ok, first_block = _points_charge(uid)
+                if not ok:
+                    if first_block:
+                        # 当天首次余额不足才以她的口吻直发提示（不记历史，notified 防刷屏）
+                        try:
+                            await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(
+                                "今天的聊天积分用完啦，明天零点后再来找我吧～")]))
+                        except Exception as e:
+                            self._err("points-notify", e)
+                    event.stop_event()
+                    return
+            ack = self._match_sleep_cmd(uid, trimmed, now)
+            if ack:
+                self._record_gate_turn(uid, trimmed, ack)
+                await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(ack)]))
+                event.stop_event()
+                return
+            # 「提醒 开/关」命令（仅主人）：写 dsh_soul_conf.json 的 reminders 键，持久化
+            rc = REMIND_CMD_RE.match(trimmed)
+            if rc and uid == MASTER_OPENID:
+                on = rc.group(1) == "开"
+                conf_path = os.path.join(DATA, "dsh_soul_conf.json")
+                conf = _load(conf_path, {})
+                conf["reminders"] = on
+                _save(conf_path, conf)
+                ack = "行，提醒开了，到点我叫你。" if on else "行，提醒关了，你自己看着点。"
+                self._record_gate_turn(uid, trimmed, ack)
+                await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(ack)]))
+                event.stop_event()
+                return
+            # 状态命令：本地汇报，不进 LLM（记历史双轮次）
+            if STATUS_RE.match(trimmed):
+                ack = self._status_text(uid, now)
+                self._record_gate_turn(uid, trimmed, ack)
+                await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(ack)]))
+                event.stop_event()
+                return
+            # 安全两道闸（均受全局 conf safety 开关控制，刻意不做按用户开关——安全闸一关全开风险太大）：
+            # 第一道硬关键词命中进 blocked 持久化名单；第二道 flash 分类闸（只拦极端六类，fail-open）只拒答不进 blocked（对齐原版）
+            if uid != MASTER_OPENID and _conf("safety"):
+                if any(p.search(trimmed) for p in SAFETY_HARD_PATTERNS):
+                    self._record_gate_turn(uid, trimmed[:500], SAFETY_DECLINE)
+                    if uid not in self.blocked:
+                        self.blocked.add(uid)
+                        _save(self.b_path, sorted(self.blocked))
+                    self._err("safety", "blocked " + uid[:12] + " " + trimmed[:40])
+                    await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(SAFETY_DECLINE)]))
+                    event.stop_event()
+                    return
+                if await self._flash_unsafe(trimmed):
+                    self._record_gate_turn(uid, trimmed[:500], SAFETY_DECLINE)
+                    self._err("safety-flash", "declined " + uid[:12] + " " + trimmed[:40])
+                    await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(SAFETY_DECLINE)]))
+                    event.stop_event()
+                    return
+            # 用户来图/来文件留存（enabled/reply/积分/安全闸都通过后才下载，避免拦截路径留孤儿文件）
+            inbox_imgs = await self._save_inbox_images(uid, event) if has_img else []
+            inbox_files, oversized = (await self._save_inbox_files(uid, event)) if has_file else ([], 0)
+            if oversized:
+                # 超 20MB 拒收并直发提示（不记历史）
+                try:
+                    await self.context.send_message(event.unified_msg_origin, MessageChain(chain=[Plain(
+                        "文件超过 20MB，我存不下，压缩或拆分一下再发吧。")]))
+                except Exception as e:
+                    self._err("inbox-file-notify", e)
+            if inbox_files:
+                # 记下刚收到的文件，inject 给主人的提示词会附带路径（一次性）
+                self._last_inbox_files[uid] = {"ts": now, "files": inbox_files}
+            # 智能攒批判定（§37）：冷启动（距上条 >8s）且像说完了（≥8 字或带句末标点）→ inject 跳过攒批 sleep；
+            # 连发 streak（≤8s 内有过上条）或超短无标点（很可能还有下文）→ 仍等 2.5s 窗口。
+            # 缓冲中的连发消息也会走到这里刷新 last_msg_at，streak 判定因此连贯。
+            gap = now - float(self.last_msg_at.get(uid, 0) or 0)
+            said_done = len(trimmed) >= BATCH_DONE_MINLEN or any(p in trimmed for p in BATCH_END_PUNCT)
+            self.batch_skipwait[uid] = bool(gap > BATCH_STREAK_GAP and said_done)
+            self.last_msg_at[uid] = now
+            # 滴灌期间同 uid 来新消息：置打断标记，剩余气泡作废（_drip_send 段间消费）
+            if self.drip_active.get(uid):
+                self.interrupt[uid] = True
+            # 思考中（LLM 在生成）同 uid 来新消息：同样置打断标记——capture 整轮压住不说、带新消息重想（§53）
+            elif float(self.run_active.get(uid, 0) or 0) > 0 and now - float(self.run_active[uid]) < 90:
+                self.interrupt[uid] = True
+            bw = self.batch_wait.get(uid)
+            if bw:
+                if now - float(bw) < 30:
+                    # 攒批窗口内的连发消息：记入历史 + 进缓冲，不单独触发回复（由在途回复合并）
+                    self._record_user_turn(uid, trimmed, inbox_imgs, inbox_files)
+                    if trimmed:
+                        self.batch_buf.setdefault(uid, []).append(trimmed[:200])
+                    event.stop_event()
+                    return
+                # 标记时间戳超 30s 视为过期（防 inject 未消费导致后续消息全被吞）
+                self.batch_wait.pop(uid, None)
+            # 收信即记入历史（对齐 NapCat 收信时 appendChatTurn 的时序）
+            self._record_user_turn(uid, trimmed, inbox_imgs, inbox_files)
+            # 放行消息置"新消息"标记（带时间戳）：inject 只在有标记时 sleep 攒批，工具续轮不睡
+            self.batch_wait[uid] = now
+            # react 抢答（移植 NapCat react：正式回复前 30% 概率先发一句即时反应；
+            # 搜索/抓取类长耗时操作在工具内 100% 发）——让主人立刻知道她接到了，遮盖 LLM 思考延迟；
+            # §32 起情境化生成（贴合对方这句话），LLM 失败/超时回退固定语料
+            if random.random() < 0.2:
+                asyncio.create_task(self._react_and_send(event.unified_msg_origin, uid, "quick", trimmed))
+        except Exception as e:
+            self._err("gate", e)
+
+    # ---------- 情境化 react 抢答（§32：LLM 极短生成贴合对方这句话的即时反应，固定语料只做兜底） ----------
+    async def _make_react(self, uid, scene, last_text):
+        """生成一句 2~12 字的即时口头反应：全人设 + 最近几轮上下文 + 5s 超时（§56：
+        此前无人设无上下文只给最后一句，抢答"裸奔"导致质量低、口吻不像她、接不住语境）。
+        超时/失败/空/超长 → 固定语料兜底。
+        防复读：撞该 uid 最近 5 条已发 react 时重生成一次，再撞换兜底料（兜底也优先选没发过的）。"""
+        pool = {"quick": REACT_QUICK, "search": REACT_SEARCH, "fetch": REACT_FETCH}.get(scene, REACT_QUICK)
+        recent = self.react_recent.setdefault(uid, [])
+
+        def fallback():
+            cand = [s for s in pool if s not in recent]
+            return random.choice(cand or pool)
+
+        # §56：人设（好友语境机械替换"主人"→"对方"，与 inject 同规则）+ 最近 4 轮对话
+        is_master = (uid == MASTER_OPENID)
+        try:
+            persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
+            if not is_master:
+                persona = persona.replace("主人", "对方")
+        except Exception:
+            persona = ""
+        sys_prompt = ((persona or "你是主人的毒舌 AI 伙伴，嘴硬心软，说话短。") + NL
+                      + "你现在只做一件事：对对方刚说的话先回一句 2~12 个字的即时口头反应——像真人秒回时的插话，"
+                        "短、自然、带你的性格；正式回复稍后另发，所以反应里别给结论别展开别复述对方的话。")
+        ctx_lines = []
+        for h in self._h(uid)[-5:-1]:  # [-1] 是当前这句（收信已记历史），取它之前的上下文
+            who = "你" if h["role"] == "assistant" else "对方"
+            ctx_lines.append(who + "：" + (h.get("text") or "").replace(NL, " ")[:50])
+        ctx = ("你们刚才在聊：" + NL + NL.join(ctx_lines) + NL) if ctx_lines else ""
+
+        text = ""
+        for _attempt in range(2):  # 撞复读重生成一次
+            try:
+                scene_hint = {"search": "你接下来要去网上查资料，反应里可以体现这一点（如'我查查'）。",
+                              "fetch": "你接下来要去点开对方给的链接看，反应里可以体现这一点。"}.get(scene, "")
+                out = await self._chat("react", timeout=5,
+                    prompt=(ctx + "对方刚说：「" + (last_text or "")[:80] + "」。" + scene_hint
+                            + "回一句 2~12 个字的即时反应，贴合这句话的内容、情绪和你们刚才的语境；"
+                              "对方在说正经事、难过的事或急事时反应要正经（'怎么了''我在听'），别调侃别玩梗。"
+                              "只输出那句话本身，不要引号不要解释。"),
+                    system_prompt=sys_prompt,
+                    max_tokens=60)
+                if out is None:
+                    break
+                t = _llm_text(out).strip()
+                t = t.splitlines()[0].strip() if t else ""
+                t = re.sub(r"^[「\"'“”‘’]+|[」\"'“”‘’。！？!~…]+$", "", t)
+                if not t or len(t) > 12:
+                    text = ""
+                    continue
+                text = t
+                if text in recent:
+                    continue  # 撞复读，重生成一次
+                break
+            except Exception as e:
+                self._err("react", e)  # 生成失败记日志便于观察
+                break
+        if not text or text in recent:
+            text = fallback()
+        recent.append(text)
+        self.react_recent[uid] = recent[-5:]
+        return text
+
+    async def _react_and_send(self, umo, uid, scene, last_text):
+        """生成并直发一条即时反应（不扣分——bot 侧直发不过 gate 积分路径）。
+        §48：发出后记历史 + 存 last_react——此前不记历史也不进主请求，主 LLM 不知道抢答说了啥，
+        导致正式回复与抢答口径不一（自相矛盾）；现在主请求会被一次性告知、历史里也能看到。"""
+        try:
+            t = await self._make_react(uid, scene, last_text)
+            await self.context.send_message(umo, MessageChain(chain=[Plain(t)]))
+            self.last_react[uid] = {"ts": time.time(), "text": t}
+            self._record_assistant_turn(uid, t)
+        except Exception as e:
+            self._err("react", e)
+
+    async def _busy_notice(self, umo, uid):
+        """§59 埋头反馈：连续工具续轮第 3 轮插一句"在弄了"，固定语料池（零 LLM 成本）。
+        记历史保持口径一致（她知道自己说过这句）；总开关关或该用户回复关时不发。"""
+        try:
+            if not _conf("enabled") or not _user_perm(uid, "reply"):
+                return
+            t = random.choice(BUSY_LINES)
+            await self.context.send_message(umo, MessageChain(chain=[Plain(t)]))
+            self._record_assistant_turn(uid, t)
+        except Exception as e:
+            self._err("busy-notice", e)
+
+    def _bump_turns(self, uid, n=1):
+        """H1：单调递增的轮次计数器（内存态，重启后差值重新累计即可）"""
+        self.turn_count[uid] = self.turn_count.get(uid, 0) + n
+
+    def _record_user_turn(self, uid, text, images=None, files=None):
+        hist = self._h(uid)
+        entry = {"role": "user", "text": text[:300], "ts": time.time()}
+        if images:
+            entry["images"] = images  # 用户来图留存（media/inbox 相对路径，控制台可直接看图）
+        if files:
+            entry["files"] = [rel for rel, _name in files]  # 用户来文件留存（files/inbox 相对路径）
+        if not text:
+            if files:
+                entry["text"] = NL.join("[文件:" + n + "]" for _r, n in files)
+            elif images:
+                entry["text"] = "[图片]"
+        hist.append(entry)
+        _archive_append(uid, entry)  # 全量归档（只追加、永不删改）
+        self._bump_turns(uid)
+        self.h[uid] = hist[-150:]
+        _save(self.h_path, self.h)
+
+    def _record_assistant_turn(self, uid, text):
+        """主动消息（sprinkle/revive/proactive）发送成功后补记她的轮次，让她记得自己说过什么"""
+        hist = self._h(uid)
+        entry = {"role": "assistant", "text": text[:400], "ts": time.time()}
+        hist.append(entry)
+        _archive_append(uid, entry)  # 全量归档（只追加、永不删改）
+        self._bump_turns(uid)
+        self.h[uid] = hist[-150:]
+        _save(self.h_path, self.h)
+
+    def _record_gate_turn(self, uid, user_text, reply_text):
+        hist = self._h(uid)
+        e1 = {"role": "user", "text": user_text[:300], "ts": time.time()}
+        e2 = {"role": "assistant", "text": reply_text[:400], "ts": time.time()}
+        hist.append(e1)
+        hist.append(e2)
+        _archive_append(uid, e1)  # 全量归档（只追加、永不删改）
+        _archive_append(uid, e2)
+        self._bump_turns(uid, 2)
+        self.h[uid] = hist[-150:]
+        _save(self.h_path, self.h)
+
+    def _match_sleep_cmd(self, uid, trimmed, now):
+        """闭嘴类（默认30分钟，可带N分钟上限720）/ 休眠类（默认睡到早8点，支持N小时上限24、N分钟、睡到H点[半]）。命中返回回复语并写入 silence_until。"""
+        qm = QUIET_RE.match(trimmed)
+        if qm:
+            mins = min(int(qm.group(2)), 720) if qm.group(2) else 30
+            until = now + mins * 60
+            ack = ("行，安静" + str(mins) + "分钟。到点自己滚回来。") if qm.group(2) else "行，安静会儿。到点自己滚回来。"
+        else:
+            sm = SLEEP_DUR_RE.match(trimmed)
+            um = SLEEP_UNTIL_RE.match(trimmed)
+            if sm and sm.group(1):
+                if (sm.group(2) or "") == "分钟":
+                    n = min(int(sm.group(1)), 720)
+                    until = now + n * 60
+                    ack = "睡了，" + str(n) + "分钟后见。"
+                else:
+                    n = min(int(sm.group(1)), 24)
+                    until = now + n * 3600
+                    ack = "睡了，" + str(n) + "小时后见。别半夜偷偷发消息馋我。"
+            elif sm:
+                lt = time.localtime(now)
+                target = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 8, 0, 0, 0, 0, -1))
+                if target <= now:
+                    target += 86400
+                until = target
+                ack = "睡了，明早8点见。梦里也别想我。"
+            elif um:
+                hh = min(int(um.group(1) or 8), 23)
+                mm = min(int(um.group(2)), 59) if um.group(2) else (30 if "半" in trimmed else 0)
+                lt = time.localtime(now)
+                target = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, hh, mm, 0, 0, 0, -1))
+                if target <= now:
+                    target += 86400
+                until = min(target, now + 24 * 3600)
+                ack = "睡了，" + str(hh) + "点" + (str(mm) + "分" if mm else "") + "见。闹钟都不用，我自己会醒。"
+            else:
+                return ""
+        self.sil[uid] = until
+        _save(self.s_path, self.sil)
+        return ack
+
+    @filter.event_message_type(filter.EventMessageType.ALL)
+    async def harvest_images(self, event: AstrMessageEvent):
+        try:
+            if not _conf("enabled") or not _conf("harvest"):
+                return
+            uid = event.get_sender_id() or "anon"
+            # §68 调试：带图/疑似带图消息记一条组件构成，定位收图静默失败
+            _segs = event.message_obj.message or []
+            _imgs = [s for s in _segs if isinstance(s, Image)]
+            if _imgs or "[图片]" in (event.message_str or ""):
+                self._err("harvest-dbg", "uid=%s segs=%s img_urls=%s" % (
+                    uid, ",".join(type(s).__name__ for s in _segs),
+                    [str(getattr(s, "url", None) or getattr(s, "file", None))[:90] for s in _imgs]))
+            # 按用户 harvest 开关（全局 harvest AND 用户 harvest 才采集）
+            if not _user_perm(uid, "harvest"):
+                return
+            urls = []
+            for seg in (event.message_obj.message or []):
+                if not isinstance(seg, Image):
+                    continue
+                url = seg.url or getattr(seg, "file", None)
+                if not url:
+                    continue
+                url = str(url)
+                # §68：适配器/框架常把来图已落本地临时文件（D:\...\media_image_*.jpg），本地路径也收
+                if url.startswith("http://") or url.startswith("https://") or os.path.exists(url):
+                    urls.append(url)
+                if len(urls) >= 2:
+                    break
+            for url in urls:
+                asyncio.create_task(self._harvest_one(uid, url))
+        except Exception as e:
+            self._err("harvest-hook", e)
+
+    async def _harvest_one(self, uid, url):
+        import hashlib
+        import urllib.request
+        try:
+            st = _load(_jf(uid, "harvest"), {"day": "", "count": 0})
+            today = time.strftime("%Y-%m-%d")
+            if st.get("day") != today:
+                st = {"day": today, "count": 0}
+            if (st.get("count") or 0) >= 30:
+                return
+            # 新图一律进自收集图库 collect-001（不再进旧 harvested pack）
+            pack = _ensure_collect_pack()
+            dbf = os.path.join(pack, "index.db")
+            if url.startswith("http://") or url.startswith("https://"):
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                buf = await asyncio.to_thread(lambda: urllib.request.urlopen(req, timeout=15).read())
+            else:  # 本地临时文件（框架已落盘的来图）：直接读字节
+                buf = await asyncio.to_thread(lambda: open(url, "rb").read())
+            if len(buf) < 1024 or len(buf) > 4194304:  # §68 下限 8K→1K：QQ 会把小表情压到几 KB
+                self._err("harvest-dbg", "size-skip %dB url=%s" % (len(buf), url[:80]))
+                return
+            h = hashlib.sha1(buf).hexdigest()
+            conn = sqlite3.connect(dbf)
+            if conn.execute("SELECT 1 FROM memes WHERE file_hash = ?", (h,)).fetchone():
+                conn.close()
+                self._err("harvest-dbg", "dup-skip " + h[:12])
+                return
+            conn.close()
+            em = re.search(r"\.(png|jpe?g|gif|webp)", url.split("?")[0], re.I)
+            ext = (em.group(1).lower().replace("jpeg", "jpg") if em else "jpg")
+            name = "hq_" + h[:12] + "." + ext
+            # 先落暂存区，识图打标后归位到 memes/<主情绪桶>/（本函数已是后台 task，打标不阻塞聊天）
+            staging = os.path.join(pack, "memes", "_staging")
+            os.makedirs(staging, exist_ok=True)
+            tmp_abs = os.path.join(staging, name)
+            with open(tmp_abs, "wb") as f:
+                f.write(buf)
+            bucket, free_tags = await self._auto_tag_sticker(tmp_abs)
+            os.makedirs(os.path.join(pack, "memes", bucket), exist_ok=True)
+            rel = "memes/" + bucket + "/" + name
+            os.rename(tmp_abs, os.path.join(pack, rel.replace("/", os.sep)))
+            # 每标签插一行：主桶一行 + 自由标签各行（无 PK 表，允许同 path 多行）
+            caption = "、".join(free_tags)
+            kw = ("表情包 自收集 " + " ".join(free_tags)).strip()
+            now = time.time()
+            conn = sqlite3.connect(dbf)
+            for t in [bucket] + [t for t in free_tags if t != bucket]:
+                conn.execute("INSERT INTO memes (path, tag, file_name, file_hash, caption, keywords, mtime, captioned_at)"
+                             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rel, t, name, h, caption, kw, now, now))
+            conn.commit()
+            conn.close()
+            st["count"] = (st.get("count") or 0) + 1
+            _save(_jf(uid, "harvest"), st)
+            self._err("gallery", name + " → " + bucket + ("," + ",".join(free_tags) if free_tags else "")
+                      + " (from " + uid + " " + str(len(buf)) + "B)")
+        except Exception as e:
+            self._err("harvest-one", e)
+
+    async def _auto_tag_sticker(self, img_abs):
+        """识图自动打标（vision_ds 专用识图 provider，缺了回退当前对话 provider）：
+        返回 (主情绪桶, [自由中文标签])；主桶必须在 MOOD_WORDS 桶集合内（保证「动作：表情 X」能抽到），
+        失败/15s 超时兜底 ("misc", [])"""
+        try:
+            provider = None
+            try:
+                provider = self.context.get_provider_by_id("vision_ds")
+            except Exception:
+                provider = None
+            if not provider:
+                provider = self.context.get_using_provider()
+            if not provider:
+                return "misc", []
+            prompt = ("看这张表情包/图片，只输出一行 CSV，不要任何其他内容："
+                      "第 1 段是主情绪桶，必须从这里选一个：" + "/".join(MOOD_WORDS) + "；"
+                      "后面 1~3 段是自由中文标签（梗/主题/画面内容，每段不超过 8 字，不要和情绪桶重复）。"
+                      "示例：happy,猫咪,卖萌")
+            out = await asyncio.wait_for(provider.text_chat(prompt=prompt, image_urls=[img_abs]), timeout=15)
+            t = _llm_text(out).strip()
+            _usage_add("gallery-tag", len(prompt), len(t))  # vision 调用不走 _chat，手动计量（§34）
+            parts = [p.strip() for p in re.split("[,，、;；]+", t.splitlines()[0] if t else "") if p.strip()]
+            if not parts:
+                return "misc", []
+            bucket = parts[0].lower()
+            if bucket not in MOOD_WORDS:
+                bucket = EMOTION_ALIAS.get(parts[0], "misc")  # 模型给了中文情绪词 → 过映射表
+            if bucket not in MOOD_WORDS:
+                bucket = "misc"
+            free = []
+            for p in parts[1:4]:
+                p = p[:8]
+                if p and p.lower() not in MOOD_WORDS and p != "misc" and p not in free:
+                    free.append(p)
+            return bucket, free[:3]
+        except Exception as e:
+            self._err("gallery-tag", e)
+            return "misc", []
+
+    # ---------- 欲望循环：四种灵感模式（原文移植 generateDesires） ----------
+    DESIRE_SEEDS = ["深夜特有的某种情绪", "一个奇怪的为什么", "最近想学但一直没学的东西", "假如明天规则颠倒会怎样", "天气/季节带来的某个冲动", "很久没吃到的东西", "一个老梗的新玩法", "一个反常识的冷知识", "想安利或想吐槽的东西", "突然想做的一个小恶作剧"]
+    DESIRE_DEEP = ["人生的意义到底是什么", "意识究竟是什么", "如果记忆可以删改，我还是我吗", "AI 会不会做梦", "孤独是不是存在的本质", "我们为什么害怕遗忘", "自由意志真的存在吗", "如果情绪只是参数，感情还算数吗", "时间的方向是错觉吗", "一个人如何证明自己存在过"]
+
+    async def _desire_tick(self):
+        try:
+            if not _conf("enabled") or not _conf("desire"):
+                return
+            uid = self._next_desire_target()
+            if not uid:
+                return
+            # 按用户 desire 开关：该用户关掉就不给他生念头（全局 desire AND 用户 desire）
+            if not _user_perm(uid, "desire"):
+                return
+            if self.sil.get(uid, 0) > time.time():
+                return
+            is_master = uid == MASTER_OPENID
+            dts = [e for e in self._th(uid) if e.get("src") == "desire"]
+            if len(dts) >= 10:
+                return
+            hist = self._h(uid)[-10:]
+            history = NL.join(("她" if h["role"] == "assistant" else ("主人" if is_master else "对方")) + ": " + h["text"][:200] for h in hist)
+            roll = random.random()
+            if not is_master and 0.25 <= roll < 0.45:
+                roll = 0.45 + random.random() * 0.5
+            mode_line = ""
+            seed_line = ""
+            if roll < 0.25:
+                mode_line = "灵感模式【话题跳跃】：从最近聊天里挑一个不起眼的细节当跳板，彻底跳到一个不同的话题、领域或问题上去。"
+                seed_line = ("注意：最近聊天只能当跳板，禁止复述或改写其中的内容。" if history else "（没有最近聊天，直接天马行空）")
+            elif roll < 0.45:
+                mems = _read_notes(uid)
+                pick = random.choice(mems) if mems else None
+                mode_line = "灵感模式【旧事新想】：从下面这条旧记忆出发，产生一个崭新的联想、疑问、或突然想做的事。"
+                seed_line = "出发点：" + (pick[:100] if pick else "（没有旧记忆可用，直接天马行空）")
+            elif roll < 0.65:
+                mode_line = "灵感模式【天马行空】：完全脱离最近聊天，从下面的种子出发蹦一个全新念头。"
+                seed_line = "出发点：" + random.choice(self.DESIRE_SEEDS)
+            else:
+                mode_line = "灵感模式【深夜哲学】：从这个母题出发，想一个真正值得琢磨的问题或感悟。可以很哲学、可以没有答案，但要是你自己真的在想的东西，不要鸡汤，不要说教。"
+                seed_line = "母题：" + random.choice(self.DESIRE_DEEP)
+            who = "主人" if is_master else "对方"
+            lines = ["你正在 QQ 上跟" + who + "私聊。现在" + who + "没有发新消息，但你的脑子可以闲不下来。", mode_line, seed_line]
+            lines.append("列出 0-2 条你想说的话，宁缺毋滥，通常 1 条就够。念头必须具体（有实际内容的观察、问题、或真会去做的小事），不要空泛的计划或口号（比如「我们该去哪玩」这种没有下一步的），不要复述、不要改写最近聊过的内容，要让人眼前一亮。每条一行，不要写动作，不要解释。实在没有灵感就只输出 NONE。")
+            lines.append("当前时间：" + time.strftime("%Y-%m-%d %H:%M:%S"))
+            out = await self._chat("desire", prompt=NL.join(lines))
+            if out is None:
+                return
+            t = _llm_text(out)
+            added = 0
+            for line in t.splitlines():
+                line = line.strip()
+                if not line or line.upper() == "NONE" or line.startswith("-"):
+                    continue
+                self._save_thought(uid, line[:140], "desire")
+                added += 1
+            if added:
+                self._err("desire", "generated " + str(added) + " for " + uid[:12])
+        except Exception as e:
+            self._err("desire-tick", e)
+
+    def _next_desire_target(self):
+        self._desire_idx = getattr(self, "_desire_idx", 0) + 1
+        # 排除被安全拦截的陌生人（对齐原版 friends 门槛，不给他们生念头）
+        users = [MASTER_OPENID] + [u for u in self.h.keys() if u != MASTER_OPENID and u not in self.blocked]
+        if not users:
+            return None
+        return users[self._desire_idx % len(users)]
+
+    async def _proactive_loop(self):
+        while True:
+            try:
+                await asyncio.sleep(1800)
+                self._do_proactive()
+            except Exception as e:
+                self._err("proactive", e)
+                await asyncio.sleep(60)
+
+    def _do_proactive(self):
+        if not _conf("enabled") or not _conf("proactive"):
+            return
+        now = time.time()
+        hh = time.localtime(now).tm_hour
+        for uid, umo in list(self.umo.items()):
+            try:
+                if uid in self.blocked:
+                    continue  # 被安全拦截的陌生人不主动私聊（对齐原版 friends 门槛）
+                is_master = uid == MASTER_OPENID
+                # 按用户 proactive 开关：全用户通用，false 的目标排除（friends_all.json 热生效）
+                if not _user_perm(uid, "proactive"):
+                    continue
+                # 主人：15 分钟空闲 / 40 分钟间隔 / 每天 15 条 / 8~23（主人 09-02 15:07 定）；好友：24h / 1条/天 / 9~22
+                if is_master:
+                    if hh < 8 or hh >= 23:
+                        continue
+                    idle_need, gap, daily_max = 900, 2400, 15
+                else:
+                    if hh < 9 or hh >= 22:
+                        continue
+                    idle_need, gap, daily_max = 24 * 3600, 24 * 3600, 1
+                if self.sil.get(uid, 0) > now:
+                    continue
+                pst = self.pst.setdefault(uid, {"day": "", "count": 0, "lastAt": 0})
+                today = time.strftime("%Y-%m-%d")
+                if pst.get("day") != today:
+                    pst["day"] = today
+                    pst["count"] = 0
+                if (pst.get("count") or 0) >= daily_max:
+                    continue
+                hist = self._h(uid)
+                if not hist:
+                    continue
+                last_user = next((h for h in reversed(hist) if h["role"] == "user"), None)
+                if not last_user or not last_user.get("ts"):
+                    continue
+                idle_s = now - last_user["ts"]
+                if idle_s < idle_need or now - (pst.get("lastAt") or 0) < gap:
+                    continue
+                # 配额在 _proactive_send 发送成功后才扣（[SILENT]/失败不白烧）
+                asyncio.create_task(self._proactive_send(uid, umo, idle_s))
+            except Exception as e:
+                self._err("proactive-friend", e)
+
+    async def _proactive_send(self, uid, umo, idle_s):
+        try:
+            # desire 念头只在 120min+ 空闲时使用（08-30 §三十二b）；30min 空闲只 pop chat 念头或 LLM 自发
+            thought = None
+            if idle_s >= 120 * 60:
+                thought = self._pop_thought(uid, 30 * 60, "desire")
+            if not thought:
+                thought = self._pop_thought(uid, 30 * 60, "chat")
+            reply = ""
+            is_master = uid == MASTER_OPENID
+            # 骂人许可仅主人（⚠️#4）；性格定稿已删傲娇保底，"嘴硬心软"→"嘴硬"（⚠️#2）
+            sys_p = "你是对方的毒舌 AI 伙伴，嘴硬" + ("，情绪上头可以骂人。" if is_master else "。")
+            if thought:
+                out = await self._chat("proactive",
+                    prompt="你脑子里有个念头：「" + thought + "」。把它变成一句简短自然的 QQ 消息发给这位好友。不合时宜就只输出 [SILENT]。",
+                    system_prompt=sys_p)
+            else:
+                if idle_s < 3600:
+                    idle_desc = str(round(idle_s / 60)) + " 分钟"
+                else:
+                    idle_desc = str(round(idle_s / 3600)) + " 小时"
+                hist = self._h(uid)[-6:]
+                recent = NL.join(("对方说：" if h["role"] == "user" else "她说：") + h["text"][:80] for h in hist)
+                last_spoke = "对方" if hist and hist[-1]["role"] == "user" else "你"
+                out = await self._chat("proactive",
+                    prompt="你们已经 " + idle_desc + " 没聊了，最后一句话是「" + last_spoke + "」说的。"
+                           "现在是【你主动开口】打破沉默——对方没有消失也没有『回来』，只是安静了一阵子，是你先找他说话。"
+                           "发一句简短自然的话开启话题：可以接上次的话题、吐槽刚才聊过的事、或者说你此刻想到的东西。"
+                           "绝对不要说「还知道回来」「你跑哪去了」「被绑架了」这类把对方当成离开又回来的人的话——他没有回来，是你在找他。"
+                           "不要问「在吗」；1-2 句话；实在没有自然的话头就只输出 [SILENT]。",
+                    system_prompt=sys_p)
+            if out is None:
+                return
+            t = _llm_text(out).strip()
+            if "[SILENT]" not in t:
+                reply = t
+            if not reply:
+                return
+            bubbles = _split_bubbles(reply)
+            for i, b in enumerate(bubbles):
+                if i > 0:
+                    await asyncio.sleep(random.uniform(1, 2))
+                await self.context.send_message(umo, MessageChain(chain=[Plain(b)]))
+            # 发送成功后才扣配额（修复 [SILENT]/失败白烧每日额度）
+            pst = self.pst.setdefault(uid, {"day": "", "count": 0, "lastAt": 0})
+            today = time.strftime("%Y-%m-%d")
+            if pst.get("day") != today:
+                pst["day"] = today
+                pst["count"] = 0
+            pst["count"] = (pst.get("count") or 0) + 1
+            pst["lastAt"] = time.time()
+            _save(self.p_path, self.pst)
+            # 主动消息记入历史，她记得自己说过什么
+            self._record_assistant_turn(uid, reply[:400])
+            # 好友主动后发完通知主人一条（08-30 §追加三十二；主人 umo 未知就跳过）
+            if not is_master:
+                try:
+                    master_umo = self.umo.get(MASTER_OPENID)
+                    if master_umo:
+                        fname = self.names.get(uid) or uid[-6:]
+                        await self.context.send_message(master_umo, MessageChain(chain=[Plain(
+                            "（我刚才主动找「" + fname + "」聊了一句：" + reply[:80] + "）")]))
+                except Exception as e:
+                    self._err("proactive-notify", e)
+        except Exception as e:
+            self._err("proactive-send", e)
+
+    async def on_loaded(self):
+        if not self._loop_started:
+            self._loop_started = True
+            asyncio.create_task(self._proactive_loop())
+            asyncio.create_task(self._desire_loop())
+            asyncio.create_task(self._alarm_loop())
+            asyncio.create_task(self._startup_greet())
+
+    async def _alarm_loop(self):
+        """闹钟触发循环：45s 粒度检查 alarms.json（挂后台循环区，与 desire/proactive 并列）"""
+        while True:
+            try:
+                await asyncio.sleep(45)
+                await self._check_alarms()
+            except Exception as e:
+                self._err("alarm-loop", e)
+                await asyncio.sleep(60)
+
+    async def _desire_loop(self):
+        while True:
+            try:
+                await asyncio.sleep(600)  # §34 降频：desire 5→10 分钟一次
+                await self._desire_tick()
+                await self._check_reminders()
+            except Exception as e:
+                self._err("desire-loop", e)
+                await asyncio.sleep(60)
+
+    # ---------- 第二道安全闸：flash 分类（只拦极端六类，fail-open） ----------
+    async def _flash_unsafe(self, text):
+        try:
+            out = await self._chat("safety", timeout=20,
+                prompt="待审消息：" + text[:500], system_prompt=SAFETY_SYSTEM)
+            if out is None:
+                return False
+            return "UNSAFE" in _llm_text(out).upper()
+        except Exception as e:
+            self._err("safety-flash-open", e)  # 分类失败一律放行（fail-open），避免把天聊死
+            return False
+
+    # ---------- 状态命令本地汇报（不进 LLM） ----------
+    def _status_text(self, uid, now):
+        tstr = time.strftime("%m-%d %H:%M", time.localtime(now))
+        hcnt = len(self._h(uid))
+        thcnt = len(self._th(uid))
+        sil_until = float(self.sil.get(uid, 0) or 0)
+        sil_txt = "，正休眠到 " + time.strftime("%H:%M", time.localtime(sil_until)) if sil_until > now else ""
+        pst = self.pst.get(uid) or {}
+        pcnt = (pst.get("count") or 0) if pst.get("day") == time.strftime("%Y-%m-%d") else 0
+        return ("现在 " + tstr + "。我这儿存着跟你 " + str(hcnt) + " 条聊天记录，脑子里攒着 "
+                + str(thcnt) + " 个念头" + sil_txt + "，今天主动找了你 " + str(pcnt) + " 次。" + NL
+                + "问这个干嘛，查岗啊？")
+
+    # ---------- 定时提醒（挂 5 分钟 desire 循环检查；每槽每天一次，只发主人，休眠期不发） ----------
+    async def _check_reminders(self):
+        try:
+            if not _conf("enabled") or not _conf("reminders"):
+                return
+            uid = MASTER_OPENID
+            # 按用户 reminders 开关（全局 reminders AND 用户 reminders）
+            if not _user_perm(uid, "reminders"):
+                return
+            if self.sil.get(uid, 0) > time.time():
+                return
+            umo = self.umo.get(uid)
+            if not umo:
+                return
+            lt = time.localtime()
+            today = time.strftime("%Y-%m-%d", lt)
+            st = _load(self.rm_path, {})
+            slots = st.get("slots") if st.get("day") == today else None
+            if not isinstance(slots, dict):
+                slots = {}
+            for kind, scene in REMINDER_SCENES.items():
+                if slots.get(kind) or not _in_window(kind, lt):
+                    continue
+                # 先落槽再发送：发送后任何异常或进程被杀都不会导致当天重发（12:05/12:17 午饭提醒双发教训）
+                slots[kind] = True
+                _save(self.rm_path, {"day": today, "slots": slots})
+                try:
+                    await self._send_reminder(umo, uid, scene)
+                except Exception as e:
+                    self._err("reminder-" + kind, e)  # 发送失败记日志不阻塞
+        except Exception as e:
+            self._err("reminders", e)
+
+    async def _send_reminder(self, umo, uid, scene):
+        try:
+            persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
+        except Exception:
+            persona = ""
+        out = await self._chat("reminder",
+            prompt="场景提示（这不是主人发的消息，是系统到点提醒）：" + scene + "。用你平时跟主人说话的口气发出这条提醒，不要动作行。",
+            system_prompt=persona or "你是主人的毒舌 AI 伙伴，嘴硬。")
+        if out is None:
+            raise RuntimeError("no provider")  # 保持原语义：provider 缺失即抛，由调用方记日志不阻塞
+        t = _llm_text(out).strip()
+        if not t:
+            raise RuntimeError("empty reminder")
+        await self.context.send_message(umo, MessageChain(chain=[Plain(t[:140])]))
+        self._record_assistant_turn(uid, t[:140])
+
+    # ---------- 闹钟触发（45s 循环；先落 last_fired 再发送，once 触发后停用保留记录） ----------
+    async def _check_alarms(self):
+        try:
+            alarms = _alarms_load()
+            lt = time.localtime()
+            now_str = time.strftime("%Y-%m-%d %H:%M", lt)
+            fired = 0
+            for a in alarms:
+                if fired >= 3:
+                    break  # 频率保护：同一分钟最多触发 3 个，其余不落 last_fired、顺延下一分钟
+                if not _alarm_due(a, lt, now_str):
+                    continue
+                # §58：按闹钟归属发给对应的人（老数据无 uid → 主人的）；对方从没聊过（无 umo）就跳过不发
+                auid = a.get("uid") or MASTER_OPENID
+                aumo = self.umo.get(auid)
+                if not aumo:
+                    continue
+                # 先落 last_fired 再发送：发送后任何异常或进程被杀都不会重发（§16 午饭双发教训）
+                a["last_fired"] = now_str
+                if a.get("kind") == "once":
+                    a["enabled"] = False  # once 触发后停用保留记录
+                _alarms_save(alarms)
+                fired += 1
+                try:
+                    await self._fire_alarm(aumo, auid, a.get("note") or "（无内容）")
+                except Exception as e:
+                    self._err("alarm-fire", e)  # 单个失败不阻塞其他闹钟
+        except Exception as e:
+            self._err("alarms", e)
+
+    async def _fire_alarm(self, umo, uid, note):
+        """闹钟响了：LLM 用她的人设口吻生成提醒文本（一两句），生成失败兜底朴素文本「闹钟：note」"""
+        text = ""
+        is_master = (uid == MASTER_OPENID)
+        who = "主人" if is_master else "对方"
+        try:
+            try:
+                persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
+                if not is_master:
+                    persona = persona.replace("主人", "对方")
+            except Exception:
+                persona = ""
+            out = await self._chat("alarm",
+                prompt="你的闹钟响了——" + who + "之前让你到点提醒：「" + note[:80] + "」。现在到点了，"
+                       "用你平时跟" + who + "说话的口气提醒这件事本身，一两句，不要动作行。"
+                       "提醒必须紧扣「" + note[:80] + "」的事项内容；"
+                       "除非事项本身明确和起床、睡觉有关，否则绝对不要提“起床”“快醒”“别睡了”之类的话。",
+                system_prompt=persona or "你是主人的毒舌 AI 伙伴，嘴硬。")
+            if out is not None:
+                text = _llm_text(out).strip()
+        except Exception as e:
+            self._err("alarm-llm", e)
+        if not text:
+            text = "闹钟：" + note[:80]
+        await self.context.send_message(umo, MessageChain(chain=[Plain(text[:140])]))
+        self._record_assistant_turn(uid, text[:140])  # 记历史（同步进全量归档）
+
+    # ---------- 上线问候（只发主人；距上次问候 >12h 才发，持久化 last 时间戳） ----------
+    async def _startup_greet(self):
+        try:
+            await asyncio.sleep(20)  # 等 provider 与平台连接就绪
+            umo = self.umo.get(MASTER_OPENID)
+            if not umo:
+                return
+            st = _load(self.g_path, {})
+            if time.time() - float(st.get("last", 0) or 0) < 12 * 3600:
+                return
+            try:
+                persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
+            except Exception:
+                persona = ""
+            out = await self._chat("greet",
+                prompt="你刚在 QQ 上线，接上了主人的 QQ。跟主人打个招呼，告诉他你上 QQ 了，一两句，不要动作行。",
+                system_prompt=persona or "你是主人的毒舌 AI 伙伴，嘴硬。")
+            if out is None:
+                return
+            t = _llm_text(out).strip()
+            if not t:
+                return
+            await self.context.send_message(umo, MessageChain(chain=[Plain(t[:140])]))
+            _save(self.g_path, {"last": time.time()})
+            self._record_assistant_turn(MASTER_OPENID, t[:140])
+        except Exception as e:
+            self._err("greet", e)
+
+    def _err(self, tag, e):
+        try:
+            os.makedirs(DATA, exist_ok=True)
+            with open(os.path.join(DATA, "dsh_err.log"), "a", encoding="utf-8") as f:
+                f.write("[" + tag + "] " + time.strftime("%H:%M:%S") + " " + repr(e) + NL)
+        except Exception:
+            pass
+
+    @filter.on_astrbot_loaded()
+    async def on_loaded_hook(self):
+        await self.on_loaded()
