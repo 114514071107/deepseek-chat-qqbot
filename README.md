@@ -1,9 +1,9 @@
-# DeepSeek娘 · deepseek-chan
+# DeepSeek娘 · deepseek-chat
 
 > **衍生开发版 · 2026-10-21**：本仓库基于 [Mentha-Azure/deepseek-chan-qqbot](https://github.com/Mentha-Azure/deepseek-chan-qqbot) 的源码快照修改，继续采用 AGPL-3.0；原作者与上游项目没有变更。来源见 [UPSTREAM.json](UPSTREAM.json)，本地改动见 [MODIFICATIONS.md](MODIFICATIONS.md)，开发与发布步骤见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 > 本仓库仅分发源码与模板，不附带上游表情图库、演示截图、赠图、语音模型或个人运行数据。
 
-本衍生版源码：[114514071107/deepseek-chan-qqbot](https://github.com/114514071107/deepseek-chan-qqbot)。向其他用户提供修改版机器人时，请在帮助或关于信息中提供对应版本的源码链接。
+本衍生版源码：[114514071107/deepseek-chat-qqbot](https://github.com/114514071107/deepseek-chat-qqbot)。向其他用户提供修改版机器人时，请在帮助或关于信息中提供对应版本的源码链接。
 
 > 一只住在 QQ 里的 DeepSeek 娘——有脾气、有记性、会碎碎念的猫系 AI 娘。
 

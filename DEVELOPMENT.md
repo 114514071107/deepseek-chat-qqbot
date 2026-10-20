@@ -6,7 +6,7 @@
 
 | 目录 | 用途 |
 | --- | --- |
-| `D:\DSH Workspace\deepseek-chan-qqbot` | Git 管理的开发源码、模板、测试和文档 |
+| `D:\DSH Workspace\deepseek-chat-qqbot` | Git 管理的开发源码、模板、测试和文档 |
 | `D:\dsbot` | 当前运行实例、`venv`、真实配置和聊天数据 |
 
 运行实例不加入 Git。修改源码后先验证，再将要部署的文件复制到对应运行目录，重载插件或重启。不要在机器人运行期间覆盖整份数据目录。
@@ -16,7 +16,7 @@
 在源码目录打开 PowerShell：
 
 ```powershell
-Set-Location 'D:\DSH Workspace\deepseek-chan-qqbot'
+Set-Location 'D:\DSH Workspace\deepseek-chat-qqbot'
 git status
 git switch -c feature/你的功能名
 
@@ -75,7 +75,7 @@ Set-Location D:\dsbot
 2. 发布对应版本的可修改源码、运行与安装说明。修改版向网络用户提供服务时，应让这些用户能取得对应修改源码；发布后在机器人帮助或关于信息中给出源码仓库链接。
 3. 图片、声音及模型不因代码采用 AGPL 就自动获得授权。本仓库不包含上游图库；自行加入的资产应记录来源、授权与许可证。
 4. 检查本次提交及全部待发布历史，确认没有真实密钥、用户 ID、聊天记录、个人资料或运行环境。不要使用 `git add -f` 强制加入忽略内容。
-5. 本衍生版的目标仓库为 `https://github.com/114514071107/deepseek-chan-qqbot`，将其设为 `origin`；`upstream` 保留原作者地址。只向 `origin` 推送自己要发布的分支。
+5. 本衍生版的目标仓库为 `https://github.com/114514071107/deepseek-chat-qqbot`，将其设为 `origin`；`upstream` 保留原作者地址。只向 `origin` 推送自己要发布的分支。
 
 ```powershell
 git push origin main
