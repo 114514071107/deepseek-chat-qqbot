@@ -1,0 +1,325 @@
+{
+  "format_version": 1,
+  "checked_at": "2026-10-21",
+  "install_scope": "Codex user skills",
+  "install_root": "~/.codex/skills",
+  "installer": "Codex bundled skill-installer/scripts/install-skill-from-github.py",
+  "install_method": "download",
+  "star_counts_are_for_repositories": true,
+  "sources": [
+    {
+      "repo": "wshobson/agents",
+      "url": "https://github.com/wshobson/agents",
+      "stars": 41243,
+      "archived": false,
+      "last_pushed_at": "2026-10-19T18:28:14Z",
+      "license": "MIT",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06"
+    },
+    {
+      "repo": "affaan-m/ECC",
+      "url": "https://github.com/affaan-m/ECC",
+      "stars": 284807,
+      "archived": false,
+      "last_pushed_at": "2026-10-20T19:37:53Z",
+      "license": "MIT",
+      "ref": "30b68924ae9729159f44326aa3134b1d9d67c0e2"
+    },
+    {
+      "repo": "anthropics/skills",
+      "url": "https://github.com/anthropics/skills",
+      "stars": 182475,
+      "archived": false,
+      "last_pushed_at": "2026-10-09T18:45:52Z",
+      "license": null,
+      "ref": "dbd4588f9e1033efb41dad4bef2f7947c8993d44"
+    },
+    {
+      "repo": "openai/skills",
+      "url": "https://github.com/openai/skills",
+      "stars": 28189,
+      "archived": false,
+      "last_pushed_at": "2026-09-08T20:35:26Z",
+      "license": null,
+      "ref": "49f948faa9258a0c61caceaf225e179651397431"
+    }
+  ],
+  "skills": [
+    {
+      "name": "async-python-patterns",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/async-python-patterns",
+      "files": {
+        "SKILL.md": "15905ae02e745a00cd235dfb18665344ca76d7d0",
+        "references/details.md": "18de19d2e2457a4d310a64c945fe881baf2a5a01"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "python-resource-management",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/python-resource-management",
+      "files": {
+        "SKILL.md": "553604fe4e1971595954d7844a490487b1e5c983",
+        "references/details.md": "a1f1775a20bd150d9e227df8540cf346e2fd8be8"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "python-testing-patterns",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/python-testing-patterns",
+      "files": {
+        "SKILL.md": "4fe8a4245c55e9e79e70b5f75ab387e2349f91dc",
+        "references/advanced-patterns.md": "da186a91e60c44339a28ddb3b6ce478b7d23af64",
+        "references/details.md": "9b1647467d5fb7401ac3a6b109c9b75c1512bf6d"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "python-resilience",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/python-resilience",
+      "files": {
+        "SKILL.md": "89c1e9d9ba0134709f9b1ac876d0b401362afd4d",
+        "references/details.md": "491f93480fed2f54856da04b581e5c6fdae87cbc"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "python-observability",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/python-observability",
+      "files": {
+        "SKILL.md": "5d3b9c844469926164d349be4f91fa80d6e3d927",
+        "references/details.md": "b5aeff08aa698892e42a96dc2a61c2ccc0dac2ae"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "uv-package-manager",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/uv-package-manager",
+      "files": {
+        "SKILL.md": "ee7814cc131d74373d132e0a1f86fac1e4448238",
+        "references/advanced-patterns.md": "249b19900ee47ca50af54c9425a9cc8b9cadd35b"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "python-configuration",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/python-development/skills/python-configuration",
+      "files": {
+        "SKILL.md": "32ef264e86f591d870337abc32add4212a92a3af",
+        "references/details.md": "9c1da34816b0204da85da36e9a7dc365b309685e"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "nodejs-backend-patterns",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/javascript-typescript/skills/nodejs-backend-patterns",
+      "files": {
+        "SKILL.md": "516bae620afc0afa257fed08e3def7549e6a33fb",
+        "references/advanced-patterns.md": "28ecb9bc9ef9f93dea2971facdb2844f5a96e30a",
+        "references/details.md": "a7123f42348d649e46ae6ecbc6bff9e85b54b9fd"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "auth-implementation-patterns",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/developer-essentials/skills/auth-implementation-patterns",
+      "files": {
+        "SKILL.md": "e002769ebf44a7b3f135a57f72231666760ecf81",
+        "references/details.md": "431fcaacc25fa46122a911e3739cb524b5e37d4f"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "api-design-principles",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/backend-development/skills/api-design-principles",
+      "files": {
+        "SKILL.md": "e914fb423af914a6213a72ea537df179a7768233",
+        "assets/api-design-checklist.md": "b78148bfb0c2feee84f08c1ff97f2cf02adf950f",
+        "assets/rest-api-template.py": "2a78401e9e6ab323cf76ceb1352a11e217330fac",
+        "references/details.md": "ba9a03432c900d1349ea87e846304e014c1e7533",
+        "references/graphql-schema-design.md": "beca5f4fe00535fb8566923277b2889569e10bed",
+        "references/rest-best-practices.md": "676be296a55ad12d014422c9844f9d010cb0280b"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "llm-evaluation",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/llm-application-dev/skills/llm-evaluation",
+      "files": {
+        "SKILL.md": "cecc8609fae6fe0ba2d4f1b31e8f59d2cb15e725",
+        "references/details.md": "f3843223ac87000e2fe8a6bacb29b5caaef9f575"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "prompt-engineering-patterns",
+      "repo": "wshobson/agents",
+      "ref": "0874a27b17a22e2b7c2e2bcd725768e0803cad06",
+      "path": "plugins/llm-application-dev/skills/prompt-engineering-patterns",
+      "files": {
+        "SKILL.md": "869548fa7b265c81dd54b3407fd06e61c1fc8ea6",
+        "assets/few-shot-examples.json": "dc30b9f89953cb839c62f6e60c7c8a9ff821e7d4",
+        "assets/prompt-template-library.md": "cb2a785a6a6d46b106c45b4973f84dcd67d21bd9",
+        "references/chain-of-thought.md": "019f32e16270aacccd66882b02802f3d0aca8b2a",
+        "references/details.md": "78d4311523e627b81c9fe17c113d1353a1f4a790",
+        "references/few-shot-learning.md": "236eaa7f88a38f90e8a0a54f7172342a6c0a00fb",
+        "references/prompt-optimization.md": "6b3ee7e361ca5681c89469edc3b347e11aba4615",
+        "references/prompt-templates.md": "e2e791186a9c0d980bda6a7b50c75941954dd1f1",
+        "references/system-prompts.md": "13f421e76e774a53c442e0d607318b376ceac910",
+        "scripts/optimize-prompt.py": "d7be11005462ab347f01c20bc99df11a21290348"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "326f0a55c96e672fedf9d807ca043c00df05ba0e",
+          "sha256": "f89abb55d9f073f38f1703e4518f0613c788c6174be7f13b8dfe48a1c076c746"
+        }
+      }
+    },
+    {
+      "name": "cost-aware-llm-pipeline",
+      "repo": "affaan-m/ECC",
+      "ref": "30b68924ae9729159f44326aa3134b1d9d67c0e2",
+      "path": "skills/cost-aware-llm-pipeline",
+      "files": {
+        "SKILL.md": "e38c15c6d355dfb97c44b9de40f7cb235bfd3f9f"
+      },
+      "additional_license_files": {
+        "LICENSE.upstream": {
+          "source_path": "LICENSE",
+          "git_blob_sha1": "b832b6f642312312367c07688dc7426db40a82ed",
+          "sha256": "326146379f01bb137c0a5d3c54770c1aa31076705c8b88a7f6b26a460f6221b2"
+        }
+      }
+    },
+    {
+      "name": "mcp-builder",
+      "repo": "anthropics/skills",
+      "ref": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+      "path": "skills/mcp-builder",
+      "files": {
+        "LICENSE.txt": "4f881c52d1f72f4cfb720e339e2d35c3058d01a9",
+        "SKILL.md": "8a1a77a47d141967b246adb4da4f91037578ff7d",
+        "reference/evaluation.md": "87e9bb78840fac113d93b4a27ab5b229a18cf226",
+        "reference/mcp_best_practices.md": "b9d343cc3ae89b1fc139dae96bdb2b7e29ba3648",
+        "reference/node_mcp_server.md": "f6e5df982adc0848bf261c47ab8d65a1e0469391",
+        "reference/python_mcp_server.md": "cf7ec996d2e6e3655bc75ff6902738d03a37334e",
+        "scripts/connections.py": "ffcd0da3fbe1539320d022017ae83b61a9587a5c",
+        "scripts/evaluation.py": "41778569c45a458e0eea839b8917692ad65be2d5",
+        "scripts/example_evaluation.xml": "41e4459b5af861e61f1ca87d2f8f5ab5543dc054",
+        "scripts/requirements.txt": "e73e5d1e356edafadb9dc9243e6f300f2c5529b3"
+      },
+      "additional_license_files": {}
+    },
+    {
+      "name": "security-threat-model",
+      "repo": "openai/skills",
+      "ref": "49f948faa9258a0c61caceaf225e179651397431",
+      "path": "skills/.curated/security-threat-model",
+      "files": {
+        "LICENSE.txt": "13e25df86ce06eb6488e6a6bc5c5847f5dedc352",
+        "SKILL.md": "abd3c1c95d49c4e0e0664f198f4bf168c6291aec",
+        "agents/openai.yaml": "d8b04e20a62688188f19bd396ae6b923841ddf8e",
+        "references/prompt-template.md": "b6affb0d2f873ffe398f7a8df00095dc0ff01f59",
+        "references/security-controls-and-assets.md": "63d1455aeacfc97eaca4e371040dbadfbd791635"
+      },
+      "additional_license_files": {}
+    }
+  ],
+  "verification": {
+    "skill_count": 15,
+    "upstream_files_verified": 54,
+    "additional_license_files_verified": 13,
+    "python_files_syntax_checked": 4,
+    "metadata_and_local_references": "passed",
+    "downloaded_code_executed": false,
+    "runtime_dependencies_installed": false
+  }
+}
