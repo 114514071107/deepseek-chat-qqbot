@@ -1,14 +1,15 @@
 # DeepSeek娘 · deepseek-chan
 
+> **衍生开发版 · 2026-10-21**：本仓库基于 [Mentha-Azure/deepseek-chan-qqbot](https://github.com/Mentha-Azure/deepseek-chan-qqbot) 的源码快照修改，继续采用 AGPL-3.0；原作者与上游项目没有变更。来源见 [UPSTREAM.json](UPSTREAM.json)，本地改动见 [MODIFICATIONS.md](MODIFICATIONS.md)，开发与发布步骤见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+> 本仓库仅分发源码与模板，不附带上游表情图库、演示截图、赠图、语音模型或个人运行数据。
+
 > 一只住在 QQ 里的 DeepSeek 娘——有脾气、有记性、会碎碎念的猫系 AI 娘。
 
 DeepSeek 娘（ds娘）是以 DeepSeek 官方人设为灵感的 AI 娘角色：嘴毒心软、会怼你也会哄你。本仓库是她的完整实现——QQ 官方接口（QQ 开放平台 Bot API）+ AstrBot 插件，让她真正活在你的好友列表里。
 
 ## 聊天实例
 
-| 查新闻 + 上网扒图 + 斗嘴 | 自我介绍 + 写文件发文件 |
-|---|---|
-| <img src="docs/demo-1.jpg" width="360"> | <img src="docs/demo-2.jpg" width="360"> |
+聊天截图见 [上游项目](https://github.com/Mentha-Azure/deepseek-chan-qqbot#聊天实例)。
 
 ## 功能详表
 
@@ -46,7 +47,7 @@ DeepSeek 娘（ds娘）是以 DeepSeek 官方人设为灵感的 AI 娘角色：�
 
 ## 控制台一览
 
-<img src="docs/demo-console.png" width="720" alt="ds娘控制台">
+控制台截图见 [上游项目](https://github.com/Mentha-Azure/deepseek-chan-qqbot#控制台一览)。
 
 状态卡片、全局功能热开关、积分系统、用户管理、日志、记忆、图库、通知代发——全部在浏览器里点点完成，不用碰配置文件。
 
@@ -89,7 +90,7 @@ dsh-console（Node.js 零依赖原生 http，127.0.0.1:7850）
 ```
 plugin/astrbot_plugin_dsh_soul/   插件本体（Python，约 3500 行，改动处均有注释标记）
 console/                          网页控制台（Node.js，零依赖）
-data_template/                    数据模板：人设 persona.md + 表情包图库 + 索引
+data_template/                    数据模板：人设 persona.md（表情包自行准备）
 config/                           AstrBot 配置模板（带占位符，按 README 替换）
 scripts/                          启动脚本
 tts/                              GPT-SoVITS 部署与训练指南 + 服务脚本
@@ -100,7 +101,7 @@ docs/                             交接文档 / 验收清单 / 聊天实例截�
 
 如果这个项目让你玩得开心：
 
-<img src="docs/donate-wechat.png" width="160" alt="微信收款码">
+如需支持原作者，请访问 [上游的支持说明](https://github.com/Mentha-Azure/deepseek-chan-qqbot#支持这个项目)。
 
 如果这个项目有帮到你，可以请作者喝杯奶茶，完全自愿。
 

@@ -1,0 +1,5 @@
+name: astrbot_plugin_ds_balance
+desc: 主人私聊查询 DeepSeek 官方账户余额，复用已有密钥
+version: v1.0.0
+author: local
+repo: ""

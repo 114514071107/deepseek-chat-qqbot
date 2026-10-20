@@ -216,3 +216,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local AstrBot instance: never commit deployment data or credentials.
+/data/
+/dsh_data/
+/dsh-console/
+/deployment-backups/
+/backups/
+/local/
+/.astrbot
+/astrbot.lock
+.env.*
+!.env.example
+*.bak
+*.bak.*
+*.before-*.bak
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.pem
+*.key
+config/*.local.json
+
+# Third-party media are not part of the source distribution.
+/data_template/dsh_data/sticker_packs/
+/ds娘照片（赠）/
+/docs/demo-*.jpg
+/docs/demo-*.png
+/docs/donate-wechat.png
