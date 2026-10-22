@@ -12,6 +12,15 @@ class BudgetContext:
 
     def __getattr__(self, name): return getattr(self.context, name)
 
+    def bind_context(self):
+        # AstrAgentContext validates the real Context type. Keep that type and
+        # its shared services; bind only provider lookups on a request-local
+        # copy instead of passing this untyped helper or mutating the original.
+        result=copy.copy(self.context)
+        result.get_provider_by_id=self.get_provider_by_id
+        result.get_using_provider_async=self.get_using_provider_async
+        return result
+
     def wrap(self, provider):
         if provider is None or not callable(getattr(provider,'text_chat',None)): return provider
         if id(provider) in self.providers: return self.providers[id(provider)]
@@ -46,7 +55,7 @@ def install_model_adapters():
             bound=build_signature.bind(*args, **kwargs)
             event=bound.arguments['event'];plugin=event.get_extra('_dsh_reply_owner')
             if plugin is not None:
-                bound.arguments['plugin_context']=BudgetContext(bound.arguments['plugin_context'],plugin,event)
+                bound.arguments['plugin_context']=BudgetContext(bound.arguments['plugin_context'],plugin,event).bind_context()
             return await build(*bound.args, **bound.kwargs)
         build_agent._dsh_budget_adapter=True
         astr_main_agent.build_main_agent=build_agent
