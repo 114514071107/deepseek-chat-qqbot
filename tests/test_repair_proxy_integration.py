@@ -140,7 +140,8 @@ async def framework_case():
         msg.self_id='fixture-bot';msg.message_id='fixture-'+str(index);msg.group_id=group
         msg.sender=MessageMember(sender,'fixture');msg.message=[Plain('new question')];msg.message_str='new question';msg.raw_message={}
         current=AstrMessageEvent('new question',msg,PlatformMetadata('qq_official','fixture',instance),group or sender)
-        scope=scoped._scope(current);scoped.h[scope.key]=[{'role':'user','text':'ONLY-SCOPE-'+str(index)}]
+        scope=scoped._scope(current);scoped.h[scope.key]=[{'role':'user','text':'ONLY-SCOPE-'+str(index),
+            'source':dict(scope.source(),message_id='previous-'+str(index))}]
         events.append(current)
     scope_ns['_read_notes']=lambda key:['PRIVATE-MEMORY-SENTINEL']
     for index,current in enumerate(events):

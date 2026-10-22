@@ -101,9 +101,12 @@ class ChatStyleRegression(unittest.TestCase):
         calls=[]
         class Provider:
             async def text_chat(self,**kwargs): calls.append(kwargs); return None
-        ns=dict(CHAT_STYLE=CHAT_STYLE,NL='\n')
+        from resource_budget import Resources,BudgetProvider
+        resources=Resources({})
+        ns=dict(CHAT_STYLE=CHAT_STYLE,NL='\n',BudgetProvider=BudgetProvider,asyncio=asyncio,current_token=lambda:None)
         exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<real auxiliary model request>','exec'),ns)
-        obj=SimpleNamespace(context=SimpleNamespace(get_using_provider=lambda:Provider()))
+        obj=SimpleNamespace(context=SimpleNamespace(get_using_provider=lambda:Provider()),resources=resources,
+                            _budget=lambda:resources.budget('fixture'))
         async def run():
             await ns['_chat'](obj,'react',prompt='fixture',system_prompt='original')
             await ns['_chat'](obj,'safety',prompt='fixture',system_prompt='exact classification')

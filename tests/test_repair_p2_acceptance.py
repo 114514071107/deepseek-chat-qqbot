@@ -270,9 +270,9 @@ async def startup_routes_case():
     tree=ast.parse((PLUGIN/'main.py').read_text(encoding='utf-8'))
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='DshSoul')
     cls.decorator_list=[]
-    cls.body=[n for n in cls.body if getattr(n,'name','') in ('__init__','_allowed','_clear_framework_history','terminate','_record_delivery_result','_retain_sent_media')]
-    imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module in ('session_scope','reply_integration','qq_delivery')]
-    ns=dict(__name__='repair_startup_fixture',Star=Star,Context=Context,Runtime=Runtime,managed=managed,
+    cls.body=[n for n in cls.body if getattr(n,'name','') in ('__init__','_allowed','_clear_framework_history','terminate','_record_delivery_result','_retain_sent_media','_thread')]
+    imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module in ('session_scope','reply_integration','qq_delivery','resource_budget','model_integration')]
+    ns=dict(__name__='repair_startup_fixture',Star=Star,Context=Context,Runtime=Runtime,managed=managed,background_work=__import__('task_runtime').background_work,
             StateController=StateController,DATA=str(root),os=os,_load=read_json,
             _jf=lambda uid,name:str(root/(name+'_'+uid+'.json')),
             install_executor_guard=install_executor_guard,

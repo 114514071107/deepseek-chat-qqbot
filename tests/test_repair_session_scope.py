@@ -58,7 +58,7 @@ class SessionScopeRegression(unittest.IsolatedAsyncioTestCase):
             tree=ast.parse((PLUGIN/'main.py').read_text(encoding='utf-8'))
             fn=next(n for n in tree.body if getattr(n,'name','')=='_read_memes')
             from state_store import write_text
-            ns.update(DATA=tmp,write_text=write_text,_read_notes=lambda key:[],_archive_read=lambda key:[])
+            ns.update(DATA=tmp,write_text=write_text,_read_notes=lambda key:[],_archive_read=lambda key,**kwargs:[])
             exec(compile(ast.fix_missing_locations(ast.Module(body=[fn],type_ignores=[])),'<real meme reader>','exec'),ns)
             await obj.learn_meme(Event('friend'), 'fixture', 'private-secret meaning')
             result=await obj.recall(Event('friend',False),'fixture private-secret')

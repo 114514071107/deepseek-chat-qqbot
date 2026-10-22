@@ -55,7 +55,7 @@ class PipelineInterleavings(unittest.IsolatedAsyncioTestCase):
             async def short_sleep(seconds): await asyncio.sleep(0.005)
             obj._desire_tick=tick;obj.context=SimpleNamespace(get_using_provider=lambda:SimpleNamespace(text_chat=model))
             ns.update(REMINDER_SCENES={'fixture':'fixture'},_in_window=lambda *a:True,_usage_add=lambda *a:None)
-            ns['asyncio']=SimpleNamespace(sleep=short_sleep,wait_for=asyncio.wait_for)
+            ns['asyncio']=SimpleNamespace(sleep=short_sleep,wait_for=asyncio.wait_for,current_task=asyncio.current_task)
             loop=obj._spawn(obj._desire_loop());await asyncio.wait_for(started.wait(),1)
             state=StateController(obj,tmp,clear_framework=lambda key:asyncio.sleep(0))
             await state.apply('switch',{'key':'reminders','value':False});release.set();before=len(ticks)
@@ -90,8 +90,11 @@ class PipelineInterleavings(unittest.IsolatedAsyncioTestCase):
             scope=obj._scope(ScopeEvent()); obj.h[scope.key]=[dict(role='user',text='fixture')]
             obj.th={};obj.t_path=str(Path(tmp)/'thoughts_v2.json')
             obj.runtime=Runtime(lambda *a:True); started=asyncio.Event()
-            async def model(**kw): started.set(); await asyncio.Event().wait()
-            obj.context=SimpleNamespace(get_using_provider=lambda:SimpleNamespace(text_chat=model))
+            actual_thread=obj._thread
+            async def blocked_summary(fn,*args,**kw):
+                started.set(); await asyncio.Event().wait()
+                return await actual_thread(fn,*args,**kw)
+            obj._thread=blocked_summary
             ns['_save']=write_json; ns['_load']=read_json; ns['_jf']=lambda key,name:str(Path(tmp)/(name+'_'+key+'.json'))
             task=obj._spawn(obj._refresh_summary(scope.key),key=scope.key)
             await started.wait()

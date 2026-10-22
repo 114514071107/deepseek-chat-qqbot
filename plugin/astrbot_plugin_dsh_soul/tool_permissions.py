@@ -72,7 +72,15 @@ def tool_guard(name):
             denial = self._authorize_tool(event, name)
             if denial:
                 return denial
-            return await fn(self, event, *args, **kwargs)
+            from resource_budget import BudgetExceeded, payload_size
+            try:
+                budget = self._budget(event)
+                budget.tool(); budget.input(payload_size(args)+payload_size(kwargs))
+                result = await self.resources.run('foreground', lambda: fn(self, event, *args, **kwargs),
+                    budget, stage='tool', timeout=self.resources.config['tool_timeout'])
+                return budget.tool_result(result) if isinstance(result, str) else result
+            except BudgetExceeded as exc:
+                return '（资源限制：' + str(exc) + '）'
         guarded._dsh_tool_name = name
         return guarded
     return decorate

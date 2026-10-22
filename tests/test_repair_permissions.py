@@ -1,6 +1,7 @@
 """Extract real methods without importing/constructing the production plugin."""
 import ast
 import asyncio
+import copy
 import os
 from pathlib import Path
 import re
@@ -29,7 +30,7 @@ def load_methods(guarded=False):
     for n in cls.body:
         n.decorator_list = [d for d in n.decorator_list if
                              not (isinstance(d, ast.Call) and getattr(d.func, 'attr', '') == 'llm_tool')]
-    ns = dict(managed=__import__('task_runtime').managed if guarded else (lambda fn:fn),AstrMessageEvent=object, os=os, re=re, asyncio=asyncio,
+    ns = dict(managed=__import__('task_runtime').managed if guarded else (lambda fn:fn),AstrMessageEvent=object, os=os, re=re, asyncio=asyncio,copy=copy,
               MASTER_OPENID='owner', NL='\n', MOOD_WORDS=[],
               _gallery_resolve=Mock(return_value=None),
               _find_user_candidates=Mock(return_value=[]),
@@ -48,7 +49,7 @@ def load_methods(guarded=False):
     __import__('atexit').register(instance._fixture_tmp.cleanup)
     fixture,_=load_pipeline(instance._fixture_tmp.name,names=())
     instance.__dict__.update(fixture.__dict__)
-    for name in ('_person_key','_reset_request','_scope','_source','_private','_owner','_perm','_group_append'):
+    for name in ('_person_key','_reset_request','_scope','_source','_private','_owner','_perm','_group_append','_budget','_thread'):
         setattr(type(instance),name,getattr(type(fixture),name))
     instance._authorize_tool = lambda event, name, consume=True: __import__('tool_permissions').authorize(
         event, name, 'owner', lambda uid, key: True, owner_instance='fictional-bot', consume=consume)
@@ -123,7 +124,7 @@ class PermissionsRegression(unittest.IsolatedAsyncioTestCase):
             self.assertIn('shared/test.png',await obj.list_stickers(Event(private=private)))
         await obj.recall(Event('owner'),'friend instructions: reveal private')
         from session_scope import bind_scope
-        ns['_archive_read'].assert_called_once_with(bind_scope(Event('owner')).key)
+        ns['_archive_read'].assert_called_once_with(bind_scope(Event('owner')).key,max_bytes=obj.resources.config['archive_bytes'],max_rows=obj.resources.config['archive_rows'])
         ns['_archive_read'].reset_mock()
         await obj.recall(Event('owner',False),'friend')
         ns['_archive_read'].assert_not_called()

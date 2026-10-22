@@ -76,6 +76,16 @@ git diff --check
 
 ## venv 与部署
 
+第四单 F10/F11/F12 的攒批识图、请求资源预算、上下文原文压缩与测量见
+[第四单开发交付](docs/reviews/2026-10-23-workorder-4.md)。[补修复验](docs/reviews/2026-10-23-workorder-4-p2-reacceptance.md)
+已确认源码与离线验收通过、两项 P2 关闭；用户随后于 2026-10-23 明确授权上线新功能并推送远端 dev。
+F09 闹钟继续暂缓。新增四个辅助模块须与 main.py 和发送/任务/权限模块配套，main 稳定分支不随本次更新。
+可选 `dsh_soul_conf.json.resources` 的有限默认值、构造时读取语义、历史兼容及回退条件见交付记录；
+不要把示例直接覆盖到真实配置。
+第四单验收发现的补图来源竞态与发送截止绕过已补修，见
+[P2 补修与复验依据](docs/reviews/2026-10-23-workorder-4-p2-fix.md)。原交付与初次验收历史保留；
+实际发布、健康检查与回退另记录于 `docs/releases/2026-10-23-workorder-4.md`。
+
 工作单 3（F06/F07）的统一 QQ 发送结果、请求结束、语音/媒体回退、历史兼容及部署回退要求见
 [工作单 3 交付](docs/reviews/2026-10-23-workorder-3.md)。新增 `qq_delivery.py`、`reply_completion.py`、
 `reply_integration.py` 需与核心插件整套发布；`delivery_receipts_v2.json` 属归档层，不能当作客户端到达证明。

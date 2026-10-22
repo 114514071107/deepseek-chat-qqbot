@@ -2,7 +2,7 @@
 import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 import functools
 import inspect
 import uuid
@@ -10,11 +10,19 @@ import weakref
 
 _work=ContextVar('dsh_work',default=None)
 _event=ContextVar('dsh_event',default=None)
+_background=ContextVar('dsh_background',default=False)
+_budget_job=ContextVar('dsh_budget_job',default=None)
 _slots=weakref.WeakValueDictionary()
 FEATURES={'_voice_reply':'voice','_sprinkle_later':'sprinkle','_revive_later':'revive',
           '_harvest_one':'harvest','_desire_for':'desire','_proactive_send':'proactive',
           '_send_reminder':'reminders','_startup_greet':'reply','_run_kimi':'kimi'}
 FEATURES.update({name:'files' for name in ('read_local_file','list_files','write_local_file','send_local_file','search_in_files')})
+
+
+@dataclass
+class JobBudget:
+    id: str = field(default_factory=lambda:uuid.uuid4().hex)
+    active: bool = True
 
 
 @dataclass(frozen=True)
@@ -38,6 +46,8 @@ def work_context(token,event=None):
 
 def current_event(): return _event.get()
 def current_token(): return _work.get()
+def background_work(): return _background.get()
+def current_budget_job(): return _budget_job.get()
 
 
 def check_current():
@@ -48,6 +58,7 @@ def check_current():
 class Runtime:
     def __init__(self, allowed, slot=None):
         self.id=uuid.uuid4().hex; self.allowed=allowed; self.alive=True
+        self.max_tasks=64
         self.tasks=set(); self.borrowed={}; self.epochs={}; self.requests={}; self.errors=[]; self.jobs={}; self.paused={}; self.exclusive={}
         if slot:
             old=_slots.get(slot)
@@ -93,14 +104,19 @@ class Runtime:
         key=key if key is not None else (parent.key if parent and parent.runtime is self else '')
         name=coro.cr_frame.f_locals.get('name',coro.cr_code.co_name)
         feature=feature or FEATURES.get(name,'reply')
-        token=self.token(key,feature,request=parent.request if parent and parent.key==key else None)
+        token=self.token(key,feature,request=parent.request if parent and parent.key==key else '')
         job=(key,name)
-        if not self.alive or job in self.jobs or (exclusive and exclusive in self.exclusive):
+        if not self.alive or len(self.tasks)>=self.max_tasks or job in self.jobs or (exclusive and exclusive in self.exclusive):
             coro.close(); return self.jobs.get(job) or self.exclusive.get(exclusive)
         async def run():
-            with work_context(token):
-                self.check(token)
-                return await coro
+            saved=_background.set(True)
+            budget=JobBudget();saved_budget=_budget_job.set(budget)
+            try:
+                with work_context(token):
+                    self.check(token)
+                    return await coro
+            finally:
+                budget.active=False;_budget_job.reset(saved_budget);_background.reset(saved)
         task=asyncio.create_task(run(),name='dsh:'+name)
         self.tasks.add(task); self.jobs[job]=task
         if exclusive: self.exclusive[exclusive]=task
@@ -151,6 +167,7 @@ def managed(fn):
     async def run(self,*args,**kw):
         values=signature.bind(self,*args,**kw).arguments
         event=values.get('event'); parent=_work.get()
+        own_budget=None;saved_budget=None
         try:
             if event is not None:
                 scope=self._scope(event)
@@ -174,7 +191,9 @@ def managed(fn):
                 key=values.get('uid','')
                 if isinstance(values.get('scope'),__import__('session_scope').Scope): key=values['scope'].key
                 key=key if key in self.scopes else ''
-                token=self.runtime.token(key,FEATURES.get(name,'reply'))
+                token=self.runtime.token(key,FEATURES.get(name,'reply'),request='')
+                if key:
+                    own_budget=JobBudget();saved_budget=_budget_job.set(own_budget)
             with work_context(token,event):
                 self.runtime.check(token)
                 if event is not None:
@@ -197,5 +216,8 @@ def managed(fn):
                 if callable(getattr(event,'set_result',None)): event.set_result(None)
                 event.stop_event()
             raise
+        finally:
+            if own_budget is not None:
+                own_budget.active=False;_budget_job.reset(saved_budget)
     run._dsh_managed=True
     return run
