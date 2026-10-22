@@ -81,6 +81,7 @@ git diff --check
 `reply_integration.py` 需与核心插件整套发布；`delivery_receipts_v2.json` 属归档层，不能当作客户端到达证明。
 原交付仅开发及离线验证；[媒体补修复验](docs/reviews/2026-10-23-workorder-3-media-acceptance.md)
 已确认 P2/P3 关闭。用户随后于 2026-10-23 明确授权上线试用并推送 dev，稳定晋级 main 仍须实测与另行指令。
+本次实际发布、健康检查与回退见[第三单上线试用记录](docs/releases/2026-10-23-workorder-3.md)。
 验收补修的普通媒体快照、请求 ID、控制台回看及配套发布文件见
 [媒体关联补修](docs/reviews/2026-10-23-workorder-3-media-fix.md)；新增 `media/sent` 属显式媒体删除层。
 
