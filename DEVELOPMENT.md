@@ -84,7 +84,7 @@ F09 闹钟继续暂缓。新增四个辅助模块须与 main.py 和发送/任务
 不要把示例直接覆盖到真实配置。
 第四单验收发现的补图来源竞态与发送截止绕过已补修，见
 [P2 补修与复验依据](docs/reviews/2026-10-23-workorder-4-p2-fix.md)。原交付与初次验收历史保留；
-实际发布、健康检查与回退另记录于 `docs/releases/2026-10-23-workorder-4.md`。
+实际发布、健康检查与回退见[第四单上线试用记录](docs/releases/2026-10-23-workorder-4.md)。
 
 工作单 3（F06/F07）的统一 QQ 发送结果、请求结束、语音/媒体回退、历史兼容及部署回退要求见
 [工作单 3 交付](docs/reviews/2026-10-23-workorder-3.md)。新增 `qq_delivery.py`、`reply_completion.py`、
