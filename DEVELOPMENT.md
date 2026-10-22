@@ -88,7 +88,7 @@ F09 闹钟继续暂缓。新增四个辅助模块须与 main.py 和发送/任务
 后续真实聊天发现的主 Agent Context 类型校验阻断见
 [Context 补修](docs/reviews/2026-10-23-main-agent-context-fix.md)。[源码与离线验收](docs/reviews/2026-10-23-main-agent-context-acceptance.md)
 已通过，用户于 2026-10-23 明确授权上线、推送远端并启动 bot；实际执行与回退记录于
-`docs/releases/2026-10-23-main-agent-context.md`。启动或 QQ 会话连接正常不能代替真实聊天验收。
+[Context 补修上线记录](docs/releases/2026-10-23-main-agent-context.md)。启动或 QQ 会话连接正常不能代替真实聊天验收。
 
 工作单 3（F06/F07）的统一 QQ 发送结果、请求结束、语音/媒体回退、历史兼容及部署回退要求见
 [工作单 3 交付](docs/reviews/2026-10-23-workorder-3.md)。新增 `qq_delivery.py`、`reply_completion.py`、
