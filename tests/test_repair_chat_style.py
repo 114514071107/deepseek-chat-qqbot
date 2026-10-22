@@ -40,7 +40,8 @@ class CapturePipelineRegression(unittest.IsolatedAsyncioTestCase):
             await plugin.capture(event,response)
             self.assertEqual(response.result_chain.get_plain_text(),literal)
             self.assertEqual(looked_up,['得意'])
-            self.assertEqual(len(plugin.pending_sticker[event.get_extra('_dsh_scope').key]),1)
+            self.assertEqual(len(event.get_extra('_dsh_reply_plan').stickers),1)
+            self.assertNotIn(event.get_extra('_dsh_scope').key,plugin.pending_sticker)
 
     async def test_capture_preserves_code_string_literals_and_formats_surrounding_prose(self):
         code='```python\ndef say():\n    print("动作：表情 得意")\n\n    return "中文。"\n```'

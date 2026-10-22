@@ -76,8 +76,16 @@ git diff --check
 
 ## venv 与部署
 
-2026-10-22 工作单 2 发布使用标签 `workorder-2-20261022` 固定对应源码；QQ 输入
-“帮助”“关于”“源码”或既有状态指令可获得免费源码入口。运行参数只保存在部署副本，
+工作单 3（F06/F07）的统一 QQ 发送结果、请求结束、语音/媒体回退、历史兼容及部署回退要求见
+[工作单 3 交付](docs/reviews/2026-10-23-workorder-3.md)。新增 `qq_delivery.py`、`reply_completion.py`、
+`reply_integration.py` 需与核心插件整套发布；`delivery_receipts_v2.json` 属归档层，不能当作客户端到达证明。
+原交付仅开发及离线验证；[媒体补修复验](docs/reviews/2026-10-23-workorder-3-media-acceptance.md)
+已确认 P2/P3 关闭。用户随后于 2026-10-23 明确授权上线试用并推送 dev，稳定晋级 main 仍须实测与另行指令。
+验收补修的普通媒体快照、请求 ID、控制台回看及配套发布文件见
+[媒体关联补修](docs/reviews/2026-10-23-workorder-3-media-fix.md)；新增 `media/sent` 属显式媒体删除层。
+
+2026-10-22 工作单 2 的历史版本标签 `workorder-2-20261022` 保留；第三单开发源码入口更新为 dev，
+部署时将运行副本的入口固定到实际发布 commit。QQ 输入“帮助”“关于”“源码”或既有状态指令可获得免费源码入口。运行参数只保存在部署副本，
 `admin_v2` 文件管理通道须限制当前运行账号及 SYSTEM 访问。完整发布记录见
 [工作单 2 上线记录](docs/releases/2026-10-22-workorder-2.md)。
 

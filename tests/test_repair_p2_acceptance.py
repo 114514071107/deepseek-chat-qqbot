@@ -56,7 +56,10 @@ class AcceptanceRegression(unittest.IsolatedAsyncioTestCase):
             obj.g_path=str(root/'greet.json');sent=[]
             async def sleep(seconds):pass
             async def model(*a,**kw):return SimpleNamespace(completion_text='上线啦。')
-            async def send(target,chain):sent.append((target,chain))
+            async def send(target,chain,**kw):
+                from qq_delivery import DeliveryResult
+                assert kw=={'mode':'proactive'}
+                sent.append((target,chain));return DeliveryResult('accepted',message_id='greet')
             obj._chat=model;obj._send=send
             ns.update(asyncio=SimpleNamespace(sleep=sleep),_load=read_json,_save=write_json,MessageChain=lambda **kw:kw)
             await obj._startup_greet(scope.key,scope.target)
@@ -267,8 +270,8 @@ async def startup_routes_case():
     tree=ast.parse((PLUGIN/'main.py').read_text(encoding='utf-8'))
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='DshSoul')
     cls.decorator_list=[]
-    cls.body=[n for n in cls.body if getattr(n,'name','') in ('__init__','_allowed','_clear_framework_history','terminate')]
-    imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module=='session_scope']
+    cls.body=[n for n in cls.body if getattr(n,'name','') in ('__init__','_allowed','_clear_framework_history','terminate','_record_delivery_result','_retain_sent_media')]
+    imports=[n for n in tree.body if isinstance(n,ast.ImportFrom) and n.module in ('session_scope','reply_integration','qq_delivery')]
     ns=dict(__name__='repair_startup_fixture',Star=Star,Context=Context,Runtime=Runtime,managed=managed,
             StateController=StateController,DATA=str(root),os=os,_load=read_json,
             _jf=lambda uid,name:str(root/(name+'_'+uid+'.json')),

@@ -7,10 +7,11 @@ import random
 import re
 import sqlite3
 import time
+import uuid
 
 from astrbot.api.star import Context, Star, register
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.message_components import Plain, Image, File
+from astrbot.api.message_components import Plain, Image, File, Record
 from astrbot.core.message.message_event_result import MessageChain
 
 import sys as _sys, os as _os
@@ -21,9 +22,12 @@ from tool_permissions import authorize, tool_guard, install_executor_guard, trus
 from file_safety import safe_assistant_path
 from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions
 from session_scope import Scope, Target, bind_scope, install_policy_adapters
-from task_runtime import Runtime, managed, check_current, work_context
+from task_runtime import Runtime, managed, check_current, work_context, current_token
 from state_store import read_json, read_text, write_json, write_text, StateController, StateError, person_ledger_key
 from admin_bridge import serve_inbox
+from qq_delivery import QQDelivery, DeliveryResult, failure
+from reply_completion import ReplyPlan, owned
+from reply_integration import install_reply_adapters
 
 
 def _qq_plain(text):
@@ -1105,7 +1109,7 @@ def _llm_text(resp):
 @register("dsh_soul", "dsh", "ds娘行为体系移植", "1.0.0")
 class DshSoul(Star):
     def _reset_request(self, key, deleted_layers=()):
-        for name in ("pending_reply", "pending_sticker", "pending_drip", "run_active", "drip_active",
+        for name in ("pending_reply", "pending_sticker", "pending_drip", "run_active", "drip_active", "request_owners", "request_events",
                      "interrupt", "batch_wait", "batch_buf", "batch_skipwait", "_last_inbox_files"):
             getattr(self, name, {}).pop(key, None)
         # These content-bearing caches deliberately survive ordinary interrupts,
@@ -1138,7 +1142,10 @@ class DshSoul(Star):
     async def _admin_send(self, scope, text):
         if not isinstance(text, str) or not text.strip():
             raise ValueError("缺少发送内容")
-        await self._send(scope.target, MessageChain(chain=[_qq_plain(text[:2000])]))
+        result = await self._send(scope.target, MessageChain(chain=[_qq_plain(text[:2000])]), mode="proactive")
+        if result:
+            self._record_assistant_turn(scope.key, text[:2000], result)
+        return result
 
     def _write_media(self, key, rel, content):
         check_current()
@@ -1150,6 +1157,60 @@ class DshSoul(Star):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as stream:
             stream.write(content)
+
+    def _retain_sent_media(self, target, result, upload, origin):
+        """Retain the exact accepted upload, never an arbitrary original path.
+
+        In-data originals must belong to this scope or the shared sticker pack.
+        Generated files outside DATA are copied from the submitted bytes; there
+        is no second source read or download after acceptance.
+        """
+        import base64
+        token = current_token()
+        check_current()
+        if token is None or token.runtime is not self.runtime or token.key not in self.scopes:
+            raise ValueError("missing media owner")
+        if result.status != "accepted" or not re.fullmatch(r"[0-9a-f]{32}", result.attempt_id):
+            raise ValueError("missing accepted media attempt")
+        field = {1: "images", 2: "files", 3: "voice", 4: "files"}[upload["file_type"]]
+        if origin and not origin.startswith(("http://", "https://", "base64://")):
+            if origin.startswith("file://"):
+                from urllib.parse import urlsplit
+                from urllib.request import url2pathname
+                parts = urlsplit(origin)
+                if parts.netloc not in ("", "localhost"):
+                    raise ValueError("remote local media")
+                origin = url2pathname(parts.path)
+            root = os.path.realpath(DATA)
+            source = os.path.realpath(origin)
+            try:
+                inside = os.path.commonpath((root, source)) == root
+            except ValueError:
+                inside = False
+            if inside:
+                rel = os.path.relpath(source, root).replace(os.sep, "/")
+                index = _load(os.path.join(DATA, "media_v2.json"), {})
+                shared = rel.startswith("sticker_packs/")
+                if rel not in index.get(token.key, []) and not shared:
+                    raise ValueError("unowned media reference")
+        content = base64.b64decode(upload["file_data"], validate=True)
+        if not content:
+            raise ValueError("empty accepted media")
+        suffix = ".bin"
+        for signature, extension in ((b"\x89PNG\r\n\x1a\n", ".png"), (b"\xff\xd8\xff", ".jpg"),
+                                     (b"GIF8", ".gif"), (b"BM", ".bmp"), (b"OggS", ".ogg"), (b"ID3", ".mp3"),
+                                     (b"#!SILK_V3", ".silk"), (b"\x02#!SILK_V3", ".silk")):
+            if content.startswith(signature):
+                suffix = extension
+                break
+        if content.startswith(b"RIFF"):
+            suffix = ".wav" if content[8:12] == b"WAVE" else ".webp" if content[8:12] == b"WEBP" else ".bin"
+        if field == "files":
+            ext = os.path.splitext(upload.get("file_name", ""))[1].lower()
+            suffix = ext if ext in (".txt", ".md", ".csv", ".pdf", ".docx", ".xlsx", ".zip", ".mp4") else ".bin"
+        rel = "media/sent/" + token.key + "/" + result.attempt_id + suffix
+        self._write_media(token.key, rel, content)
+        return {field: rel if field == "voice" else [rel]}
 
     def _allowed(self, key, feature):
         if feature == "control":
@@ -1172,6 +1233,12 @@ class DshSoul(Star):
         scope = bind_scope(event)
         self.scopes[scope.key] = scope.source()
         _save(self.scopes_path, self.scopes)
+        event.set_extra("_dsh_reply_owner", self)
+        # QQ output is consumed as a bounded plan. Streaming partials lack
+        # per-item acceptance and can otherwise escape before capture.
+        event.set_extra("enable_streaming", False)
+        if event.get_extra("action_type") == "live":
+            event.set_extra("action_type", None)  # same bounded reply/voice action path
         return scope
 
     def _source(self, key):
@@ -1214,17 +1281,10 @@ class DshSoul(Star):
             _save(self.group_path, self.groups)
 
     @managed
-    async def _send(self, target, chain):
+    async def _send(self, target, chain, mode="reply"):
         if not isinstance(target, Target):
             raise ValueError("an explicit target snapshot is required")
-        matches = [p for p in self.context.platform_manager.platform_insts
-                   if p.meta().id == target.instance and p.meta().name == target.platform]
-        if len(matches) != 1:
-            raise ValueError("destination platform instance is unavailable")
-        accepted = await self.context.send_message(target.umo, chain)
-        if accepted is False:
-            raise RuntimeError("destination platform was not found")
-        return accepted
+        return await self.delivery.send(target, chain, mode=mode)
 
     def _owner_target(self):
         matches = [Scope(**d) for d in self.scopes.values()
@@ -1243,7 +1303,9 @@ class DshSoul(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         install_policy_adapters()
+        install_reply_adapters()
         self.runtime = Runtime(self._allowed, slot=os.path.realpath(DATA))
+        self.delivery = QQDelivery(context, audit=self._record_delivery_result, retain_media=self._retain_sent_media)
         install_executor_guard(self)
         self.h_path = _jf("v2", "history")
         self.t_path = _jf("v2", "thoughts")
@@ -1485,11 +1547,15 @@ class DshSoul(Star):
                 _usage_add_main(_u)
         except Exception:
             pass
+        scope = None
         try:
             scope = self._scope(event)
             uid = scope.key
             raw = _llm_text(resp)
             if not raw.strip():
+                rc = getattr(resp, "result_chain", None)
+                event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
+                    self.pending_sticker.pop(uid, []), others=[c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]))
                 return
             # §53 思考中插话重想：本轮生成期间对方来了新消息（gate 置打断标记）→ 整轮压住：
             # 不发气泡、不记历史，原文存 interrupted_note 下轮一次性告知（自然接续或改口）。
@@ -1497,8 +1563,8 @@ class DshSoul(Star):
             if self.interrupt.pop(uid, False):
                 self.interrupted_note[uid] = raw[:200]
                 self._clear_text_result(resp)
-                self.run_active.pop(uid, None)
-                self.pending_sticker.pop(uid, None)
+                event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [], []))
+                self._finish_reply(event)
                 self._err("gen-interrupt", "uid=%s suppressed %d chars" % (uid, len(raw)))
                 return
             umo = uid
@@ -1526,54 +1592,95 @@ class DshSoul(Star):
                     srow = _pick_sticker(sticker_q)
                     if srow:
                         self.pending_sticker.setdefault(uid, []).append(srow)
-                        self.last_sticker[uid] = {"tag": srow["tag"], "caption": srow["caption"], "ts": time.time()}
                 if voice:
                     self.pending_sticker.pop(umo, None)
                 self._clear_text_result(resp)
-                self.pending_reply[umo] = True
+                event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
+                    self.pending_sticker.pop(uid, [])))
                 return
             if sticker_q and not voice:
                 srow = _pick_sticker(sticker_q)
                 if srow:
                     self.pending_sticker.setdefault(uid, []).append(srow)
-                    self.last_sticker[uid] = {"tag": srow["tag"], "caption": srow["caption"], "ts": time.time()}
-            self.last_reply[umo] = text or raw
-            self.pending_reply[umo] = True
-            hist = self._h(uid)
-            # user 轮次已在 gate 收信时记录，这里只记她的回复。
-            # 打断功能后历史只记「实际发出去」的部分：语音模式整段转语音发出，记 raw（含动作行，
-            # 对齐 NapCat 历史格式，她看到自己的动作协议用法会自我强化）；文字模式此处只发首气泡，
-            # 记首气泡（表情动作由 post_send 跟发，一并记上）；剩余滴灌段由 _drip_send 发出后逐段补记，
-            # 被插话作废的段不进历史（她不知道自己没说过的话）
+            bubbles = [format_qq_text(b) for b in (_bubbles_napcat(text) or [text])]
+            rc = getattr(resp, "result_chain", None)
+            others = [c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]
+            rows = self.pending_sticker.pop(uid, [])
+            event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"),
+                bubbles, [] if voice else rows, voice, text, others))
+            # Preview is still formatted for hooks. RespondStage consumes the
+            # owned plan before its empty-chain check and bypasses generic send.
             if voice:
-                rec_text = raw[:400]
-            else:
-                bubbles = [format_qq_text(b) for b in (_bubbles_napcat(text) or [text])]
-                rec_text = bubbles[0]
-                if sticker_em:
-                    rec_text = (rec_text + NL + "动作：表情 " + sticker_em)[:400]
-            _entry = {"role": "assistant", "text": rec_text[:400], "ts": time.time()}
-            _entry.update(self._source(uid))
-            self._group_append(uid, _entry)
-            hist.append(_entry)
-            _archive_append(uid, _entry)  # 全量归档（只追加、永不删改）
-            self._bump_turns(uid)
-            self.h[uid] = hist[-150:]
-            _save(self.h_path, self.h)
-            # 改写结果链：语音模式清空文字（语音替代）；否则结果链只留首条气泡立即发出，
-            # 剩余段存 pending_drip 由 post_send 启动插件自滴灌（平台 respond 阶段逐组件 sleep+send，
-            # 滴灌期会话锁阻塞且插件无法插打断逻辑，故分条发送全权由插件接管）
-            if voice:
-                self.pending_sticker.pop(umo, None)  # 语音模式跳过表情包（对齐原版）
                 self._clear_text_result(resp)
-                self._spawn(self._voice_reply(scope.target, uid, text[:150]))
             else:
                 self._set_first_bubble_result(resp, bubbles)
-                if len(bubbles) > 1:
-                    self.pending_drip[umo] = {"uid": uid, "segments": bubbles[1:]}
+        except Exception as e:
+            if scope is not None:
+                event.set_extra("_dsh_reply_plan", ReplyPlan(scope.key, scope.target, event.get_extra("_dsh_work"), [], []))
+            elif callable(getattr(event, "stop_event", None)):
+                event.stop_event()
+            self._finish_reply(event)
+            self._clear_text_result(resp)
+            self._err("capture", type(e).__name__)
+
+    def _finish_reply(self, event):
+        plan = event.get_extra("_dsh_reply_plan")
+        if plan:
+            plan.finished = True
+        token = event.get_extra("_dsh_work")
+        if (token is None or getattr(self, "request_owners", {}).get(token.key) != token.request
+                or getattr(self, "request_events", {}).get(token.key) is not event):
+            return  # an old finally must never erase a newer request
+        key = token.key
+        for name in ("run_active", "pending_reply", "pending_sticker", "pending_drip", "drip_active", "interrupt", "batch_wait", "request_owners", "request_events"):
+            getattr(self, name, {}).pop(key, None)
+
+    @managed
+    async def _complete_reply(self, event):
+        plan = event.get_extra("_dsh_reply_plan")
+        if plan is None or plan.started or plan.finished:
+            return
+        if plan.token != event.get_extra("_dsh_work"):
+            raise asyncio.CancelledError("reply plan identity mismatch")
+        plan.started = True
+        uid = plan.key
+        try:
+            if plan.voice:
+                result = await self._voice_reply(plan.target, uid, plan.text, plan.token.request, plan.id)
+                plan.results.append(result)
+            else:
+                if not plan.bubbles and plan.others:
+                    result = await self._send(plan.target, MessageChain(chain=plan.others))
+                    plan.results.append(result)
+                    if not result:
+                        return
+                    self._record_assistant_turn(uid, "[媒体]", result, plan_id=plan.id)
+                for i, text in enumerate(plan.bubbles):
+                    if i:
+                        self.drip_active[uid] = plan.id
+                        lo, hi = self._drip_interval()
+                        await asyncio.sleep(random.uniform(lo, hi))
+                    check_current()
+                    result = await self._send(plan.target, MessageChain(chain=(plan.others if i == 0 else []) + [_qq_plain(text)]))
+                    if i == 0 and plan.others:
+                        result = await self._text_fallback(plan.target, text, result)
+                    plan.results.append(result)
+                    if not result:
+                        return
+                    self._record_assistant_turn(uid, text, result, plan_id=plan.id)
+                for row in plan.stickers:
+                    result = await self._send_sticker_row(plan.target, row)
+                    plan.results.append(result)
+                    if not result:
+                        return
+                    rel = "sticker_packs/" + row["pack"] + "/" + str(row["rel"]).replace(os.sep, "/")
+                    self._record_assistant_turn(uid, "[表情] " + row.get("caption", ""), result,
+                        plan_id=plan.id, media={"sticker": rel})
+                    self.last_sticker[uid] = {"tag": row.get("tag", ""), "caption": row.get("caption", ""), "ts": time.time()}
+            hist = self._h(uid)
             # H1：用单调递增的轮次计数器判断触发，避免 _h 封顶 150 后差值恒 0 导致提炼/摘要永久停摆
             tc = self.turn_count.get(uid, 0)
-            if scope.private and len(hist) >= 12 and tc - self.extract_at.get(uid, 0) >= 12:  # §34 降频 8→12 轮
+            if self._private(uid) and len(hist) >= 12 and tc - self.extract_at.get(uid, 0) >= 12:
                 self.extract_at[uid] = tc
                 self._spawn(self._extract_notes(uid))
             sess = _load(_jf(uid, "session"), {})
@@ -1584,8 +1691,50 @@ class DshSoul(Star):
                 sess["at"] = tc
                 _save(_jf(uid, "session"), sess)
                 self._spawn(self._refresh_summary(uid))
-        except Exception as e:
-            self._err("capture", e)
+            if any(plan.results):
+                if random.random() < 0.04:
+                    self._spawn(self._sprinkle_later(plan.target, uid))
+                if random.random() < 0.2:
+                    self._spawn(self._revive_later(plan.target, uid, random.uniform(150, 330)))
+        except asyncio.CancelledError as error:
+            result = getattr(error, "delivery_result", None)
+            if result is not None:
+                plan.results.append(result)
+            raise
+        finally:
+            self._finish_reply(event)
+
+    @managed
+    async def _persist_framework_reply(self, event, req):
+        if not req or not req.conversation:
+            return
+        plan = event.get_extra("_dsh_reply_plan")
+        try:
+            key = event.get_extra("_dsh_work").key
+            # F01 uses plugin history as the only model history. Never persist
+            # generated assistant/tool traces as though the user had seen them.
+            rows = [{"role": h["role"], "content": h["text"]} for h in self._h(key)
+                    if h["role"] != "assistant" or h.get("delivery", {}).get("status") == "accepted"]
+            await self.context.conversation_manager.update_conversation(event.unified_msg_origin,
+                req.conversation.cid, history=rows)
+            check_current()
+            event.set_extra("_dsh_framework_persistence", "saved")
+            if plan:
+                for result in plan.results:
+                    result.persistence["framework"] = "saved"
+                    try:
+                        self._record_delivery_result(plan.target, result)
+                    except (Exception, asyncio.CancelledError):
+                        result.persistence["receipt"] = "failed"
+        except Exception:
+            event.set_extra("_dsh_framework_persistence", "failed")
+            if plan:
+                for result in plan.results:
+                    result.persistence["framework"] = "failed"
+                    try:
+                        self._record_delivery_result(plan.target, result)
+                    except (Exception, asyncio.CancelledError):
+                        result.persistence["receipt"] = "failed"
 
     def _clear_text_result(self, resp):
         """清空 resp 里的文字组件（语音替代文字时空链会被 respond 阶段跳过）"""
@@ -1641,8 +1790,10 @@ class DshSoul(Star):
                         self.interrupted_note[uid] = unsent
                     self._err("drip", "uid=%s interrupted: %d/%d sent" % (uid, i, len(segments)))
                     return
-                await self._send(umo, MessageChain(chain=[_qq_plain(seg)]))
-                self._record_assistant_turn(uid, seg)  # 只记已发出的段
+                result = await self._send(umo, MessageChain(chain=[_qq_plain(seg)]))
+                if not result:
+                    return
+                self._record_assistant_turn(uid, seg, result)  # 只记已发出的段
         except Exception as e:
             self._err("drip", e)
         finally:
@@ -1706,34 +1857,9 @@ class DshSoul(Star):
     @filter.after_message_sent()
     @managed
     async def post_send(self, event: AstrMessageEvent):
-        try:
-            scope = self._scope(event)
-            uid = scope.key
-            umo = uid
-            self.run_active.pop(uid, None)  # 本轮 run 结束，清除"思考中"标记（§53）
-            # 先发待发表情包（不依赖 pending_reply 闸门——空文本回复也要把已选表情发出去）
-            sticker_rows = self.pending_sticker.pop(umo, [])
-            for sticker_row in sticker_rows:
-                try:
-                    if await self._send_sticker_row(scope.target, sticker_row):
-                        # 发送成功把所选图片相对路径挂到最后一条 assistant 历史条目（控制台可直接看图）
-                        rel = "sticker_packs/" + sticker_row["pack"] + "/" + str(sticker_row["rel"]).replace(os.sep, "/")
-                        self._attach_media(uid, "sticker", rel)
-                except Exception as e:
-                    self._err("pending-sticker", e)
-            if not self.pending_reply.pop(umo, None):
-                return
-            # 首条气泡已随管线发出，启动插件自滴灌发剩余段（段间可查打断标记）
-            drip = self.pending_drip.pop(umo, None)
-            if drip:
-                self._drip_seq += 1
-                self._spawn(self._drip_send(scope.target, drip["uid"], drip["segments"], self._drip_seq))
-            if random.random() < 0.04:
-                self._spawn(self._sprinkle_later(scope.target, uid))
-            if random.random() < 0.2:
-                self._spawn(self._revive_later(scope.target, uid, random.uniform(150, 330)))
-        except Exception as e:
-            self._err("post-send", e)
+        # Retained registration for compatibility. Completion no longer depends
+        # on this callback (empty-chain and failed sends do not reliably call it).
+        return
 
     @managed
     async def _sprinkle_later(self, umo, uid):
@@ -1749,8 +1875,10 @@ class DshSoul(Star):
                 return
             lead = random.choice(SPRINKLE_LEADS)
             msg = (lead + thought)[:140]
-            await self._send(umo, MessageChain(chain=[_qq_plain(msg)]))
-            self._record_assistant_turn(uid, msg)
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(msg)]))
+            if not result:
+                return
+            self._record_assistant_turn(uid, msg, result)
         except Exception as e:
             self._err("sprinkle", e)
 
@@ -1790,36 +1918,61 @@ class DshSoul(Star):
             t = _llm_text(out).strip()
             if not t or "[SILENT]" in t:
                 return
-            await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]))
-            self._record_assistant_turn(uid, t[:140])
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]))
+            if not result:
+                return
+            self._record_assistant_turn(uid, t[:140], result)
         except Exception as e:
             self._err("revive", e)
 
     @managed
-    async def _voice_reply(self, umo, uid, text):
-        """动作：语音触发：原句截断 150 字直接合成 → 以语音消息发送（替代文字）。
-        语音文件留存 media/voice/（不再删除，控制台可回放），文件名挂到该 uid 最后一条 assistant 历史条目的 voice 键。"""
+    async def _synthesize_voice(self, uid, text):
+        """Existing local TTS boundary, replaced in offline tests; no service startup."""
         import urllib.request
+        body = json.dumps({"text": text[:150], "format": "wav"}).encode("utf-8")
+        req = urllib.request.Request("http://127.0.0.1:18765/tts", data=body,
+                                     headers={"Content-Type": "application/json"})
+        wav = await self._thread(lambda: urllib.request.urlopen(req, timeout=60).read())
+        if not wav:
+            raise ValueError("empty voice")
+        rel = "media/voice/voice_" + uuid.uuid4().hex + ".wav"
+        self._write_media(uid, rel, wav)
+        return rel
+
+    @managed
+    async def _text_fallback(self, target, text, result):
+        safe = result.status == "failed" and (result.category == "media" or
+            (result.category == "network" and result.stage != "message"))
+        if not safe or not text:
+            return result
+        check_current()
+        original = result.public()
+        result = await self._send(target, MessageChain(chain=[_qq_plain(text)]))
+        result.fallback_from = original
+        return result
+
+    @managed
+    async def _voice_reply(self, umo, uid, text, request_id="", plan_id=""):
+        """One voice attempt; definite media/synthesis failure gets one text fallback.
+
+        Unknown message results, permission, expiry, exhaustion or revocation do
+        not trigger another delivery. Text fallback uses the original full text.
+        """
+        result = None
+        rel = None
         try:
-            text = text[:150]
-            body = json.dumps({"text": text, "format": "wav"}).encode("utf-8")
-            req = urllib.request.Request("http://127.0.0.1:18765/tts", data=body,
-                                         headers={"Content-Type": "application/json"})
-            wav = await self._thread(lambda: urllib.request.urlopen(req, timeout=60).read())
-            vdir = os.path.join(DATA, "media", "voice")
-            os.makedirs(vdir, exist_ok=True)
-            # 文件名加毫秒+随机，避免秒级碰撞互相覆盖
-            fname = "voice_" + str(int(time.time() * 1000)) + "_" + str(random.randint(100, 999)) + ".wav"
-            wav_path = os.path.join(vdir, fname)
-            self._write_media(uid, "media/voice/" + fname, wav)
-            # 自动媒体到期清理政策另单决定；本单不删除其他会话的文件
-            # self._prune_voice_dir(vdir)  # 超 200 个文件删最旧，防无限膨胀
-            from astrbot.api.message_components import Record
-            await self._send(umo, MessageChain(chain=[Record(file=wav_path)]))
-            self._attach_media(uid, "voice", "media/voice/" + fname)
-            self._err("voice", "sent: " + text[:30])
-        except Exception as e:
-            self._err("voice", e)
+            rel = await self._synthesize_voice(uid, text)
+            check_current()
+            result = await self._send(umo, MessageChain(chain=[Record(file=os.path.join(DATA, rel.replace("/", os.sep)))]))
+        except Exception:
+            result = failure("failed", "synthesis", "media")
+        if result.status == "accepted":
+            self._record_assistant_turn(uid, text[:150], result, request_id=request_id, plan_id=plan_id, media={"voice": rel})
+        else:
+            result = await self._text_fallback(umo, text, result)
+            if result:
+                self._record_assistant_turn(uid, text, result, request_id=request_id, plan_id=plan_id)
+        return result
 
     def _prune_voice_dir(self, vdir):
         """media/voice 下超过 200 个 wav 时删最旧（防无限膨胀）"""
@@ -1831,18 +1984,6 @@ class DshSoul(Star):
                     os.remove(old)
         except Exception as e:
             self._err("voice-prune", e)
-
-    def _attach_media(self, uid, key, rel):
-        """把媒体相对路径（相对 dsh_data）挂到该 uid 最后一条 assistant 历史条目（新键可选，不破坏既有读取方）"""
-        try:
-            hist = self.h.get(uid) or []
-            for h in reversed(hist):
-                if h.get("role") == "assistant":
-                    h[key] = rel
-                    _save(self.h_path, self.h)
-                    return
-        except Exception as e:
-            self._err("attach-media", e)
 
     @managed
     async def _extract_notes(self, uid):
@@ -2107,26 +2248,15 @@ class DshSoul(Star):
             if os.path.getsize(rp) > 20 * 1024 * 1024:
                 return "文件超过 20MB，发不了（自限，QQ 接口上传太大容易失败）。"
             fname = os.path.basename(rp)
-            with open(rp, "rb") as f:
-                data = f.read()
-
-            import base64
             target = self._scope(event).target
-            st1, j1 = await self._thread(_qq_api_post, target.endpoint("files"), {
-                "file_type": 4, "file_data": base64.b64encode(data).decode("ascii"),
-                "file_name": fname, "srv_send_msg": False}, target.instance)
-            fi = j1.get("file_info") if isinstance(j1, dict) else None
-            if st1 >= 300 or not fi:
-                return "上传文件失败（HTTP " + str(st1) + "）"
-            payload = {"msg_type": 7, "media": {"file_info": fi}, "msg_seq": 1}
-            if target.message_id:
-                payload["msg_id"] = target.message_id
-            st2, _ = await self._thread(_qq_api_post, target.endpoint("messages"), payload, target.instance)
-            if st2 >= 300:
-                return "发送文件失败（HTTP " + str(st2) + "）"
+            components = [File(name=fname, file=rp)]
             if (caption or "").strip():
-                await self._send(target, MessageChain(chain=[_qq_plain(caption.strip()[:500])]))
-            return "文件「" + fname + "」已提交到 QQ 接口"
+                components.insert(0, _qq_plain(caption.strip()[:500]))
+            result = await self._send(target, MessageChain(chain=components))
+            if result.status == "accepted":
+                self._record_assistant_turn(self._scope(event).key, "[文件] " + fname, result)
+                return "文件「" + fname + "」已被 QQ 接口接受（不代表客户端已收到）"
+            return "文件发送：" + result.status + "（" + result.stage + "/" + result.category + "）"
         except Exception as e:
             return "发文件失败：" + repr(e)[:150]
 
@@ -2362,11 +2492,11 @@ class DshSoul(Star):
         await asyncio.sleep(6)
         try:
             if umo:
-                await self._send(umo, MessageChain(chain=[_qq_plain(msg[:600])]))
+                result = await self._send(umo, MessageChain(chain=[_qq_plain(msg[:600])]))
                 if target:
                     key = next((k for k,d in self.scopes.items() if Scope(**d).target == target), None)
                     if key:
-                        self._record_assistant_turn(key, msg[:600])
+                        self._record_assistant_turn(key, msg[:600], result)
         except Exception as e:
             self._err("ask-kimi-send", e)
 
@@ -2613,9 +2743,8 @@ class DshSoul(Star):
     async def _send_sticker_row(self, umo, row):
         abs_path = os.path.join(PACKS, row["pack"], row["rel"].replace("/", os.sep))
         if not os.path.isfile(abs_path):
-            return False
-        await self._send(umo, MessageChain(chain=[Image.fromFileSystem(abs_path)]))
-        return True
+            return failure("failed", "prepare", "media")
+        return await self._send(umo, MessageChain(chain=[Image.fromFileSystem(abs_path)]))
 
     @managed
     async def _send_sticker(self, umo, query):
@@ -2636,7 +2765,6 @@ class DshSoul(Star):
         if not row:
             return "（图库里没找到匹配的表情包）"
         self.pending_sticker.setdefault(uid, []).append(row)
-        self.last_sticker[uid] = {"tag": row["tag"], "caption": row["caption"], "ts": time.time()}
         return "（已选好表情包，会跟在回复后面发出）"
 
     # ---------- 共享图库：全用户检索，主人私聊维护 ----------
@@ -2821,10 +2949,13 @@ class DshSoul(Star):
                 await self.state.apply("switch", {"key": "enabled", "value": on})
                 control = self.runtime.begin(uid, "control")
                 event.set_extra("_dsh_work", control)
+                self.request_owners[uid] = control.request
+                self.request_events[uid] = event
                 ack = "行，总开关开了，我回来了。" if on else "行，全静默了。想叫我回来就说「总开关 开」。"
                 with work_context(control):
-                    self._record_gate_turn(uid, trimmed, ack)
-                    await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                    self._record_user_turn(uid, trimmed)
+                    result = await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                    self._record_assistant_turn(uid, ack, result)
                 event.stop_event()
                 return
             # 全局总开关：enabled=false 时所有消息直接静默（不记历史、不进 LLM、不触发 react/主动逻辑）
@@ -2869,8 +3000,9 @@ class DshSoul(Star):
                     return
             ack = self._match_sleep_cmd(uid, trimmed, now)
             if ack:
-                self._record_gate_turn(uid, trimmed, ack)
-                await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_user_turn(uid, trimmed)
+                result = await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_assistant_turn(uid, ack, result)
                 event.stop_event()
                 return
             # 「提醒 开/关」命令（仅主人）：写 dsh_soul_conf.json 的 reminders 键，持久化
@@ -2879,33 +3011,37 @@ class DshSoul(Star):
                 on = rc.group(1) == "开"
                 await self.state.apply("switch", {"key": "reminders", "value": on})
                 ack = "行，提醒开了，到点我叫你。" if on else "行，提醒关了，你自己看着点。"
-                self._record_gate_turn(uid, trimmed, ack)
-                await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_user_turn(uid, trimmed)
+                result = await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_assistant_turn(uid, ack, result)
                 event.stop_event()
                 return
             # 状态命令：本地汇报，不进 LLM（记历史双轮次）
             if STATUS_RE.match(trimmed):
                 ack = self._status_text(uid, now)
-                self._record_gate_turn(uid, trimmed, ack)
-                await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_user_turn(uid, trimmed)
+                result = await self._send(scope.target, MessageChain(chain=[_qq_plain(ack)]))
+                self._record_assistant_turn(uid, ack, result)
                 event.stop_event()
                 return
             # 安全两道闸（均受全局 conf safety 开关控制，刻意不做按用户开关——安全闸一关全开风险太大）：
             # 第一道硬关键词命中进 blocked 持久化名单；第二道 flash 分类闸（只拦极端六类，fail-open）只拒答不进 blocked（对齐原版）
             if not self._owner(uid) and _conf("safety"):
                 if any(p.search(trimmed) for p in SAFETY_HARD_PATTERNS):
-                    self._record_gate_turn(uid, trimmed[:500], SAFETY_DECLINE)
+                    self._record_user_turn(uid, trimmed[:500])
                     if uid not in self.blocked:
                         self.blocked.add(uid)
                         _save(self.b_path, sorted(self.blocked))
                     self._err("safety", "blocked " + uid[:12] + " " + trimmed[:40])
-                    await self._send(scope.target, MessageChain(chain=[_qq_plain(SAFETY_DECLINE)]))
+                    result = await self._send(scope.target, MessageChain(chain=[_qq_plain(SAFETY_DECLINE)]))
+                    self._record_assistant_turn(uid, SAFETY_DECLINE, result)
                     event.stop_event()
                     return
                 if await self._flash_unsafe(trimmed):
-                    self._record_gate_turn(uid, trimmed[:500], SAFETY_DECLINE)
+                    self._record_user_turn(uid, trimmed[:500])
                     self._err("safety-flash", "declined " + uid[:12] + " " + trimmed[:40])
-                    await self._send(scope.target, MessageChain(chain=[_qq_plain(SAFETY_DECLINE)]))
+                    result = await self._send(scope.target, MessageChain(chain=[_qq_plain(SAFETY_DECLINE)]))
+                    self._record_assistant_turn(uid, SAFETY_DECLINE, result)
                     event.stop_event()
                     return
             from astrbot.core.config.agent_runner import normalize_agent_runner
@@ -3035,9 +3171,11 @@ class DshSoul(Star):
         导致正式回复与抢答口径不一（自相矛盾）；现在主请求会被一次性告知、历史里也能看到。"""
         try:
             t = await self._make_react(uid, scene, last_text)
-            await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
+            if not result:
+                return
             self.last_react[uid] = {"ts": time.time(), "text": t}
-            self._record_assistant_turn(uid, t)
+            self._record_assistant_turn(uid, t, result)
         except Exception as e:
             self._err("react", e)
 
@@ -3049,14 +3187,34 @@ class DshSoul(Star):
             if not _conf("enabled") or not self._perm(uid, "reply"):
                 return
             t = random.choice(BUSY_LINES)
-            await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
-            self._record_assistant_turn(uid, t)
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
+            if not result:
+                return
+            self._record_assistant_turn(uid, t, result)
         except Exception as e:
             self._err("busy-notice", e)
 
     def _bump_turns(self, uid, n=1):
         """H1：单调递增的轮次计数器（内存态，重启后差值重新累计即可）"""
         self.turn_count[uid] = self.turn_count.get(uid, 0) + n
+
+    def _record_delivery_result(self, target, result):
+        token = current_token()
+        if token is None or token.runtime is not self.runtime or token.key not in self.scopes:
+            return
+        # Outcome metadata has its own archive layer, never model input. Storage
+        # guards still prevent invalidated work from resurrecting deleted layers.
+        path = os.path.join(DATA, "delivery_receipts_v2.json")
+        table = _load(path, {})
+        rows = table.setdefault(token.key, [])
+        row = {"attempt_id": result.attempt_id, "request_id": token.request or result.attempt_id, "ts": time.time(),
+               **result.public()}
+        existing = next((i for i, old in enumerate(rows) if old.get("attempt_id") == result.attempt_id), None)
+        if existing is None:
+            rows.append(row)
+        else:
+            rows[existing] = row
+        _save(path, table)
 
     def _record_user_turn(self, uid, text, images=None, files=None):
         hist = self._h(uid)
@@ -3078,35 +3236,47 @@ class DshSoul(Star):
         self.h[uid] = hist[-150:]
         _save(self.h_path, self.h)
 
-    def _record_assistant_turn(self, uid, text):
-        """主动消息（sprinkle/revive/proactive）发送成功后补记她的轮次，让她记得自己说过什么"""
+    def _record_assistant_turn(self, uid, text, result=None, *, request_id="", plan_id="", media=None):
+        """Accepted API message only. Storage failures never change its receipt.
+
+        Each layer contains the same entry identity and accepted semantics. There
+        is no cross-file transaction; partial persistence is explicitly reported.
+        """
+        if not isinstance(result, DeliveryResult) or result.status != "accepted":
+            return None
+        check_current()
+        token = current_token()
+        if token is not None and token.runtime is self.runtime and token.key == uid:
+            request_id = token.request or result.attempt_id
+        request_id = request_id or result.attempt_id
         text = format_qq_text(text)
         hist = self._h(uid)
-        entry = {"role": "assistant", "text": text[:400], "ts": time.time()}
+        entry = {"role": "assistant", "text": text, "ts": time.time(), "id": uuid.uuid4().hex,
+                 "request_id": request_id, "delivery": {"status": "accepted", "message_id": result.message_id,
+                 "seq": result.seq, "ref_idx": result.ref_idx, "attempt_id": result.attempt_id}}
+        if plan_id:
+            entry["plan_id"] = plan_id
+        media = result.media if media is None else media
+        if media:
+            entry.update(media)
         entry.update(self._source(uid))
         hist.append(entry)
-        self._group_append(uid, entry)
-        _archive_append(uid, entry)
+        self.h[uid] = hist[-150:]
+        for layer, write in (("rolling", lambda: _save(self.h_path, self.h)),
+                             ("group", lambda: self._group_append(uid, entry)),
+                             ("archive", lambda: _archive_append(uid, entry))):
+            try:
+                write()
+                result.persistence[layer] = "saved"
+            except Exception:
+                result.persistence[layer] = "failed"
+        self.last_reply[uid] = text
         self._bump_turns(uid)
-        self.h[uid] = hist[-150:]
-        _save(self.h_path, self.h)
-
-    def _record_gate_turn(self, uid, user_text, reply_text):
-        reply_text = format_qq_text(reply_text)
-        hist = self._h(uid)
-        e1 = {"role": "user", "text": user_text[:300], "ts": time.time()}
-        e2 = {"role": "assistant", "text": reply_text[:400], "ts": time.time()}
-        e1.update(self._source(uid))
-        e2.update(self._source(uid))
-        self._group_append(uid, e1)
-        self._group_append(uid, e2)
-        hist.append(e1)
-        hist.append(e2)
-        _archive_append(uid, e1)  # 全量归档（只追加、永不删改）
-        _archive_append(uid, e2)
-        self._bump_turns(uid, 2)
-        self.h[uid] = hist[-150:]
-        _save(self.h_path, self.h)
+        try:
+            self._record_delivery_result(Scope(**self.scopes[uid]).target, result)
+        except (Exception, asyncio.CancelledError):
+            result.persistence["receipt"] = "failed"
+        return entry
 
     def _match_sleep_cmd(self, uid, trimmed, now):
         """闭嘴类（默认30分钟，可带N分钟上限720）/ 休眠类（默认睡到早8点，支持N小时上限24、N分钟、睡到H点[半]）。命中返回回复语并写入 silence_until。"""
@@ -3457,7 +3627,10 @@ class DshSoul(Star):
             for i, b in enumerate(bubbles):
                 if i > 0:
                     await asyncio.sleep(random.uniform(1, 2))
-                await self._send(umo, MessageChain(chain=[_qq_plain(b)]))
+                result = await self._send(umo, MessageChain(chain=[_qq_plain(b)]), mode="proactive")
+                if not result:
+                    return
+                self._record_assistant_turn(uid, b, result)
             # 发送成功后才扣配额（修复 [SILENT]/失败白烧每日额度）
             pst = self.pst.setdefault(person_ledger_key(Scope(**self.scopes[uid]), self.pst), {"day": "", "count": 0, "lastAt": 0})
             today = time.strftime("%Y-%m-%d")
@@ -3468,7 +3641,6 @@ class DshSoul(Star):
             pst["lastAt"] = time.time()
             _save(self.p_path, self.pst)
             # 主动消息记入历史，她记得自己说过什么
-            self._record_assistant_turn(uid, reply[:400])
             # 朋友私聊内容只留在受保护控制台，不经 QQ 转述给主人。
         except Exception as e:
             self._err("proactive-send", e)
@@ -3545,7 +3717,7 @@ class DshSoul(Star):
                 + str(thcnt) + " 个念头" + sil_txt + "，今天主动找了你 " + str(pcnt) + " 次。" + NL
                 + "问这个干嘛，查岗啊？" + NL
                 + "本版对应源码（AGPL-3.0，免费获取）：" + NL
-                + "https://github.com/114514071107/deepseek-chat-qqbot/tree/workorder-2-20261022")
+                + "https://github.com/114514071107/deepseek-chat-qqbot/tree/dev")
 
     # ---------- 定时提醒（挂 5 分钟 desire 循环检查；每槽每天一次，只发主人，休眠期不发） ----------
     @managed
@@ -3598,8 +3770,10 @@ class DshSoul(Star):
         t = _llm_text(out).strip()
         if not t:
             raise RuntimeError("empty reminder")
-        await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]))
-        self._record_assistant_turn(uid, t[:140])
+        result = await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]), mode="proactive")
+        if not result:
+            return
+        self._record_assistant_turn(uid, t[:140], result)
 
     # ---------- 闹钟触发（45s 循环；先落 last_fired 再发送，once 触发后停用保留记录） ----------
     @managed
@@ -3684,9 +3858,11 @@ class DshSoul(Star):
             t = _llm_text(out).strip()
             if not t:
                 return
-            await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]))
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(t[:140])]), mode="proactive")
+            if not result:
+                return
             _save(self.g_path, {"last": time.time()})
-            self._record_assistant_turn(uid, t[:140])
+            self._record_assistant_turn(uid, t[:140], result)
         except Exception as e:
             self._err("greet", e)
 

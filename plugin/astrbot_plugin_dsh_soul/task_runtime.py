@@ -9,6 +9,7 @@ import uuid
 import weakref
 
 _work=ContextVar('dsh_work',default=None)
+_event=ContextVar('dsh_event',default=None)
 _slots=weakref.WeakValueDictionary()
 FEATURES={'_voice_reply':'voice','_sprinkle_later':'sprinkle','_revive_later':'revive',
           '_harvest_one':'harvest','_desire_for':'desire','_proactive_send':'proactive',
@@ -26,10 +27,17 @@ class Token:
 
 
 @contextmanager
-def work_context(token):
+def work_context(token,event=None):
     saved=_work.set(token)
+    source=_event.set(event) if event is not None else None
     try: yield
-    finally: _work.reset(saved)
+    finally:
+        _work.reset(saved)
+        if source is not None: _event.reset(source)
+
+
+def current_event(): return _event.get()
+def current_token(): return _work.get()
 
 
 def check_current():
@@ -161,14 +169,20 @@ def managed(fn):
                 self.runtime.borrow(token)
                 token=replace(token,feature=self._entry_feature(event) if name=='gate' else 'harvest' if name=='harvest_images' else FEATURES.get(name,'reply'))
             elif parent and parent.runtime is self.runtime and parent.key:
-                token=parent
+                token=replace(parent,feature=FEATURES.get(name,parent.feature))
             else:
                 key=values.get('uid','')
                 if isinstance(values.get('scope'),__import__('session_scope').Scope): key=values['scope'].key
                 key=key if key in self.scopes else ''
                 token=self.runtime.token(key,FEATURES.get(name,'reply'))
-            with work_context(token):
+            with work_context(token,event):
                 self.runtime.check(token)
+                if event is not None:
+                    if not hasattr(self,'request_owners'): self.request_owners={}
+                    if not hasattr(self,'request_events'): self.request_events={}
+                    if self.request_owners.get(scope.key)!=token.request:
+                        self.request_owners[scope.key]=token.request
+                        self.request_events[scope.key]=event
                 if event is not None:
                     from session_scope import check_framework_policy
                     await check_framework_policy(event)

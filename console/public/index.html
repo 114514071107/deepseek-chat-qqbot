@@ -112,7 +112,7 @@
 <main id="view"></main>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261023-entry-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261023-delivery-3"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -363,11 +363,14 @@ function histEntryHtml(e) {
   let media = "";
   if (e.voice) media += '<audio class="h-audio" controls preload="none" src="' + mediaUrl(e.voice) + '"></audio>';
   else if (actVoice) media += '<div class="h-note">（语音 · 当时未留存）</div>';
+  if (e.voice) media += '<a href="' + mediaUrl(e.voice) + '" download>语音文件</a>';
   if (e.sticker) media += '<a href="' + mediaUrl(e.sticker) + '" target="_blank"><img class="h-img" src="' + mediaUrl(e.sticker) + '"></a>';
   else if (em) media += '<div class="stk-sample" data-tag="' + esc(EMOTION_CN[em[1]] || "") + '"></div>';
   if (e.images && e.images.length)
     media += "<div>" + e.images.map((p) =>
       '<a href="' + mediaUrl(p) + '" target="_blank"><img class="h-img" src="' + mediaUrl(p) + '"></a>').join("") + "</div>";
+  if (e.files && e.files.length)
+    media += "<div>" + e.files.map((p,i) => '<a href="' + mediaUrl(p) + '" download>附件 ' + (i+1) + '</a>').join(" · ") + "</div>";
   return '<div class="msg ' + (e.role === "assistant" ? "a" : "u") + '"><div class="meta">' +
     (e.role === "assistant" ? "她" : "对方") + " · " + fmtT(e.ts) + "</div>" + esc(txt) + media + "</div>";
 }

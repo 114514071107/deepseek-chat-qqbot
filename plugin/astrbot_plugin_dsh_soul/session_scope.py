@@ -7,6 +7,7 @@ import inspect
 import sys
 import asyncio
 import re
+import time
 from types import SimpleNamespace
 
 
@@ -116,6 +117,8 @@ class Target:
     kind: str
     address: str
     message_id: str = ''
+    event_id: str = ''
+    received_at: float = 0
 
     @property
     def umo(self):
@@ -140,6 +143,8 @@ class Scope:
     group: str
     message_id: str
     private: bool
+    event_id: str = ''
+    received_at: float = 0
 
     @property
     def memory_key(self): return _key('p2_',self.platform,self.instance,self.bot,self.sender)
@@ -148,7 +153,7 @@ class Scope:
     @property
     def group_key(self): return '' if self.private else _key('g2_',self.platform,self.instance,self.bot,self.group)
     @property
-    def target(self): return Target(self.platform,self.instance,self.bot,'private' if self.private else 'group',self.sender if self.private else self.group,self.message_id)
+    def target(self): return Target(self.platform,self.instance,self.bot,'private' if self.private else 'group',self.sender if self.private else self.group,self.message_id,self.event_id,self.received_at)
     def source(self): return asdict(self)
 
 
@@ -160,8 +165,14 @@ def bind_scope(event):
     who=caller(event)
     if who is None: raise ValueError('untrusted event identity')
     obj=getattr(event,'message_obj',None)
+    stamp=getattr(obj,'timestamp',None)
+    try: stamp=float(stamp.timestamp() if hasattr(stamp,'timestamp') else stamp)
+    except (TypeError,ValueError): stamp=time.time()
+    # Missing receive time is bound once on the event, never refreshed by hooks.
+    stamp=min(stamp,time.time())
     scope=Scope(who.platform,who.instance,str(getattr(obj,'self_id','') or ''),who.sender,who.group or '',
-                str(getattr(obj,'message_id','') or ''),who.private)
+                str(getattr(obj,'message_id','') or ''),who.private,
+                str(getattr(getattr(obj,'raw_message',None),'event_id','') or ''),stamp)
     origin=event.get_extra('_dsh_original_umo') or event.unified_msg_origin
     event.set_extra('_dsh_original_umo',origin)
     event.session_id=scope.key

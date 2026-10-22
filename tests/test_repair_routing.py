@@ -17,14 +17,20 @@ class RoutingRegression(unittest.IsolatedAsyncioTestCase):
             obj,ns=load_methods();event=Event('owner');event.message_obj=SimpleNamespace(message_id='trigger',self_id='self')
             ns['_safe_local_path']=lambda *a,**kw:(str(file),None)
             calls=[]
-            def api(endpoint,payload,instance):
-                calls.append((endpoint,payload,instance))
+            from qq_delivery import QQDelivery
+            ns.update(File=lambda **kw:SimpleNamespace(**kw),MessageChain=lambda **kw:SimpleNamespace(**kw))
+            platform=SimpleNamespace(meta=lambda:SimpleNamespace(id='fictional-bot',name='qq_official'))
+            context=SimpleNamespace(platform_manager=SimpleNamespace(platform_insts=[platform]))
+            async def api(platform,endpoint,payload):
+                calls.append((endpoint,payload,platform.meta().id))
                 if endpoint.endswith('/files'):
                     event.private=False  # subsequent chat/route state must not redirect this request
                     return 200,{'file_info':'fixture-media'}
-                return 200,{}
-            ns['_qq_api_post']=api
-            obj._thread=asyncio.to_thread
+                return 200,{'id':'accepted-file'}
+            async def parse(chain):return '',None,None,None,None,chain.chain[0].file,chain.chain[0].name
+            delivery=QQDelivery(context,request=api,parse=parse)
+            obj._send=delivery.send
+            obj._record_assistant_turn=lambda *a:None
             result=await obj.send_local_file(event,str(file))
             self.assertIn('QQ',result)
             self.assertEqual([row[0] for row in calls],['/v2/users/owner/files','/v2/users/owner/messages'])
@@ -51,20 +57,20 @@ class RoutingRegression(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):ns['_qq_token']('absent')
         self.assertEqual(selected,['fixture-b'])
 
-    async def test_post_send_uses_original_group_after_same_sender_moves_to_private(self):
+    async def test_completion_uses_original_group_after_same_sender_moves_to_private(self):
         with tempfile.TemporaryDirectory() as tmp:
-            obj,ns=load_pipeline(tmp,names=('post_send',))
+            from repair_pipeline_support import ResultChain
+            from qq_delivery import DeliveryResult
+            obj,ns=load_pipeline(tmp,names=('capture','_clear_text_result','_set_first_bubble_result'),guarded=True)
             first=ScopeEvent('a','g1'); scope=obj._scope(first)
+            await obj.capture(first,SimpleNamespace(result_chain=ResultChain('first\n\nlater')))
             obj._scope(ScopeEvent('a'))
-            obj.pending_reply[scope.key]=True; obj.pending_drip[scope.key]={'uid':scope.key,'segments':['later']}
-            obj._drip_seq=0
             calls=[]
-            async def drip(target,*args): calls.append(target)
-            obj._drip_send=drip
-            obj._spawn=lambda coro,**kw:asyncio.create_task(coro)
-            ns['random']=SimpleNamespace(random=lambda:1)
-            await obj.post_send(first); await asyncio.sleep(0)
-            self.assertEqual(calls,[scope.target])
+            async def send(target,*args):calls.append(target);return DeliveryResult('accepted',message_id='fixture')
+            obj._send=send;obj._drip_interval=lambda:(0,0)
+            ns['random']=SimpleNamespace(random=lambda:1,uniform=lambda *a:0)
+            await obj._complete_reply(first)
+            self.assertEqual(calls,[scope.target,scope.target])
 
     async def test_target_endpoints_and_absent_destination(self):
         for kind,address,base in [('private','user-id','users'),('group','group-id','groups')]:
@@ -78,8 +84,11 @@ class RoutingRegression(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             obj,_=load_pipeline(tmp,names=('_send',))
             obj.context=SimpleNamespace(send_message=AsyncMock(),platform_manager=SimpleNamespace(platform_insts=[]))
+            from qq_delivery import QQDelivery
+            obj.delivery=QQDelivery(obj.context)
             with self.assertRaises(ValueError): await obj._send('last route',object())
-            with self.assertRaises(ValueError): await obj._send(Target('qq_official','absent','','private','u'),object())
+            result=await obj._send(Target('qq_official','absent','','private','u'),object())
+            self.assertEqual((result.status,result.category),('failed','route'))
             obj.context.send_message.assert_not_awaited()
 
 

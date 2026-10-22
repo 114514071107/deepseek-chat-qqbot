@@ -28,8 +28,11 @@ class PipelineInterleavings(unittest.IsolatedAsyncioTestCase):
                       MessageChain=lambda **kw:kw)
             ns['_conf']=lambda key:read_json(Path(tmp)/'dsh_soul_conf.json',{}).get(key,True)
             sent=[]
-            async def send(*args):sent.append(args);return True
+            from qq_delivery import QQDelivery
+            async def send(*args):sent.append(args);return 200,{'id':'fixture'}
             obj.context=SimpleNamespace(platform_manager=SimpleNamespace(platform_insts=[SimpleNamespace(meta=lambda:SimpleNamespace(id='bot-one',name='qq_official'))]),send_message=send)
+            async def parse(chain): return chain['chain'][0].text,None,None,None,None,None,None
+            obj.delivery=QQDelivery(obj.context,request=send,parse=parse)
             async def waiting():await asyncio.Event().wait()
             old=obj.runtime.spawn(waiting(),key=friend.key)
             for message in ('总开关 关','总开关 开'):

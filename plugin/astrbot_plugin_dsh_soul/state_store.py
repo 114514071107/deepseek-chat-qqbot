@@ -75,7 +75,7 @@ class StateController:
         return {'uid':key,'layers':list(LAYERS),'backups':self.backups(),
                 'backup_impact':'所列备份可能包含所有用户；删除所选整份文件，不是按用户擦除。外部/系统备份不在本入口范围',
                 'mapping':{'rolling':'插件滚动历史及可准确定位的新框架会话历史',
-                           'archive':'插件归档及该来源在当前群的共享历史',
+                           'archive':'插件归档、脱敏投递结果账本及该来源在当前群的共享历史',
                            'summary':'会话摘要及临时念头','memory':'长期笔记、学习资料及私有 Markdown 画像',
                            'media':'本会话留存的收件和语音文件；共享表情图库不在此项',
                            'backups':'明确选中的整份备份文件'},
@@ -158,6 +158,7 @@ class StateController:
             kept=[row for row in rows if row.get('uid')!=key]
             write_text(path,''.join(json.dumps(row,ensure_ascii=False)+'\n' for row in kept))
             if known:
+                self._table_remove(self.path('delivery_receipts_v2.json'),key)
                 groups=copy.deepcopy(obj.groups)
                 for group,entries in groups.items():
                     groups[group]=[row for row in entries if not self._same_source(row.get('source'),obj.scopes[key])]
@@ -194,7 +195,7 @@ class StateController:
             for rel in media:
                 if rel in shared: failed.append(rel); continue
                 file=self.path(rel).resolve()
-                allowed=any(file.is_relative_to(self.path(root).resolve()) for root in ('media/inbox','media/voice','files/inbox'))
+                allowed=any(file.is_relative_to(self.path(root).resolve()) for root in ('media/inbox','media/voice','media/sent','files/inbox'))
                 if not allowed: failed.append(rel); continue
                 try: self._unlink(file); removed.append(rel)
                 except OSError: failed.append(rel)
@@ -237,8 +238,12 @@ class StateController:
                 raise ValueError('目标类型或平台实例不一致')
             task=self.plugin.runtime.spawn(self.plugin._admin_send(scope,body.get('text','')),key=scope.key,feature='reply')
             if task is None: raise ValueError('instance unavailable')
-            await task
-            return {'ok':True,'target':scope.target.kind,'instance':scope.instance,'note':'已调用发送入口；不代表客户端已收到'}
+            result=await task
+            from qq_delivery import DeliveryResult, failure
+            if not isinstance(result,DeliveryResult): result=failure('unknown','message','missing_receipt')
+            return {'ok':result.status=='accepted','target':scope.target.kind,'instance':scope.instance,
+                    'delivery':result.public(),'note':'QQ 接口接受' if result.status=='accepted' else '发送'+result.status,
+                    'error':None if result.status=='accepted' else result.error or result.status}
         async with self.lock:
             return self._modify(operation,body)
 

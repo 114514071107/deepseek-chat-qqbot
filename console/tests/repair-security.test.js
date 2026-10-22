@@ -45,6 +45,34 @@ test('all pages, history, media and management require credentials', async t => 
   assert.equal((await request('/api/switch', {method:'POST',body:'{"key":"enabled","value":false}'})).status,401);
 });
 
+test('accepted snapshots remain authenticated and unknown formats download only inside sent media', async t => {
+  const {root,request,auth}=await fixture(t);
+  const sent=path.join(root,'dsh_data','media','sent','fixture-scope');fs.mkdirSync(sent,{recursive:true});
+  for(const name of ['image.png','attachment.md','audio.silk','unsafe.html'])fs.writeFileSync(path.join(sent,name),'snapshot');
+  fs.writeFileSync(path.join(root,'dsh_data','media','private.md'),'not a sent snapshot');
+  for(const name of ['image.png','attachment.md','audio.silk','unsafe.html']){
+    const url='/api/media?f='+encodeURIComponent('media/sent/fixture-scope/'+name);
+    assert.equal((await request(url)).status,401);
+    const result=await request(url,{headers:{authorization:auth}});
+    assert.equal(result.status,200,name);assert.equal(result.body,'snapshot');
+    if(name!=='image.png'){
+      assert.match(result.headers['content-disposition'],/^attachment;/);
+      assert.equal(result.headers['content-type'],'application/octet-stream');
+    }
+  }
+  assert.equal((await request('/api/media?f=media/private.md',{headers:{authorization:auth}})).status,403);
+});
+
+test('history renders accepted image, audio and attachment references as inspectable media',()=>{
+  const page=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
+  const renderer=page.slice(page.indexOf('const mediaUrl ='),page.indexOf('// 老记录'));
+  const ctx={esc:String,fmtT:()=>''};vm.runInNewContext(renderer+';globalThis.render=histEntryHtml',ctx);
+  const html=ctx.render({role:'assistant',text:'caption',images:['media/sent/scope/image.png'],voice:'media/sent/scope/audio.silk',files:['media/sent/scope/file.md']});
+  assert.match(html,/src="\/api\/media\?f=media%2Fsent%2Fscope%2Fimage.png"/);
+  assert.match(html,/href="\/api\/media\?f=media%2Fsent%2Fscope%2Faudio.silk"[^>]*download/);
+  assert.match(html,/href="\/api\/media\?f=media%2Fsent%2Fscope%2Ffile.md"[^>]*download/);
+});
+
 test('user-initiated cross-site entry navigation reaches login and the console page', async t => {
   const {request,auth} = await fixture(t);
   const navigation = {'sec-fetch-site':'cross-site','sec-fetch-mode':'navigate',

@@ -18,7 +18,10 @@ async def main():
                            names={},blocked=set(),sil={},h_path=str(root/'history_v2.json'),t_path=str(root/'thoughts_v2.json'),group_path=str(root/'groups_v2.json'))
     write_json(root/'scopes_v2.json',plugin.scopes);write_json(plugin.h_path,plugin.h)
     async def clear(key): pass
-    async def send(scope,text): write_json(root/'sent_fixture.json',{'kind':scope.target.kind,'instance':scope.instance,'address':scope.target.address})
+    async def send(scope,text):
+        from qq_delivery import DeliveryResult
+        write_json(root/'sent_fixture.json',{'kind':scope.target.kind,'instance':scope.instance,'address':scope.target.address})
+        return DeliveryResult('accepted',message_id='fixture')
     plugin._admin_send=send
     controller=StateController(plugin,root,clear_framework=clear)
     async def apply(operation,body):
