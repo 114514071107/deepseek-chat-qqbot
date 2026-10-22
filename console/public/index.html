@@ -112,7 +112,7 @@
 <main id="view"></main>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261022-state-2"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261023-entry-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });

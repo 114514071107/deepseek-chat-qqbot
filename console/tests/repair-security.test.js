@@ -45,6 +45,32 @@ test('all pages, history, media and management require credentials', async t => 
   assert.equal((await request('/api/switch', {method:'POST',body:'{"key":"enabled","value":false}'})).status,401);
 });
 
+test('user-initiated cross-site entry navigation reaches login and the console page', async t => {
+  const {request,auth} = await fixture(t);
+  const navigation = {'sec-fetch-site':'cross-site','sec-fetch-mode':'navigate',
+    'sec-fetch-dest':'document','sec-fetch-user':'?1'};
+  for (const url of ['/', '/index.html']) {
+    assert.equal((await request(url,{headers:navigation})).status,401,url);
+    const response = await request(url,{headers:{...navigation,authorization:auth}});
+    assert.equal(response.status,200,url);
+    assert.match(response.headers['content-type'],/text\/html/);
+  }
+});
+
+test('entry navigation exception never exposes APIs, media, frames or cross-site writes', async t => {
+  const {request,auth} = await fixture(t);
+  const navigation = {authorization:auth,'sec-fetch-site':'cross-site',
+    'sec-fetch-mode':'navigate','sec-fetch-dest':'document','sec-fetch-user':'?1'};
+  for (const url of ['/api/history','/api/media?f=media/test.png'])
+    assert.equal((await request(url,{headers:navigation})).status,403,url);
+  for (const bad of [{'sec-fetch-mode':'cors'},{'sec-fetch-dest':'iframe'},
+    {'sec-fetch-user':''},{origin:'https://foreign.invalid'},{origin:'null'}])
+    assert.equal((await request('/',{headers:{...navigation,...bad}})).status,403,JSON.stringify(bad));
+  assert.equal((await request('/api/switch',{method:'POST',headers:{...navigation,
+    'content-type':'application/json','x-dsh-request':'1'},
+    body:'{"key":"enabled","value":false}'})).status,403);
+});
+
 test('authenticated reads work; writes require same origin, JSON and custom header', async t => {
   const {request,auth,origin,root} = await fixture(t);
   assert.equal((await request('/api/history', {headers:{authorization:auth}})).status,200);

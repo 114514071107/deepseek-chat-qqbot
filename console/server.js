@@ -22,7 +22,7 @@ const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261022-state-2";
+const API_VER = "20261023-entry-1";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -58,8 +58,15 @@ function protect(req, res) {
   const hosts = ["127.0.0.1:" + port, "localhost:" + port];
   if (!hosts.includes(req.headers.host)) { send(res, 403, {error:"Host 被拒绝"}); return false; }
   const origin = "http://" + req.headers.host;
+  // Opening the login page from a link is a navigation, not cross-site API access.
+  // Keep this exception limited to user-initiated top-level entry pages and retain authentication.
+  const entryNavigation = req.method === "GET" && ["/", "/index.html"].includes(req.url) &&
+    req.headers.origin === undefined &&
+    req.headers["sec-fetch-mode"] === "navigate" && req.headers["sec-fetch-dest"] === "document" &&
+    req.headers["sec-fetch-user"] === "?1" &&
+    ["cross-site", "same-site"].includes(req.headers["sec-fetch-site"]);
   if ((req.headers.origin !== undefined && req.headers.origin !== origin) ||
-      (req.headers["sec-fetch-site"] && !["none", "same-origin"].includes(req.headers["sec-fetch-site"]))) {
+      (req.headers["sec-fetch-site"] && !["none", "same-origin"].includes(req.headers["sec-fetch-site"]) && !entryNavigation)) {
     send(res, 403, {error:"跨来源访问被拒绝"}); return false;
   }
   const match = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(req.headers.authorization || "");
