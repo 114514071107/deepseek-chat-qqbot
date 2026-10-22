@@ -4,20 +4,25 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { execFile, spawn } = require("child_process");
+const crypto = require("crypto");
+const {createStateBridge,readJson: readStateJson} = require("./state-bridge");
+
+function createConsoleServer(options = {}) {
 
 // ==================== 部署配置（使用前必改，共 2 处） ====================
 // ① AstrBot 安装根目录
-const DSH = "D:\\dsbot";
+const DSH = options.dsh || "D:\\dsbot";
 // ② 主人的 QQ openid（须与插件 main.py 里的 MASTER_OPENID 一致）
-const MASTER = "YOUR_MASTER_OPENID";
+const MASTER = options.master || "YOUR_MASTER_OPENID";
 // ============================================================
 const DATA = path.join(DSH, "dsh_data");
+const applyState = createStateBridge(DATA, options.bridgeTimeout ?? 5000);
 const RUN_LOG = path.join(DSH, "astrbot-run.log");
 const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20260902-3";
+const API_VER = "20261022-state-2";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -35,16 +40,62 @@ function argVal(name, dflt) {
   const i = process.argv.indexOf("--" + name);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : dflt;
 }
-const HOST = argVal("host", process.env.HOST || "127.0.0.1");
-const PORT = parseInt(argVal("port", process.env.PORT || "7850"), 10);
-
-function readJson(file, dflt) {
-  try { return JSON.parse(fs.readFileSync(file, "utf-8")); } catch (e) { return dflt; }
+const HOST = options.host || argVal("host", process.env.HOST || "127.0.0.1");
+const PORT = options.port ?? parseInt(argVal("port", process.env.PORT || "7850"), 10);
+if (HOST !== "127.0.0.1") throw new Error("控制台只允许监听 127.0.0.1");
+const TOKEN = options.token ?? process.env.DSH_CONSOLE_TOKEN;
+if (typeof TOKEN !== "string" || TOKEN.length < 32 || /[\s:]/.test(TOKEN)) {
+  throw new Error("请通过 DSH_CONSOLE_TOKEN 配置至少 32 字符的随机访问令牌（不得含空白或冒号）");
 }
-function writeJson(file, obj) {
-  const tmp = file + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 1));
-  fs.renameSync(tmp, file);
+const expectedAuth = crypto.createHash("sha256").update("dsh:" + TOKEN).digest();
+
+function protect(req, res) {
+  res.setHeader("cache-control", "no-store");
+  res.setHeader("referrer-policy", "no-referrer");
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("x-frame-options", "DENY");
+  const port = server.address().port;
+  const hosts = ["127.0.0.1:" + port, "localhost:" + port];
+  if (!hosts.includes(req.headers.host)) { send(res, 403, {error:"Host 被拒绝"}); return false; }
+  const origin = "http://" + req.headers.host;
+  if ((req.headers.origin !== undefined && req.headers.origin !== origin) ||
+      (req.headers["sec-fetch-site"] && !["none", "same-origin"].includes(req.headers["sec-fetch-site"]))) {
+    send(res, 403, {error:"跨来源访问被拒绝"}); return false;
+  }
+  const match = /^Basic ([A-Za-z0-9+/]+={0,2})$/.exec(req.headers.authorization || "");
+  const supplied = crypto.createHash("sha256").update(match ? Buffer.from(match[1], "base64") : Buffer.alloc(0)).digest();
+  if (!crypto.timingSafeEqual(expectedAuth, supplied)) {
+    res.setHeader("www-authenticate", 'Basic realm="DSH local console", charset="UTF-8"');
+    send(res, 401, {error:"需要控制台认证"}); return false;
+  }
+  if (!["GET", "HEAD"].includes(req.method) &&
+      (req.headers.origin !== origin || req.headers["x-dsh-request"] !== "1" ||
+       !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers["content-type"] || ""))) {
+    send(res, 403, {error:"写请求需要同源、JSON 和 X-DSH-Request: 1"}); return false;
+  }
+  return true;
+}
+
+function readJson(file, dflt) { return readStateJson(file, dflt); }
+function histories() { return {...readJson(path.join(DATA,"history_all.json"),{}),...readJson(path.join(DATA,"history_v2.json"),{})}; }
+function thoughts() { return {...readJson(path.join(DATA,"thoughts_all.json"),{}),...readJson(path.join(DATA,"thoughts_v2.json"),{})}; }
+function scopes() { return readJson(path.join(DATA,"scopes_v2.json"),{}); }
+function pointsView() {
+  const ledger=readJson(path.join(DATA,"points_all.json"),{}), view={...ledger};
+  for(const [key,source] of Object.entries(scopes())) {
+    const person="p2_"+crypto.createHash("sha256").update(JSON.stringify([source.platform,source.instance,source.bot,source.sender])).digest("hex");
+    if(ledger[person] || ledger[source.sender])view[key]=ledger[person] || ledger[source.sender];
+  }
+  return view;
+}
+function knownTargets() {
+  const targets=new Map();
+  for(const [key,s] of Object.entries(scopes())) {
+    const target={target_key:key,kind:s.private?"private":"group",instance:s.instance,platform:s.platform,address:s.private?s.sender:s.group};
+    const id=JSON.stringify([s.platform,s.instance,s.bot,target.kind,target.address]);
+    if(!targets.has(id))targets.set(id,target);
+  }
+  return [...targets.values()];
 }
 function jf(uid, name) {
   const safe = String(uid).replace(/[^A-Za-z0-9_-]/g, "_");
@@ -64,10 +115,17 @@ function send(res, code, obj) {
   res.end(body);
 }
 function readBody(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let b = "";
-    req.on("data", (c) => { b += c; if (b.length > 65536) req.destroy(); });
-    req.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch (e) { resolve({}); } });
+    let size = 0;
+    req.on("data", (c) => { size += c.length; if (size > 65536) { reject(new Error("请求体超过上限")); req.destroy(); } else b += c; });
+    req.on("error", reject);
+    req.on("aborted", () => reject(new Error("请求中断")));
+    req.on("end", () => { try {
+      const body = JSON.parse(b);
+      if (!body || Array.isArray(body) || typeof body !== "object") throw new Error("JSON 须为对象");
+      resolve(body);
+    } catch (e) { reject(new Error("JSON 请求体无效")); } });
   });
 }
 function execFileP(cmd, args, timeout) {
@@ -79,12 +137,18 @@ function execFileP(cmd, args, timeout) {
 }
 
 const api = {
+  "GET /api/admin/result": async q => {
+    const id=q.get("id") || "";
+    if (!/^[a-f0-9]{32}$/.test(id)) return {ok:false,error:"无效命令编号"};
+    return readJson(path.join(DATA,"admin_v2","responses",id+".json"),{ok:false,pending:true,id});
+  },
+  "GET /api/targets": async () => ({targets:knownTargets()}),
   // 状态总览：进程、文件新鲜度、各 uid 数据量、模型与开关摘要
   "GET /api/status": async () => {
     const proc = await execFileP("tasklist", ["/FI", "IMAGENAME eq astrbot.exe", "/FO", "CSV", "/NH"]);
     const running = proc.ok && proc.out.includes("astrbot.exe");
-    const hist = readJson(path.join(DATA, "history_all.json"), {});
-    const th = readJson(path.join(DATA, "thoughts_all.json"), {});
+    const hist = histories();
+    const th = thoughts();
     const users = Object.keys(hist).map((uid) => ({
       uid, master: uid === MASTER,
       history: (hist[uid] || []).length,
@@ -127,13 +191,13 @@ const api = {
   "GET /api/history": async (q) => {
     const uid = q.get("uid") || MASTER;
     const limit = Math.min(parseInt(q.get("limit") || "120", 10) || 120, 500);
-    const hist = readJson(path.join(DATA, "history_all.json"), {});
+    const hist = histories();
     const entries = (hist[uid] || []).slice(-limit).reverse();
     return { uid, master: uid === MASTER, count: (hist[uid] || []).length, entries };
   },
   "GET /api/thoughts": async (q) => {
     const uid = q.get("uid") || MASTER;
-    const th = readJson(path.join(DATA, "thoughts_all.json"), {});
+    const th = thoughts();
     return { uid, thoughts: (th[uid] || []).slice().reverse() };
   },
   "GET /api/notes": async (q) => {
@@ -143,9 +207,9 @@ const api = {
     try { text = fs.readFileSync(path.join(DATA, "memories", safe + ".md"), "utf-8"); } catch (e) { text = "（暂无长期记忆）"; }
     return { uid, text };
   },
-  "GET /api/memes": async () => {
+  "GET /api/memes": async (q) => {
     let text = "";
-    try { text = fs.readFileSync(path.join(DATA, "memes.md"), "utf-8"); } catch (e) { text = "（梗图鉴为空）"; }
+    try { text = fs.readFileSync(scopes()[q.get("uid")] ? path.join(DATA,"memes",String(q.get("uid"))+".md") : path.join(DATA,"memes.md"), "utf-8"); } catch (e) { text = "（梗图鉴为空）"; }
     return { text };
   },
   "GET /api/session": async (q) => {
@@ -155,12 +219,17 @@ const api = {
   // 开关面板数据（conf=全局开关，friends=按用户开关原始表，users=用户列表：主人排最前）
   "GET /api/switches": async () => {
     const friends = readJson(path.join(DATA, "friends_all.json"), {});
-    const hist = readJson(path.join(DATA, "history_all.json"), {});
+    for (const [key,source] of Object.entries(scopes())) {
+      const overrides=friends[key] || {}, legacy=friends[source.sender] || {};
+      friends[key]={...overrides};
+      for(const feature of USER_KEYS) friends[key][feature]=feature in overrides ? overrides[feature] : legacy[feature]===false ? false : !(source.private && feature==="proactive");
+    }
+    const hist = histories();
     const names = readJson(path.join(DATA, "names_all.json"), {});
     // 用户列表 = 聊天记录键 ∪ friends_all 键 ∪ {主人}，每项 {uid, name, master}，主人排最前
-    const uids = Array.from(new Set([MASTER].concat(Object.keys(hist), Object.keys(friends))));
+    const uids = Array.from(new Set([MASTER].concat(Object.keys(hist), Object.keys(friends), Object.keys(scopes()))));
     const users = uids
-      .map((uid) => ({ uid, name: names[uid] || "", master: uid === MASTER }))
+      .map((uid) => ({ uid, name: names[uid] || (scopes()[uid] ? ((scopes()[uid].private ? "私聊" : "群 "+scopes()[uid].group)+" · "+scopes()[uid].sender+" · "+scopes()[uid].instance) : "旧档（来源未定）"), master: uid === MASTER }))
       .sort((a, b) => (b.master ? 1 : 0) - (a.master ? 1 : 0));
     const conf2 = readJson(path.join(DATA, "dsh_soul_conf.json"), {});
     return {
@@ -170,11 +239,11 @@ const api = {
       user_keys: USER_KEYS,
       users,
       // 积分系统：points_all 全量 + 全局默认（points_daily 数值 / points_enabled 布尔，缺省 30/true）
-      points: readJson(path.join(DATA, "points_all.json"), {}),
+      points: pointsView(),
       points_daily: typeof conf2.points_daily === "number" ? conf2.points_daily : 30,
       points_enabled: conf2.points_enabled !== false,
       blocked: readJson(path.join(DATA, "blocked_all.json"), []),
-      silence: readJson(path.join(DATA, "silence_all.json"), {}),
+      silence: {...readJson(path.join(DATA,"silence_all.json"),{}),...readJson(path.join(DATA,"silence_v2.json"),{})},
       names,
       master: MASTER,
     };
@@ -268,179 +337,23 @@ const post = {
     return { ok: true, action: "restart", note: "控制台将在 1 秒内自重启" };
   },
 
-  // 功能开关（写 dsh_soul_conf.json，插件每轮热读）
-  "/api/switch": async (b) => {
-    if (!SWITCH_KEYS.includes(b.key)) return { ok: false, error: "未知开关" };
-    const file = path.join(DATA, "dsh_soul_conf.json");
-    const conf = readJson(file, {});
-    conf[b.key] = !!b.value;
-    writeJson(file, conf);
-    return { ok: true, conf };
+  "/api/delete/preview": async b => applyState("preview", b),
+  "/api/history/clear": async b => applyState("delete", b),
+  "/api/admin_send": async b => {
+    if (!b.target_key || !["group","private"].includes(b.kind) || !b.instance)
+      return {ok:false,applied:false,error:"必须明确选择目标类型与平台实例"};
+    return applyState("send", b);
   },
-  // 按用户功能开关（写 friends_all.json，十键，全用户含主人通用）
-  "/api/user": async (b) => {
-    if (!b.uid || !USER_KEYS.includes(b.key)) return { ok: false, error: "参数错误" };
-    const file = path.join(DATA, "friends_all.json");
-    const friends = readJson(file, {});
-    friends[b.uid] = friends[b.uid] || {};
-    friends[b.uid][b.key] = !!b.value;
-    writeJson(file, friends);
-    return { ok: true, friends };
-  },
-  // 用户备注名（写 names_all.json，键 uid → 字符串；QQ 官方 bot 拿不到昵称，备注名为主标识）
-  "/api/name": async (b) => {
-    const uid = String(b.uid || "").trim();
-    if (!uid) return { ok: false, error: "缺 uid" };
-    const file = path.join(DATA, "names_all.json");
-    const names = readJson(file, {});
-    const name = String(b.name == null ? "" : b.name).trim().slice(0, 30);
-    if (name) names[uid] = name; else delete names[uid]; // 空备注 = 删除备注
-    writeJson(file, names);
-    return { ok: true, names };
-  },
-  // 积分：改余额 {uid, mode:"add"|"set", value}
-  "/api/points": async (b) => {
-    const uid = String(b.uid || "").trim();
-    const val = parseInt(b.value, 10);
-    if (!uid || isNaN(val) || !["add", "set"].includes(b.mode)) return { ok: false, error: "参数错误" };
-    const file = path.join(DATA, "points_all.json");
-    const all = readJson(file, {});
-    const ent = all[uid] || { balance: 0, grant: null, last: "", spent: 0, notified: "" };
-    ent.balance = Math.max(0, b.mode === "add" ? (parseInt(ent.balance, 10) || 0) + val : val);
-    all[uid] = ent;
-    writeJson(file, all);
-    return { ok: true, entry: ent };
-  },
-  // 积分：每日赠送覆盖 {uid, value}（value=null 恢复跟随全局 points_daily）
-  "/api/points/grant": async (b) => {
-    const uid = String(b.uid || "").trim();
-    if (!uid) return { ok: false, error: "缺 uid" };
-    const file = path.join(DATA, "points_all.json");
-    const all = readJson(file, {});
-    const ent = all[uid] || { balance: 0, grant: null, last: "", spent: 0, notified: "" };
-    if (b.value === null || b.value === "" || b.value === undefined) ent.grant = null;
-    else {
-      const v = parseInt(b.value, 10);
-      if (isNaN(v) || v < 0) return { ok: false, error: "赠送值无效" };
-      ent.grant = v;
-    }
-    all[uid] = ent;
-    writeJson(file, all);
-    return { ok: true, entry: ent };
-  },
-  // 积分：全局配置 {daily, enabled}（写 dsh_soul_conf.json 的 points_daily / points_enabled）
-  "/api/points/conf": async (b) => {
-    const file = path.join(DATA, "dsh_soul_conf.json");
-    const conf = readJson(file, {});
-    if (b.daily !== undefined) {
-      const v = parseInt(b.daily, 10);
-      if (isNaN(v) || v < 0) return { ok: false, error: "每日赠送值无效" };
-      conf.points_daily = v;
-    }
-    if (b.enabled !== undefined) conf.points_enabled = !!b.enabled;
-    writeJson(file, conf);
-    return { ok: true, points_daily: conf.points_daily, points_enabled: conf.points_enabled !== false };
-  },
-  // 移出黑名单
-  "/api/unblock": async (b) => {
-    const file = path.join(DATA, "blocked_all.json");
-    let list = readJson(file, []);
-    const before = list.length;
-    list = list.filter((u) => u !== b.uid);
-    writeJson(file, list);
-    return { ok: true, removed: before - list.length, blocked: list };
-  },
-  // 解除休眠
-  "/api/unsilence": async (b) => {
-    const file = path.join(DATA, "silence_all.json");
-    const sil = readJson(file, {});
-    delete sil[b.uid];
-    writeJson(file, sil);
-    return { ok: true, silence: sil };
-  },
-  // 清空某 uid 聊天记录（先备份）
-  "/api/history/clear": async (b) => {
-    if (!b.uid) return { ok: false, error: "缺 uid" };
-    const file = path.join(DATA, "history_all.json");
-    const hist = readJson(file, {});
-    const n = (hist[b.uid] || []).length;
-    if (n === 0) return { ok: true, cleared: 0 };
-    fs.copyFileSync(file, file + ".bak-console-" + Date.now());
-    hist[b.uid] = [];
-    writeJson(file, hist);
-    return { ok: true, cleared: n };
-  },
-  // 删除某 uid 一个念头
-  "/api/thought/del": async (b) => {
-    const file = path.join(DATA, "thoughts_all.json");
-    const th = readJson(file, {});
-    const arr = th[b.uid] || [];
-    if (typeof b.index === "number" && arr[b.index]) {
-      arr.splice(b.index, 1);
-      th[b.uid] = arr;
-      writeJson(file, th);
-      return { ok: true, thoughts: arr };
-    }
-    return { ok: false, error: "下标无效" };
-  },
-  // 管理员直发指定用户（不写入记忆）
-  "/api/admin_send": async (b) => {
-    const uid = String(b.uid || "").trim();
-    const text = String(b.text || "").trim();
-    if (!uid || !text) return { ok: false, error: "缺 uid 或内容" };
-    const token = await qqToken();
-    const r = await qqC2C(token, uid, text.slice(0, 2000));
-    return { ok: r.status < 300, status: r.status, resp: r.body, sent_to: uid, note: "管理员直发，不写入记忆" };
-  },
-  // 管理员广播全部已知用户（主人 + umo_all 里有过来往的 uid）
-  "/api/admin_broadcast": async (b) => {
-    const text = String(b.text || "").trim();
-    if (!text) return { ok: false, error: "缺内容" };
-    const umo = readJson(path.join(DATA, "umo_all.json"), {});
-    const targets = Array.from(new Set([MASTER].concat(Object.keys(umo))));
-    const token = await qqToken();
-    const results = [];
-    for (const uid of targets) {
-      try {
-        const r = await qqC2C(token, uid, text.slice(0, 2000));
-        results.push({ uid, ok: r.status < 300, status: r.status, resp: r.status >= 300 ? r.body : "" });
-      } catch (e) {
-        results.push({ uid, ok: false, error: String(e && e.message || e) });
-      }
-      await new Promise((r2) => setTimeout(r2, 400));
-    }
-    return { ok: results.every((x) => x.ok), count: results.length, results, note: "管理员广播，不写入记忆" };
+  "/api/admin_broadcast": async b => {
+    if (!Array.isArray(b.targets) || !b.targets.length || b.targets.length>20 || b.targets.some(t=>!t.target_key||!t.kind||!t.instance))
+      return {ok:false,error:"必须明确选择目标列表（每次最多20个）"};
+    const results=[];
+    for (const target of b.targets) results.push(await applyState("send",{...target,text:b.text}));
+    return {ok:results.every(r=>r.ok),count:results.length,results};
   },
 };
-
-// ---- 管理员发信（直连 QQ 官方 API，绕过插件 → 不写入任何记忆/历史） ----
-let _tokenCache = { token: null, exp: 0 };
-function qqCreds() {
-  const cfg = readJson(CMD_CONFIG, {});
-  const plat = (cfg.platform || []).find((p) => p.type === "qq_official" || String(p.id || "").startsWith("qqbot-")) || {};
-  if (!plat.appid || !plat.secret) throw new Error("cmd_config.json 缺少 qq_official 平台凭据（appid/secret）");
-  return plat;
-}
-async function qqToken() {
-  if (_tokenCache.token && Date.now() < _tokenCache.exp) return _tokenCache.token;
-  const plat = qqCreds();
-  const r = await fetch("https://bots.qq.com/app/getAppAccessToken", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ appId: plat.appid, clientSecret: plat.secret }),
-  });
-  const j = await r.json();
-  if (!j.access_token) throw new Error("getAppAccessToken 失败：" + JSON.stringify(j).slice(0, 200));
-  _tokenCache = { token: j.access_token, exp: Date.now() + (parseInt(j.expires_in || "7000", 10) - 300) * 1000 };
-  return _tokenCache.token;
-}
-async function qqC2C(token, openid, text) {
-  const r = await fetch("https://api.sgroup.qq.com/v2/users/" + encodeURIComponent(openid) + "/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", Authorization: "QQBot " + token },
-    body: JSON.stringify({ content: text, msg_type: 0, msg_seq: Math.floor(Math.random() * 10000) + 1 }),
-  });
-  return { status: r.status, body: (await r.text()).slice(0, 300) };
-}
+for (const operation of ["switch","user","name","points","points/grant","points/conf","unblock","unsilence","thought/del"])
+  post["/api/"+operation] = async body => applyState(operation,body);
 
 // ---- 媒体文件直出（语音/图片）：白名单根目录 + 扩展名校验 + Range 支持（audio 拖动） ----
 function serveMedia(f, req, res) {
@@ -475,6 +388,8 @@ function serveMedia(f, req, res) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    if (!protect(req, res)) return;
+    if (!req.url.startsWith("/") || req.url.startsWith("//")) { send(res, 400, {error:"请求路径无效"}); return; }
     const u = new URL(req.url, "http://x");
     if (req.method === "GET" && u.pathname === "/api/media") {
       serveMedia(u.searchParams.get("f") || "", req, res);
@@ -495,10 +410,21 @@ const server = http.createServer(async (req, res) => {
     }
     send(res, 404, { error: "not found" });
   } catch (e) {
-    send(res, 500, { error: String(e && e.message || e) });
+    send(res, 500, { ok:false, error: String(e && e.message || e) });
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log("[dsh-console] listening on http://" + HOST + ":" + PORT);
-});
+server.requestTimeout = 15000;
+server.headersTimeout = 10000;
+return server;
+}
+
+module.exports = { createConsoleServer };
+if (require.main === module) {
+  const server = createConsoleServer();
+  const i = process.argv.indexOf("--port");
+  const port = parseInt((i >= 0 && process.argv[i + 1]) || process.env.PORT || "7850", 10);
+  server.listen(port, "127.0.0.1", () => {
+    console.log("[dsh-console] listening on http://127.0.0.1:" + server.address().port);
+  });
+}

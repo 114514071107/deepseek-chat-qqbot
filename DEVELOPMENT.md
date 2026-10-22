@@ -34,18 +34,40 @@ git log --oneline -5
 
 ## 检查
 
+2026-10-22 工作单 1 的访问认证、工具权限、离线验证及部署前配置说明见
+[工作单 1 交付](docs/reviews/2026-10-22-workorder-1.md)。控制台新版必须由启动环境提供
+`DSH_CONSOLE_TOKEN`，没有凭据会拒绝启动；主人特权须绑定 `DSH_OWNER_PLATFORM_ID`，
+文本助理另需独立的 `DSH_ASSISTANT_ROOT`。本单尚未部署，不能直接用源码模板覆盖运行参数。
+
+工作单 2（F01/F04/F05/F08）的作用域、固定目标、任务生命周期、运行态管理确认和六层删除见
+[工作单 2 交付](docs/reviews/2026-10-22-workorder-2.md)。新会话使用 v2 来源键，旧档保留；
+控制台写入需要新版插件在线确认，离线不会直接改文件。`admin_v2` 与插件、控制台应使用同一数据根，
+保护该目录的本机账号权限。部署需要整套辅助模块及前后端同版，不能只复制 main.py 或 server.js。
+第二单验收补修见 [P2 补修记录](docs/reviews/2026-10-22-workorder-2-p2.md)：框架配置档继续绑定原始会话或平台，
+`c2_…` / `p2_…` 内部键不支持独立绑定配置档；新内部会话的拒绝不会放宽原会话限制。
+[启动时机补修](docs/reviews/2026-10-22-workorder-2-startup.md) 将守卫安装提前到插件构造阶段，首条消息前即可保护配置入口；
+main.py 和 session_scope.py 必须配套更新。
+
 当前运行环境已安装所需 Python；源码工具检查不需要读取实际配置或 API Key：
 
 ```powershell
-D:\dsbot\venv\Scripts\python.exe -m unittest discover -s plugin\astrbot_plugin_ds_balance -p test_balance.py
-D:\dsbot\venv\Scripts\python.exe -m compileall -q plugin tts
+D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_repair_*.py'
+D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s plugin\astrbot_plugin_ds_balance -p test_balance.py
+node --test console/tests/repair-security.test.js console/tests/repair-state.test.js
 node --check console\server.js
+node --check console\state-bridge.js
 git diff --check
 ```
 
 已有余额插件测试只覆盖身份判断和金额文本显示；真实余额接口、QQ 指令路由和插件重载需在运行实例中另行验证。
+纯语法检查使用 `ast.parse`，不要为检查语法导入生产插件或初始化实际实例；框架导入的副作用在修复测试中由临时子进程隔离。
 
 ## venv 与部署
+
+2026-10-22 工作单 2 发布使用标签 `workorder-2-20261022` 固定对应源码；QQ 输入
+“帮助”“关于”“源码”或既有状态指令可获得免费源码入口。运行参数只保存在部署副本，
+`admin_v2` 文件管理通道须限制当前运行账号及 SYSTEM 访问。完整发布记录见
+[工作单 2 上线记录](docs/releases/2026-10-22-workorder-2.md)。
 
 从空目录安装时可使用：
 

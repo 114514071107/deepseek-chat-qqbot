@@ -112,9 +112,19 @@
 <main id="view"></main>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20260902-3"; // 与 server.js 的 API_VER 同步递增
-const api = async (p, opt) => (await fetch(p, opt)).json();
-const post = (p, body) => api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+const FE_VER = "20261022-state-2"; // 与 server.js 的 API_VER 同步递增
+const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
+const post = async (p, body) => {
+  const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+  if (result.applied==='unknown' && result.id) {
+    for (let attempt=0;attempt<20;attempt++) {
+      await new Promise(resolve=>setTimeout(resolve,500));
+      const confirmed=await api('/api/admin/result?id='+encodeURIComponent(result.id));
+      if (!confirmed.pending) return confirmed;
+    }
+  }
+  return result;
+};
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmtT = (ts) => { const d = new Date(ts > 1e12 ? ts : ts * 1000); const p = (n) => String(n).padStart(2, "0"); return (d.getMonth()+1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
 const ago = (ms) => { if (!ms) return "无"; const s = Math.max(0, (Date.now() - ms) / 1000 | 0); return s < 60 ? s + "秒前" : s < 3600 ? (s/60|0) + "分钟前" : (s/3600|0) + "小时前"; };
@@ -160,6 +170,7 @@ function refreshNow(manual) {
   const ae = document.activeElement;
   if (!manual && ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // 正在输入不打扰
   if (!manual && document.querySelector("audio") && Array.from(document.querySelectorAll("audio")).some((a) => !a.paused)) return; // 正在听语音
+  if (!manual && document.getElementById("delete-panel")) return; // 保留未提交的删除选择
   if (!manual && cur === "notify") return; // 通知页有草稿
   if (!manual && cur === "logs") return; // 日志页有自己的 5s 定时器
   VIEWS()[cur]();
@@ -425,7 +436,7 @@ async function renderUserDetail() {
         (r.user_keys || []).map((k) => tg(ent[k] !== false, 'data-scope="user" data-k="' + k + '" data-uid="' + esc(u.uid) + '"', false, esc(USER_KEY_CN[k] || k))).join("") +
       "</div></div>" +
       '<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">聊天记录 <span class="dim" id="h-info"></span></h3>' +
-      '<span><button class="act" id="h-load">刷新</button> <button class="act danger" id="h-clear">清空（先备份）</button></span></div>' +
+      '<span><button class="act" id="h-load">刷新</button> <button class="act danger" id="h-clear">选择删除范围</button></span></div>' +
       '<div id="h-list">加载中…</div></div>' +
     "</div>";
   // 备注名编辑：点击名字 → 输入框，Enter/失焦保存
@@ -481,10 +492,37 @@ async function renderUserDetail() {
   };
   $("#h-load").onclick = loadHist;
   $("#h-clear").onclick = async () => {
-    if (!confirm("确定清空该用户的全部聊天记录？（会自动备份 .bak 文件）")) return;
-    const rr = await post("/api/history/clear", { uid: curUid });
-    alert("已清空 " + rr.cleared + " 条");
-    loadHist();
+    const selectedUid = curUid;
+    const preview = await post("/api/delete/preview", {uid: selectedUid});
+    if (!preview.ok) return alert(preview.error || "运行态未确认，未打开删除操作");
+    let panel = $("#delete-panel");
+    if (panel) panel.remove();
+    panel = document.createElement("div"); panel.id = "delete-panel"; panel.className = "card";
+    panel.innerHTML = '<h3>删除所选来源的数据</h3><p class="dim">未选择的层会保留。删除不自动生成新备份。' +
+      (preview.legacy ? '此为来源未定旧档，框架旧历史无法准确定位，会保留并报告部分完成。' : '') + '</p>' +
+      Object.entries(preview.mapping).map(([key,desc]) => '<label style="display:block;margin:10px 0"><input type="checkbox" data-delete-layer="'+esc(key)+'"> '+esc(desc)+'</label>').join('') +
+      '<button class="act" id="delete-all">全选六层及所列备份</button><p>'+esc(preview.backup_impact)+'</p>' +
+      (preview.backups.length ? preview.backups.map(file=>'<label style="display:block"><input type="checkbox" data-delete-backup="'+esc(file)+'"> '+esc(file)+'</label>').join('') : '<p class="dim">声明范围内没有备份文件</p>') +
+      '<label style="display:block;margin:12px 0"><input type="checkbox" id="delete-backup-confirm"> 我确认：所选整份备份可能包含其他用户，删除会影响整份文件</label>' +
+      '<button class="act danger" id="delete-apply">删除所选层</button> <button class="act" id="delete-cancel">取消</button><pre id="delete-result" aria-live="polite"></pre>';
+    $("#h-clear").closest('.card').after(panel);
+    panel.querySelector('#delete-all').onclick=()=>panel.querySelectorAll('[data-delete-layer],[data-delete-backup]').forEach(c=>c.checked=true);
+    panel.querySelector('#delete-cancel').onclick=()=>panel.remove();
+    panel.querySelector('#delete-apply').onclick=async()=>{
+      const layers=Array.from(panel.querySelectorAll('[data-delete-layer]:checked')).map(c=>c.dataset.deleteLayer);
+      const backup_files=Array.from(panel.querySelectorAll('[data-delete-backup]:checked')).map(c=>c.dataset.deleteBackup);
+      const confirm_shared_backups=panel.querySelector('#delete-backup-confirm').checked;
+      if (!layers.length) return alert('请先选择至少一层');
+      if (layers.includes('backups') && !confirm_shared_backups) return alert('请选择备份文件，并确认整份备份的影响');
+      if (!confirm('确认删除所选来源的 '+layers.join('、')+'？未选择的层保留')) return;
+      const button=panel.querySelector('#delete-apply'); button.disabled=true;
+      try {
+        const result=await post('/api/history/clear',{uid:selectedUid,layers,backup_files,confirm_shared_backups});
+        panel.querySelector('#delete-result').textContent=(result.ok?'所选层处理完成':'未完全完成，请核对逐层结果')+'\n'+JSON.stringify(result,null,2);
+        await loadHist();
+      } catch(error) {panel.querySelector('#delete-result').textContent='未取得确认，请刷新核对：'+error.message;}
+      finally {button.disabled=false;}
+    };
   };
   await loadHist();
 }
@@ -525,20 +563,22 @@ async function vMemory() {
     '<div class="grid"><div class="card"><h3>念头（可删除）</h3><div id="m-th"></div></div>' +
     '<div class="card"><h3>长期记忆</h3><pre id="m-notes"></pre></div>' +
     '<div class="card"><h3>会话摘要</h3><pre id="m-sess"></pre></div>' +
-    '<div class="card"><h3>梗图鉴（全局共享）</h3><pre id="m-memes"></pre></div></div>';
+    '<div class="card"><h3>本来源学习资料（旧档图鉴保留）</h3><pre id="m-memes"></pre></div></div>';
   const load = async () => {
     curUid = $("#m-uid").value;
     const [th, notes, sess, memes] = await Promise.all([
       api("/api/thoughts?uid=" + encodeURIComponent(curUid)),
       api("/api/notes?uid=" + encodeURIComponent(curUid)),
       api("/api/session?uid=" + encodeURIComponent(curUid)),
-      api("/api/memes"),
+      api("/api/memes?uid="+encodeURIComponent(curUid)),
     ]);
     $("#m-th").innerHTML = th.thoughts.length ? th.thoughts.map((t, i) =>
       '<div class="kv"><span>' + esc(t.text) + ' <span class="dim">· ' + esc(t.src) + " · " + fmtT(t.t) + '</span></span>' +
       '<button class="act danger" data-thdel="' + (th.thoughts.length - 1 - i) + '">删</button></div>').join("") : '<div class="dim">无</div>';
     document.querySelectorAll("[data-thdel]").forEach((b) => (b.onclick = async () => {
-      await post("/api/thought/del", { uid: curUid, index: parseInt(b.dataset.thdel, 10) }); load();
+      const result=await post("/api/thought/del", { uid: curUid, index: parseInt(b.dataset.thdel, 10) });
+      if (!result.ok) alert(result.error || "运行态未确认删除");
+      await load();
     }));
     $("#m-notes").textContent = notes.text;
     $("#m-sess").textContent = JSON.stringify(sess.session, null, 2);
@@ -562,33 +602,34 @@ async function vStickers() {
 
 // ---------- 通知页 ----------
 async function vNotify() {
-  const users = await uidSelector();
+  const {targets=[]} = await api('/api/targets');
   $("#view").innerHTML =
-    '<div class="card"><h3>管理员发信（从机器人账号直接发出，<span class="pill">不写入她的记忆</span>——她不会知道自己发过这条，对方回复时她也对不上号）</h3>' +
-    '<div class="row"><select id="n-uid"><option value="">选择用户…</option>' +
-    users.map((u) => '<option value="' + u.uid + '">' + (u.master ? "👑 " : "👤 ") + esc(u.name || u.uid.slice(0, 16) + "…") + "</option>").join("") +
-    '</select><span class="dim">或输入 openid：</span><input id="n-uid2" style="width:300px" placeholder="完整 openid（优先于下拉）"></div>' +
+    '<div class="card"><h3>管理员发信</h3><p class="dim">只向已接收事件确认的目标发送，不写入对话记忆。旧 openid 不自动当作私聊地址；接口返回不代表客户端收到。</p>' +
+    '<div class="row"><label for="n-uid">发送目标</label><select id="n-uid" multiple size="6" style="max-width:100%">' +
+    targets.map((target,i) => '<option value="'+i+'">'+esc((target.kind==='group'?'群':'私聊')+' · '+target.address+' · '+target.instance)+'</option>').join('') + '</select></div>' +
     '<div class="row"><textarea id="n-text" style="width:100%;height:100px" placeholder="消息内容（最长 2000 字）"></textarea></div>' +
     '<div class="row"><button class="act" id="n-send">发送给此人</button>' +
-    '<button class="act danger" id="n-bcast">广播给全部用户</button>' +
+    '<button class="act danger" id="n-bcast">发送给所选目标</button>' +
     '<label class="tg"><input type="checkbox" id="n-prefix" checked><i></i><span>广播时加「【通知】」前缀</span></label></div>' +
     '<pre id="n-out" style="display:none"></pre></div>';
   const out = (obj) => { const el = $("#n-out"); el.style.display = "block"; el.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2); };
-  const target = () => ($("#n-uid2").value.trim() || $("#n-uid").value);
+  const selected = () => Array.from($("#n-uid").selectedOptions).map(option=>targets[Number(option.value)]);
   $("#n-send").onclick = async () => {
-    const uid = target(), text = $("#n-text").value.trim();
-    if (!uid || !text) return out("请选用户并填写内容");
+    const chosen = selected(), text = $("#n-text").value.trim();
+    if (chosen.length!==1 || !text) return out("请选择一个明确目标并填写内容");
     out("发送中…");
-    const r = await post("/api/admin_send", { uid, text });
-    out(r.ok ? "✓ 已发出（对方 QQ 已收到，记忆无留存）\n" + JSON.stringify(r, null, 2) : "✗ 发送失败\n" + JSON.stringify(r, null, 2));
+    const r = await post("/api/admin_send", { ...chosen[0], text });
+    out((r.ok ? "已完成发送入口调用，请另行核对实际接收\n" : "发送未成功或未确认\n") + JSON.stringify(r, null, 2));
   };
   $("#n-bcast").onclick = async () => {
     let text = $("#n-text").value.trim();
     if (!text) return out("请填写内容");
     if ($("#n-prefix").checked && !text.startsWith("【通知】")) text = "【通知】" + text;
-    if (!confirm("确定向全部已知用户广播？\n\n" + text)) return;
+    const chosen=selected();
+    if (!chosen.length) return out('请选择明确目标');
+    if (!confirm("确定向所选 "+chosen.length+" 个目标发送？\n\n" + text)) return;
     out("广播中…");
-    const r = await post("/api/admin_broadcast", { text });
+    const r = await post("/api/admin_broadcast", { text, targets:chosen });
     out((r.ok ? "✓ 广播完成 " : "✗ 部分失败 ") + "(" + (r.count || 0) + " 个目标）\n" + JSON.stringify(r.results, null, 2));
   };
 }

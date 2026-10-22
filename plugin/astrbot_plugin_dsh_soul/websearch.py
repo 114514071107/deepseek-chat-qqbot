@@ -6,6 +6,7 @@ import re
 import time
 
 import aiohttp
+from network_safety import fetch_public_bytes
 
 FREE_ENGINES = ["so360", "bing-cn", "sogou"]
 STALE_SITES_RE = re.compile(
@@ -29,11 +30,8 @@ async def fetch_text(session, url, timeout_ms, headers=None):
             "Cache-Control": "no-cache"}
     if headers:
         hdrs.update(headers)
-    timeout = aiohttp.ClientTimeout(total=timeout_ms / 1000)
-    async with session.get(url, headers=hdrs, timeout=timeout, ssl=False) as res:
-        if res.status != 200:
-            raise RuntimeError("status " + str(res.status))
-        return await res.text()
+    raw = await asyncio.to_thread(fetch_public_bytes, url, timeout=timeout_ms / 1000, headers=hdrs)
+    return raw.decode('utf-8', errors='replace')
 
 
 def parse_bing_cn(html, top_n):

@@ -26,7 +26,7 @@ class DSBalance(Star):
     async def balance(self, event: AstrMessageEvent):
         event.stop_event()
         if not allowed(event.get_sender_id(), owner_id(), event.is_private_chat()):
-            yield event.plain_result('请主人在私聊中使用 /ds余额。')
+            yield event.plain_result('请主人在私聊中使用 /ds余额')
             return
         try:
             config = json.loads((ROOT / 'data/cmd_config.json').read_text(encoding='utf-8-sig'))
