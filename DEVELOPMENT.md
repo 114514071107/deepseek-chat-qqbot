@@ -18,17 +18,29 @@
 ```powershell
 Set-Location 'D:\DSH Workspace\deepseek-chat-qqbot'
 git status
-git switch -c feature/你的功能名
+git switch dev
+git pull --ff-only origin dev
 
 # 修改后先看差异，运行与改动相关的检查。
 git diff
 git add -- 具体文件路径
 git diff --cached
 git commit -m 'feat: 描述本次功能'
+git push origin dev
 git log --oneline -5
 ```
 
-初始 `main` 是源码导入基线；`work/local-development` 记录本地新增插件、启动脚本和发布准备。新功能可从当前开发分支另建分支。每个可验证的改动单独提交。
+自 2026-10-23 起，本地及远端仅保留两个长期分支：
+
+- `dev`：日常开发及最新功能试用版本，后续开发默认在此进行；完成相应离线检查后，可按用户授权部署验证。
+- `main`：实测稳定的发布版本，保持 GitHub 默认分支。只有在实际运行场景验证并经用户确认稳定后，才将对应改动从 `dev` 合入；离线测试通过不能代替实测。
+
+本次按用户指令将截至 `0b7451a` 的最新版本合入 `main`，再从相同基线创建 `dev`，
+清理已合并的旧分支。两分支初始化时内容相同；本次整理不新增真实 QQ、热重载或数据迁移验收证据，
+已有验证缺口仍按各交付记录保留。历史版本标签保留，不因整理分支而移动。
+
+稳定版本晋级时，先确认 `dev` 中待合入内容均已实测，再切到 `main` 合并并验证、推送。
+若 `dev` 混有尚未稳定的功能，先整理待发布范围，不能把整个分支当成已验收。推送分支本身不代表已经部署。
 
 `upstream` 指向原作者仓库，用来查看和比较上游变化。本仓库采用注明来源的独立源码快照，没有继承上游 Git 历史，以免把图库带入发布历史；不要直接执行 `git pull upstream main`。如需同步上游，先取回变更，在新分支审阅并迁移相关源码，同时更新来源与修改说明。
 
@@ -101,7 +113,7 @@ Set-Location D:\dsbot
 
 ```powershell
 git push origin main
-git push -u origin work/local-development
+git push origin dev
 ```
 
 如果凭据误入任何提交，仅删除当前文件不能清除历史；应先撤销或轮换该凭据，再清理对应历史。
