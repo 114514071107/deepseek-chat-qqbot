@@ -21,7 +21,7 @@ import websearch
 from network_safety import fetch_public_bytes
 from tool_permissions import authorize, tool_guard, install_executor_guard, trusted_plugin_tool
 from file_safety import safe_assistant_path
-from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions
+from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal
 from session_scope import Scope, Target, bind_scope, install_policy_adapters
 from task_runtime import Runtime, managed, check_current, work_context, current_token, background_work, current_budget_job
 from state_store import read_json, read_text, write_json, write_text, StateController, StateError, person_ledger_key
@@ -1170,7 +1170,7 @@ class DshSoul(Star):
     def _set_reply_plan(self, event, plan):
         # Intent comes from the explicit tool/protocol field, never a keyword
         # search through user chat, quotes or code.
-        if event.get_extra("_dsh_sticker_only") and not preserve_literal_message(plan.text):
+        if event.get_extra("_dsh_sticker_only") and not preserve_sticker_literal(plan.text):
             plan.sticker_only = True
             plan.voice = False
             plan.others = []

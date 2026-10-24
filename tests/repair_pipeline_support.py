@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 PLUGIN=Path(__file__).resolve().parents[1]/'plugin/astrbot_plugin_dsh_soul'
 sys.path.insert(0,str(PLUGIN))
-from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions
+from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal
 from tool_permissions import trusted_plugin_tool
 from session_scope import Scope, Target, bind_scope
 from qq_delivery import QQDelivery, DeliveryResult, failure
@@ -56,7 +56,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
         Resources=Resources,BudgetProvider=BudgetProvider,BudgetExceeded=BudgetExceeded,payload_size=payload_size,build_window=build_window,fingerprint=fingerprint,evidence_rows=evidence_rows,
         MessageChain=lambda **kw:SimpleNamespace(**kw),Record=lambda **kw:SimpleNamespace(type='Record',**kw),
         BUBBLE_CAP=2,BATCH_WAIT=0,MASTER_OPENID='owner',DATA=str(root),
-        CHAT_STYLE=CHAT_STYLE,format_qq_text=format_qq_text,preserve_literal_message=preserve_literal_message,split_chat_actions=split_chat_actions,
+        CHAT_STYLE=CHAT_STYLE,format_qq_text=format_qq_text,preserve_literal_message=preserve_literal_message,split_chat_actions=split_chat_actions,preserve_sticker_literal=preserve_sticker_literal,
         Scope=Scope,Target=Target,bind_scope=bind_scope,current_token=__import__('task_runtime').current_token,work_context=__import__('task_runtime').work_context,managed=__import__('task_runtime').managed,check_current=__import__('task_runtime').check_current,
         background_work=__import__('task_runtime').background_work,
         current_budget_job=__import__('task_runtime').current_budget_job,

@@ -15,6 +15,13 @@ def preserve_literal_message(text):
                 any(c in text for c in (*_QUOTES, *_QUOTES.values(), '"')))
 
 
+def preserve_sticker_literal(text):
+    """Protect code/quote blocks and quoted action examples, not quoted words."""
+    text = str(text or '')
+    return bool(re.search(r'(?m)^(?: {0,3}(?:`{3,}|~{3,}|>)| {4}|\t)', text) or
+                any(protected and re.search(r'动作[:：]', line) for line, protected in _literal_lines(text)))
+
+
 def _literal_lines(text):
     """Share original-text boundaries across action parsing and punctuation."""
     fence=None
