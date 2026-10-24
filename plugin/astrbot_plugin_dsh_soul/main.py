@@ -21,7 +21,7 @@ import websearch
 from network_safety import fetch_public_bytes
 from tool_permissions import authorize, tool_guard, install_executor_guard, trusted_plugin_tool
 from file_safety import safe_assistant_path
-from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal, sticker_only_request
+from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal, sticker_only_request, sticker_count_request
 from session_scope import Scope, Target, bind_scope, install_policy_adapters
 from task_runtime import Runtime, managed, check_current, work_context, current_token, background_work, current_budget_job
 from state_store import read_json, read_text, write_json, write_text, StateController, StateError, person_ledger_key
@@ -1179,19 +1179,62 @@ class DshSoul(Star):
             await asyncio.gather(*tasks, return_exceptions=True)
 
     def _set_reply_plan(self, event, plan):
+        budget = self._sticker_budget(event)
+        previous = event.get_extra("_dsh_reply_plan")
+        # Intermediate LLM captures can replace an unstarted plan. Selected
+        # images still belong to this request; popping pending is not delivery.
+        if (previous is not None and previous is not plan and previous.token == plan.token
+                and not previous.started and not previous.finished and not plan.voice and not budget["closed"]):
+            plan.stickers = previous.stickers + plan.stickers
+        plan.sticker_limit = budget["limit"]
+        if plan.sticker_limit is not None:
+            plan.stickers = plan.stickers[:max(0, plan.sticker_limit-budget["attempted"])]
         # Intent comes from the explicit tool/protocol field, never a keyword
         # search through user chat, quotes or code.
         if event.get_extra("_dsh_sticker_only") and not preserve_sticker_literal(plan.text):
             plan.sticker_only = True
             plan.voice = False
             plan.others = []
-            plan.bubbles = [] if plan.stickers else ["暂时没有可用的表情"]
+            plan.bubbles = [] if plan.stickers or plan.sticker_limit == 0 else ["暂时没有可用的表情"]
         event.set_extra("_dsh_reply_plan", plan)
+
+    def _sticker_budget(self, event):
+        scope = event.get_extra("_dsh_scope") or self._scope(event)
+        token = event.get_extra("_dsh_work")
+        identity = (scope.key, getattr(token, "request", None))
+        state = event.get_extra("_dsh_sticker_budget")
+        if state is None or state["identity"] != identity:
+            if not hasattr(self, "sticker_owners"):
+                self.sticker_owners = {}
+            if self.sticker_owners.get(scope.key) not in (None, identity[1]):
+                self.pending_sticker.pop(scope.key, None)
+            self.sticker_owners[scope.key] = identity[1]
+            texts = [getattr(event, "message_str", "")] + (event.get_extra("_dsh_request_texts") or [])
+            state = dict(identity=identity, limit=sticker_count_request(NL.join(texts)), selected=0, attempted=0, closed=False)
+            event.set_extra("_dsh_sticker_budget", state)
+        return state
+
+    def _queue_sticker(self, event, query):
+        # No await between quota check, selection and reservation: concurrent
+        # tool coroutines cannot independently consume the same slot.
+        state = self._sticker_budget(event)
+        if state["closed"]:
+            return "（本请求已结束，未继续选图或发送）"
+        if state["limit"] is not None and state["selected"] >= state["limit"]:
+            return "（本请求已达到明确表情张数，未额外选图或发送）"
+        row = _pick_sticker(query)
+        if not row:
+            return "（图库里没找到匹配的表情包）"
+        self.pending_sticker.setdefault(state["identity"][0], []).append(row)
+        state["selected"] += 1
+        return "（已选好表情包，会跟在回复后面发出）"
 
     def _reset_request(self, key, deleted_layers=()):
         event = getattr(self, "request_events", {}).get(key)
         if event is not None:
             self._close_feedback(event)
+            self._sticker_budget(event)["closed"] = True
+        getattr(self, "sticker_owners", {}).pop(key, None)
         self._close_request(key, getattr(self, "request_owners", {}).get(key), "stopped")
         for name in ("pending_reply", "pending_sticker", "pending_drip", "run_active", "drip_active", "request_owners", "request_events",
                      "interrupt", "batch_wait", "batch_buf", "batch_skipwait", "_last_inbox_files"):
@@ -1554,6 +1597,8 @@ class DshSoul(Star):
             item = event.get_extra("_dsh_input")
             if item is not None:
                 items = [item] + self.batch_buf.pop(uid, [])
+                if event.get_extra("_dsh_request_texts") is None:
+                    event.set_extra("_dsh_request_texts", [entry.get("text", "") for entry in items])
                 if any(sticker_only_request(entry.get("text", "")) for entry in items):
                     event.set_extra("_dsh_silent_feedback", True)
                 for pending in items:
@@ -1713,10 +1758,9 @@ class DshSoul(Star):
             text = clean if preserve_literal_message(clean) else NL.join(l for l in (s.strip() for s in clean.split(NL)) if l).strip()
             # Tool choices are authoritative for this reply (including multiple
             # explicit choices). The protocol is a fallback, not another image.
-            if sticker_q and not voice and not self.pending_sticker.get(uid):
-                srow = _pick_sticker(sticker_q)
-                if srow:
-                    self.pending_sticker.setdefault(uid, []).append(srow)
+            if (sticker_q and not voice and not self.pending_sticker.get(uid)
+                    and not self._sticker_budget(event)["selected"]):
+                self._queue_sticker(event, sticker_q)
             if not text:
                 # 模型只输出了动作行（或空文本）：先剥离动作协议原文改写 resp，避免原文外泄；
                 # 语音模式不发表情包（对齐原版跳过），并清掉工具已选的 pending_sticker 防残留
@@ -1749,6 +1793,7 @@ class DshSoul(Star):
 
     def _finish_reply(self, event):
         self._close_feedback(event)
+        self._sticker_budget(event)["closed"] = True
         plan = event.get_extra("_dsh_reply_plan")
         if plan:
             plan.finished = True
@@ -1780,6 +1825,9 @@ class DshSoul(Star):
         plan.started = True
         uid = plan.key
         try:
+            budget = self._sticker_budget(event)
+            if budget["limit"] is not None:
+                plan.stickers = plan.stickers[:max(0, budget["limit"]-budget["attempted"])]
             await self._settle_feedback(event)
             accepted_feedback = self._feedback(event)["accepted"]
             plan.bubbles = [text for text in plan.bubbles if format_qq_text(text) not in accepted_feedback]
@@ -1808,6 +1856,10 @@ class DshSoul(Star):
                         return
                     self._record_assistant_turn(uid, text, result, plan_id=plan.id)
                 for row in plan.stickers:
+                    budget = self._sticker_budget(event)
+                    if budget["limit"] is not None and budget["attempted"] >= budget["limit"]:
+                        break
+                    budget["attempted"] += 1  # unknown/failed attempts never free slots
                     result = await self._send_sticker_row(plan.target, row)
                     plan.results.append(result)
                     if not result:
@@ -2918,12 +2970,7 @@ class DshSoul(Star):
         if only_sticker is True:
             event.set_extra("_dsh_sticker_only", True)
             self._close_feedback(event)
-        umo = scope.target
-        row = _pick_sticker(query)
-        if not row:
-            return "（图库里没找到匹配的表情包）"
-        self.pending_sticker.setdefault(uid, []).append(row)
-        return "（已选好表情包，会跟在回复后面发出）"
+        return self._queue_sticker(event, query)
 
     # ---------- 共享图库：全用户检索，主人私聊维护 ----------
     @filter.llm_tool(name="list_stickers")

@@ -46,6 +46,12 @@ git log --oneline -5
 
 ## 检查
 
+2026-10-25 请求内表情数量及管理工作台聚合见
+[实施、身份关联规则、后台使用与测试](docs/reviews/2026-10-25-sticker-count-users-workbench.md)。
+用户页人工关联只影响管理展示，原 scope、身份/权限、积分账本和发送目标继续独立；旧档不猜测合并。
+Console 新增 `user-workbench.js` 与 `public/user-workbench.js`，须与 server.js、index.html 同版发布（`20261025-users-1`）；开发交付本身不授权部署。
+除下列旧集合，运行 `node --test console/tests/repair-workbench.test.js`；浏览器脚本为 `tests/workbench_browser.cjs`，使用已有 Node Playwright 和已安装 Edge，详见记录，不自动安装依赖。
+
 2026-10-24 真实 QQ 验收补修及双解释器启动器见
 [本轮补修记录](docs/reviews/2026-10-24-real-qq-repair.md)和[一键启动说明](docs/tooling/one-click-bot-startup.md)。
 开发入口为 `scripts/start-bot.cmd`，默认只启动 Bot，管理控制台需 `-WithConsole`。

@@ -61,14 +61,41 @@ def _literal_lines(text, mask_quotes=False):
         yield (''.join(visible), indented) if mask_quotes else (line, quoted or indented)
 
 
+def request_prose(text):
+    prose = '\n'.join(line for line, protected in _literal_lines(str(text or ''), mask_quotes=True) if not protected)
+    return re.sub(r'(`+).*?\1', ' ', prose, flags=re.S)
+
+
+def sticker_count_request(text):
+    """Explicit 0..99 totals in current prose; ambiguous choices have no cap."""
+    prose = request_prose(text)
+    number = r'[0-9零一二两三四五六七八九十]{1,3}'
+    if re.search(number+r'张?\s*(?:或|或者|到|至|[-~～—–])\s*'+number, prose): return None
+    if not re.search(r'表情|贴图|图片', prose): return None
+    totals = re.findall(r'(?:总共|一共|总计|合计|共)\s*('+number+r')\s*张', prose)
+    requests = re.findall(r'(?:发|给|来|要)\s*('+number+r')\s*张[^。！？；\n]{0,16}?(?:表情包?|贴图|图片)', prose)
+    choices = totals[-1:] or requests or re.findall(r'('+number+r')\s*张[^。！？；\n]{0,16}?(?:表情包?|贴图|图片)', prose)
+    choices = choices or re.findall(r'(?:表情包?|贴图|图片)[^。！？；\n]{0,12}?('+number+r')\s*张', prose)
+    if not choices: return None
+    def value(raw):
+        if raw.isascii() and raw.isdigit(): return int(raw)
+        digits={c:n for n,c in enumerate('零一二三四五六七八九')};digits['两']=2
+        if raw=='十': return 10
+        if '十' in raw:
+            left,right=raw.split('十',1)
+            return digits.get(left,1)*10+digits.get(right,0) if len(left)<=1 and len(right)<=1 else 100
+        return digits.get(raw,100)
+    values=[value(raw) for raw in choices]
+    return values[0] if len(set(values))==1 and 0<=values[0]<=99 else None
+
+
 def sticker_only_request(text):
     """Recognize explicit request prose only, never quoted/code examples.
 
     This suppresses optional progress text; it does not execute an action or
     infer how many stickers a model/tool should select.
     """
-    prose = '\n'.join(line for line, protected in _literal_lines(str(text or ''), mask_quotes=True) if not protected)
-    prose = re.sub(r'(`+).*?\1', ' ', prose, flags=re.S)
+    prose = request_prose(text)
     sticker = r'(?:表情包?|贴图)'
     negated = r'(?:不要|别|不用|不需要|不能|不想)\s*$'
     pure = r'(?:只(?:要|发|用|给|回(?:复)?)|仅(?:要|发|用|给|回(?:复)?)?|纯)[^。！？；\n]{0,32}?' + sticker

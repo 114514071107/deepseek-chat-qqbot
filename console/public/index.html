@@ -85,6 +85,14 @@
   .uchip { background:var(--panel); border:2px solid var(--line); border-radius:12px; padding:9px 14px; cursor:pointer; min-width:150px; box-shadow:var(--shadow); transition:border-color .15s; }
   .uchip:hover { border-color:#b9cdf5; }
   .uchip.on { border-color:var(--acc); background:#f4f8ff; }
+  button.uchip { color:var(--fg); font:inherit; text-align:left; max-width:100%; }
+  button:focus-visible,summary:focus-visible { outline:2px solid var(--acc); outline-offset:3px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .scene-button[aria-pressed="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
+  .source-list { padding-left:20px; overflow-wrap:anywhere; }
+  #people-detail select { max-width:100%; }
+  details > summary { cursor:pointer; font-weight:600; }
+  @media (max-width:600px) { header { flex-wrap:wrap; padding:12px; } main,nav { padding:12px; } .uchips { gap:8px; } .uchip { min-width:130px; flex:1; } .card { padding:12px; } }
   .uchip .un { font-weight:700; font-size:14px; }
   .uchip .uu { color:var(--dim); font-size:11px; font-family:Consolas,monospace; }
   .badge { background:linear-gradient(135deg,#ffd76e,#f5b73d); color:#6b4a00; font-size:11px; font-weight:700; padding:1px 9px; border-radius:999px; }
@@ -110,9 +118,10 @@
 </header>
 <nav id="tabs"></nav>
 <main id="view"></main>
+<script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261023-delivery-3"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261025-users-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -132,8 +141,10 @@ const ago = (ms) => { if (!ms) return "无"; const s = Math.max(0, (Date.now() -
 const TABS = [ ["status","状态"], ["users","用户"], ["logs","日志"], ["memory","记忆"], ["stickers","图库"], ["notify","通知"] ];
 let cur = "status", timer = null, curUid = null, logFilter = { file: "dsh", q: "", lines: 300 };
 let swCache = null; // /api/switches 缓存（用户页用）
+let scopeDetailVersion = 0;
 
 function tab(name) {
+  if(window.UserWorkbench)window.UserWorkbench.leave();
   cur = name;
   if (timer) { clearInterval(timer); timer = null; }
   _lastHtml = ""; // 切页签强制重绘
@@ -256,11 +267,13 @@ async function vStatus() {
   try {
     [s, r] = await Promise.all([api("/api/status"), api("/api/switches")]);
   } catch (e) {
+    if(cur!=="status")return;
     $("#hdr-status").innerHTML = '<span class="tag bad">服务未连接</span>';
     $("#view").innerHTML = '<div class="card"><h3>连不上控制台服务</h3>' +
       '<p class="dim">请确认已双击 start-dsh-console.vbs 启动控制台（127.0.0.1:7850）。页面每 5 秒会自动重试，服务恢复后自动显示。</p></div>';
     return;
   }
+  if(cur!=="status")return;
   // 前后端版本不一致 = 旧进程在跑老代码，提示重开控制台
   if (s.api_ver && s.api_ver !== FE_VER) {
     $("#view").innerHTML = '<div class="card" style="border:2px solid #e74c3c"><h3 style="color:#e74c3c">控制台后端已过期</h3>' +
@@ -283,7 +296,7 @@ async function vStatus() {
         ' <span class="saved" id="bot-saved">✓ 已执行</span></div></div>' +
       masterStatHtml(enabled) +
       '<div class="stat"><div class="lb">当前模型</div><div class="vl" style="font-size:17px">' + esc(s.model || "未知") + '</div><div class="sb mono">' + esc((s.modalities || []).join(",")) + "</div></div>" +
-      '<div class="stat"><div class="lb">用户数</div><div class="vl">' + (s.users || []).length + '</div><div class="sb">黑名单 ' + (s.blocked || []).length + " 人</div></div>" +
+      '<div class="stat"><div class="lb">来源会话数</div><div class="vl">' + (s.users || []).length + '</div><div class="sb">黑名单 ' + (s.blocked || []).length + " 人</div></div>" +
       '<div class="stat"><div class="lb">错误日志</div><div class="vl" style="font-size:17px">' + ago(s.err_log_mtime) + '</div><div class="sb">框架日志 ' + ago(s.run_log_mtime) + "</div></div>" +
     "</div>" +
     '<div class="card"><h3>全局功能开关（热生效）</h3>' + featGridHtml(r.conf, r.conf_keys) + "</div>" +
@@ -392,24 +405,16 @@ async function hydrateStickerSamples(root) {
 }
 
 async function vUsers() {
-  const r = await api("/api/switches");
-  swCache = r;
-  const users = r.users || [];
-  if (!curUid || !users.some((u) => u.uid === curUid)) curUid = users.length ? users[0].uid : null;
-  $("#view").innerHTML =
-    '<div class="uchips">' + users.map((u) => {
-      const pt = (r.points || {})[u.uid] || {};
-      return '<div class="uchip' + (u.uid === curUid ? " on" : "") + '" data-uid="' + esc(u.uid) + '">' +
-      '<div class="un">' + (u.master ? "👑 " : "") + esc(u.name || "未备注") + '</div>' +
-      '<div class="uu">' + esc(u.uid.slice(0, 12)) + "…</div>" +
-      '<div class="uu">积分 ' + (pt.balance == null ? 0 : pt.balance) + (u.master ? "（主人豁免）" : "") + "</div></div>";
-    }).join("") + "</div>" +
-    '<div id="u-detail"></div>';
-  document.querySelectorAll(".uchip").forEach((c) => (c.onclick = () => { curUid = c.dataset.uid; vUsers(); }));
-  if (curUid) renderUserDetail();
+  if(!window.UserWorkbench||window.UserWorkbench.version!==FE_VER){
+    $("#view").innerHTML='<div class="card" role="alert">用户工作台模块未加载或版本不匹配，请刷新并核对控制台文件同版。</div>';
+    return;
+  }
+  return window.UserWorkbench.render();
 }
 
 async function renderUserDetail() {
+  const chosenVersion=++scopeDetailVersion;
+  const chosenUid=curUid;
   const r = swCache;
   const users = r.users || [];
   const u = users.find((x) => x.uid === curUid);
@@ -488,15 +493,23 @@ async function renderUserDetail() {
   };
   // 聊天记录
   const loadHist = async () => {
-    const h = await api("/api/history?uid=" + encodeURIComponent(curUid) + "&limit=150");
+    try {
+    const h = await api("/api/history?uid=" + encodeURIComponent(chosenUid) + "&limit=150");
+    if(cur!=='users'||curUid!==chosenUid||chosenVersion!==scopeDetailVersion||!$("#h-list"))return;
+    if(!Array.isArray(h.entries))throw Error(h.error||'未取得有效来源历史');
     $("#h-info").textContent = "共 " + h.count + " 条，新→旧";
     $("#h-list").innerHTML = h.entries.length ? h.entries.map(histEntryHtml).join("") : '<div class="dim">暂无记录</div>';
     hydrateStickerSamples($("#h-list"));
+    } catch(error) {
+      if(cur==='users'&&curUid===chosenUid&&chosenVersion===scopeDetailVersion&&$("#h-list"))
+        $("#h-list").innerHTML='<p role="alert">所选来源记录加载失败：'+esc(error.message)+'。可点刷新重试。</p>';
+    }
   };
   $("#h-load").onclick = loadHist;
   $("#h-clear").onclick = async () => {
     const selectedUid = curUid;
     const preview = await post("/api/delete/preview", {uid: selectedUid});
+    if(cur!=='users'||curUid!==selectedUid||chosenVersion!==scopeDetailVersion||!$("#h-clear"))return;
     if (!preview.ok) return alert(preview.error || "运行态未确认，未打开删除操作");
     let panel = $("#delete-panel");
     if (panel) panel.remove();

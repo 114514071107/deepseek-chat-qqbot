@@ -6,6 +6,7 @@ const path = require("path");
 const { execFile, spawn } = require("child_process");
 const crypto = require("crypto");
 const {createStateBridge,readJson: readStateJson} = require("./state-bridge");
+const {createUserWorkbench} = require("./user-workbench");
 
 function createConsoleServer(options = {}) {
 
@@ -16,13 +17,14 @@ const DSH = options.dsh || process.env.DSH_RUNTIME_ROOT || "D:\\dsbot";
 const MASTER = options.master || "YOUR_MASTER_OPENID";
 // ============================================================
 const DATA = path.join(DSH, "dsh_data");
+const workbench = createUserWorkbench(DATA);
 const applyState = createStateBridge(DATA, options.bridgeTimeout ?? 5000);
 const RUN_LOG = path.join(DSH, "astrbot-run.log");
 const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261023-delivery-3";
+const API_VER = "20261025-users-1";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -144,6 +146,8 @@ function execFileP(cmd, args, timeout) {
 }
 
 const api = {
+  "GET /api/people": async q => workbench.list(q),
+  "GET /api/people/history": async q => workbench.history(q),
   "GET /api/admin/result": async q => {
     const id=q.get("id") || "";
     if (!/^[a-f0-9]{32}$/.test(id)) return {ok:false,error:"无效命令编号"};
@@ -310,6 +314,8 @@ function botStart() {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 const post = {
+  "/api/people/link": async body => workbench.link(body),
+  "/api/people/unlink": async body => workbench.unlink(body),
   // 机器人进程开关：start / stop / restart
   "/api/bot": async (b) => {
     const action = String(b.action || "");
@@ -410,17 +416,28 @@ const server = http.createServer(async (req, res) => {
       res.end(fs.readFileSync(path.join(__dirname, "public", "index.html")));
       return;
     }
+    if (req.method === "GET" && u.pathname === "/assets/user-workbench.js") {
+      res.writeHead(200, {"content-type":"application/javascript; charset=utf-8", "cache-control":"no-store"});
+      res.end(fs.readFileSync(path.join(__dirname,"public","user-workbench.js")));
+      return;
+    }
     if (req.method === "GET" && api["GET " + u.pathname]) {
       send(res, 200, await api["GET " + u.pathname](u.searchParams));
       return;
     }
     if (req.method === "POST" && post[u.pathname]) {
-      send(res, 200, await post[u.pathname](await readBody(req)));
+      const body = await readBody(req);
+      const operationIds=[body.uid,body.target_key,...(Array.isArray(body.targets)?body.targets.map(t=>t?.target_key):[])];
+      if (!u.pathname.startsWith('/api/people/') && operationIds.some(value=>typeof value==='string'&&/^person_[a-f0-9]{64}$/.test(value))) {
+        send(res,400,{ok:false,applied:false,error:'聚合入口不是操作来源，请明确选择原始来源会话'});
+        return;
+      }
+      send(res, 200, await post[u.pathname](body));
       return;
     }
     send(res, 404, { error: "not found" });
   } catch (e) {
-    send(res, 500, { ok:false, error: String(e && e.message || e) });
+    send(res, e.statusCode || 500, { ok:false, error: String(e && e.message || e) });
   }
 });
 
