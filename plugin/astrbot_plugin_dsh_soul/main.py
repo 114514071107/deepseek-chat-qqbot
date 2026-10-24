@@ -1209,7 +1209,9 @@ class DshSoul(Star):
             if self.sticker_owners.get(scope.key) not in (None, identity[1]):
                 self.pending_sticker.pop(scope.key, None)
             self.sticker_owners[scope.key] = identity[1]
-            texts = [getattr(event, "message_str", "")] + (event.get_extra("_dsh_request_texts") or [])
+            texts = event.get_extra("_dsh_sticker_inputs")
+            if texts is None:
+                texts = [getattr(event, "message_str", "")]
             state = dict(identity=identity, limit=sticker_count_request(NL.join(texts)), selected=0, attempted=0, closed=False)
             event.set_extra("_dsh_sticker_budget", state)
         return state
@@ -1597,8 +1599,19 @@ class DshSoul(Star):
             item = event.get_extra("_dsh_input")
             if item is not None:
                 items = [item] + self.batch_buf.pop(uid, [])
-                if event.get_extra("_dsh_request_texts") is None:
-                    event.set_extra("_dsh_request_texts", [entry.get("text", "") for entry in items])
+                if event.get_extra("_dsh_sticker_inputs") is None:
+                    # The retained prefix is a copy of the first message, not
+                    # a newer instruction. Preserve each real arrival once.
+                    texts = [item.get("count_text", getattr(event, "message_str", "") or item.get("text", ""))]
+                    seen = {item["message_id"]} if item.get("message_id") else set()
+                    for entry in items[1:]:
+                        message_id = entry.get("message_id")
+                        if message_id and message_id in seen:
+                            continue
+                        if message_id:
+                            seen.add(message_id)
+                        texts.append(entry.get("count_text", entry.get("text", "")))
+                    event.set_extra("_dsh_sticker_inputs", texts)
                 if any(sticker_only_request(entry.get("text", "")) for entry in items):
                     event.set_extra("_dsh_silent_feedback", True)
                 for pending in items:
@@ -3257,7 +3270,7 @@ class DshSoul(Star):
             batching = bool(bw and now - float(bw) < 30)
             if not batching:
                 self.batch_wait[uid] = now
-            item = {"text": trimmed[:2000], "images": [], "files": [],
+            item = {"text": trimmed[:2000], "count_text": trimmed, "images": [], "files": [],
                     "message_id": scope.message_id, "error": "", "ready": asyncio.Event()}
             event.set_extra("_dsh_input", item)
             if batching:
