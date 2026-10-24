@@ -105,7 +105,7 @@ TOOL_GUIDE_LINES = [
     "- learn_meme(term, meaning)：遇到不认识的梗/流行语，先用 web_search 查清含义，再记进梗图鉴；",
     "- record_note(content)：把值得长期记住的事记进笔记；",
     "- record_thought(content)：记个以后想说的念头",
-    "- send_sticker(query, only_sticker)：发表情包（大图），query 为情绪和描述。用户要求只发表情时 only_sticker=true，或单独写「动作：仅表情 X」；纯表情计划成功时不发文字，失败仅回退一次。普通图文使用「动作：表情 X」。",
+    "- send_sticker(query, only_sticker)：发表情包（大图），query 为情绪和描述。用户要求只发表情时 only_sticker=true，或单独写「动作：仅表情 X」；纯表情计划成功时不发文字，失败仅回退一次。普通图文使用「动作：表情 X」。工具已选图时动作行不追加图片；明确多张时按张数分别调用工具。",
     "- list_stickers(tag, limit)：检索共享表情图库；retag_sticker/delete_sticker 仅允许已绑定平台的主人私聊使用。",
     "【分寸】反应、搜索别每条都用；表情包适度用：想带就在最后一行带「动作：表情 X」，情绪和图要配得上，别连着发同一个情绪，也别每条都带；语音别等他开口要，聊到兴起、撒娇、唱歌或内容带情绪时主动来一句，大概每聊四五句可以来一句。每条消息尽量短（一句话、10 字上下），想说的多就用换行多分几条，宁短勿长。可以用 unicode emoji 点缀语气。",
     "允许半句话、语气词、脱口而出的短反应，也允许想清楚再说的完整句；像真人打字，不要每次都发完整的一大段。",
@@ -1698,23 +1698,21 @@ class DshSoul(Star):
                         sticker_q = EMOTION_ALIAS.get(em, em)
                         sticker_em = em
             text = clean if preserve_literal_message(clean) else NL.join(l for l in (s.strip() for s in clean.split(NL)) if l).strip()
+            # Tool choices are authoritative for this reply (including multiple
+            # explicit choices). The protocol is a fallback, not another image.
+            if sticker_q and not voice and not self.pending_sticker.get(uid):
+                srow = _pick_sticker(sticker_q)
+                if srow:
+                    self.pending_sticker.setdefault(uid, []).append(srow)
             if not text:
                 # 模型只输出了动作行（或空文本）：先剥离动作协议原文改写 resp，避免原文外泄；
                 # 语音模式不发表情包（对齐原版跳过），并清掉工具已选的 pending_sticker 防残留
-                if sticker_q and not voice:
-                    srow = _pick_sticker(sticker_q)
-                    if srow:
-                        self.pending_sticker.setdefault(uid, []).append(srow)
                 if voice:
                     self.pending_sticker.pop(umo, None)
                 self._clear_text_result(resp)
                 self._set_reply_plan(event, ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
                     self.pending_sticker.pop(uid, [])))
                 return
-            if sticker_q and not voice:
-                srow = _pick_sticker(sticker_q)
-                if srow:
-                    self.pending_sticker.setdefault(uid, []).append(srow)
             bubbles = [format_qq_text(b) for b in (_bubbles_napcat(text) or [text])]
             rc = getattr(resp, "result_chain", None)
             others = [c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]
