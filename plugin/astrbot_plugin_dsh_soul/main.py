@@ -105,7 +105,7 @@ TOOL_GUIDE_LINES = [
     "- learn_meme(term, meaning)：遇到不认识的梗/流行语，先用 web_search 查清含义，再记进梗图鉴；",
     "- record_note(content)：把值得长期记住的事记进笔记；",
     "- record_thought(content)：记个以后想说的念头",
-    "- send_sticker(query)：发表情包（大图），query 为 情绪 + 描述词（如 'happy 得意拳' 或 'daily 干饭'），从图库语义匹配最贴切的一张；随手发也可以在回复最后一行写「动作：表情 X」。",
+    "- send_sticker(query, only_sticker)：发表情包（大图），query 为情绪和描述。用户要求只发表情时 only_sticker=true，或单独写「动作：仅表情 X」；纯表情计划成功时不发文字，失败仅回退一次。普通图文使用「动作：表情 X」。",
     "- list_stickers(tag, limit)：检索共享表情图库；retag_sticker/delete_sticker 仅允许已绑定平台的主人私聊使用。",
     "【分寸】反应、搜索别每条都用；表情包适度用：想带就在最后一行带「动作：表情 X」，情绪和图要配得上，别连着发同一个情绪，也别每条都带；语音别等他开口要，聊到兴起、撒娇、唱歌或内容带情绪时主动来一句，大概每聊四五句可以来一句。每条消息尽量短（一句话、10 字上下），想说的多就用换行多分几条，宁短勿长。可以用 unicode emoji 点缀语气。",
     "允许半句话、语气词、脱口而出的短反应，也允许想清楚再说的完整句；像真人打字，不要每次都发完整的一大段。",
@@ -1128,7 +1128,60 @@ def _llm_text(resp):
 
 @register("dsh_soul", "dsh", "ds娘行为体系移植", "1.0.0")
 class DshSoul(Star):
+    def _close_request(self, key, request, status):
+        if not request:
+            return
+        changed = []
+        for row in self.h.get(key, []):
+            if row.get("role") == "user" and row.get("request_id") == request and row.get("request_state") == "active":
+                row["request_state"] = status
+                changed.append(row["id"])
+        if changed:
+            _save(self.h_path, self.h)
+            # Original archive speech stays intact; append an audit transition.
+            _archive_append(key, dict(role="request_state", text="", request_id=request,
+                request_state=status, entry_ids=changed, ts=time.time(), source=self.scopes[key]))
+            sess = _load(_jf(key, "session"), {})
+            context = sess.get("context", {})
+            if status == "stopped" and context:
+                context["entries"] = [e for e in context.get("entries", []) if e.get("id") not in changed]
+                _save(_jf(key, "session"), sess)
+
+    def _feedback(self, event):
+        state = event.get_extra("_dsh_feedback")
+        if state is None:
+            state = dict(closed=asyncio.Event(), tasks=set(), accepted=[], claimed=False)
+            event.set_extra("_dsh_feedback", state)
+        return state
+
+    def _close_feedback(self, event):
+        state = self._feedback(event)
+        state["closed"].set()
+        for task in list(state["tasks"]):
+            if task is not asyncio.current_task() and not task.done():
+                task.cancel()
+
+    async def _settle_feedback(self, event):
+        self._close_feedback(event)
+        tasks = [t for t in self._feedback(event)["tasks"] if t is not asyncio.current_task()]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _set_reply_plan(self, event, plan):
+        # Intent comes from the explicit tool/protocol field, never a keyword
+        # search through user chat, quotes or code.
+        if event.get_extra("_dsh_sticker_only") and not preserve_literal_message(plan.text):
+            plan.sticker_only = True
+            plan.voice = False
+            plan.others = []
+            plan.bubbles = [] if plan.stickers else ["暂时没有可用的表情"]
+        event.set_extra("_dsh_reply_plan", plan)
+
     def _reset_request(self, key, deleted_layers=()):
+        event = getattr(self, "request_events", {}).get(key)
+        if event is not None:
+            self._close_feedback(event)
+        self._close_request(key, getattr(self, "request_owners", {}).get(key), "stopped")
         for name in ("pending_reply", "pending_sticker", "pending_drip", "run_active", "drip_active", "request_owners", "request_events",
                      "interrupt", "batch_wait", "batch_buf", "batch_skipwait", "_last_inbox_files"):
             getattr(self, name, {}).pop(key, None)
@@ -1504,11 +1557,8 @@ class DshSoul(Star):
                 event.set_extra("_dsh_current_ids", ids)
                 event.set_extra("_dsh_image_errors", image_errors)
                 event.set_extra("_dsh_expected_images", len(req.image_urls))
-            # 滴灌/思考被打断的一次性告知（全用户通用，不进历史）：她知道自己哪部分没说出口，可自然接续
-            note = self.interrupted_note.pop(uid, None)
-            if note:
-                req.prompt = (req.prompt or "") + NL + ("[系统提示] 你上一轮想到的话被对方插话打断了，没能说出口的部分：「"
-                             + note[:200] + "」。可以自然接续或改口，别把没能说出去的内容原样复读。")
+            # 未发送的旧计划不作为下一轮指令；原始 user 审计另行保留。
+            self.interrupted_note.pop(uid, None)  # unsent plans are not new instructions
             # 思考中插话打断（§53）的在生成标记：每次 LLM 请求刷新，gate 据此判定"思考中来新消息"
             self.run_active[uid] = time.time()
             is_master = self._owner(uid)
@@ -1573,12 +1623,8 @@ class DshSoul(Star):
             ctx.append(_now_period_line())
             if ctx:
                 req.system_prompt += NL + "[本轮背景资料，不属于当前发言；笔记与历史发言均需核验]" + NL + NL.join(ctx)
-            # 抢答一致性（§48）：主回复必须知道自己刚才抢答说了什么，避免口径打架
-            lr = self.last_react.pop(uid, None)
-            if lr and time.time() - lr.get("ts", 0) < 120:
-                req.prompt = ("[系统提示] 你刚刚已经先回了一句口头反应：「" + lr["text"][:30] + "」。"
-                              "正式回复要和它口径一致、顺着它说，别自相矛盾，也别原样复读它。" + NL
-                              + (req.prompt or ""))
+            # Feedback is neutral and request-owned; accepted history is its
+            # only context source, never a uid-wide instruction from an old run.
             # Schema is only presentation; executor and each entry enforce the same policy.
             if getattr(req, "func_tool", None):
                 from astrbot.core.agent.tool import ToolSet
@@ -1617,11 +1663,12 @@ class DshSoul(Star):
             raw = _llm_text(resp)
             if not raw.strip():
                 rc = getattr(resp, "result_chain", None)
-                event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
+                self._set_reply_plan(event, ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
                     self.pending_sticker.pop(uid, []), others=[c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]))
                 return
+            self._close_feedback(event)
             # §53 思考中插话重想：本轮生成期间对方来了新消息（gate 置打断标记）→ 整轮压住：
-            # 不发气泡、不记历史，原文存 interrupted_note 下轮一次性告知（自然接续或改口）。
+            # 不发气泡、不记已发历史；临时片段待清理，不在新请求自动接续。
             # 说明：LLM HTTP 请求无法中途取消，本轮 token 已消耗；换来的是"她没说出口"的干净体验。
             if self.interrupt.pop(uid, False):
                 self.interrupted_note[uid] = raw[:200]
@@ -1643,6 +1690,9 @@ class DshSoul(Star):
                     if self._perm(uid, "voice"):
                         voice = True
                 else:
+                    if act.startswith("仅表情 "):
+                        event.set_extra("_dsh_sticker_only", True)
+                        act = act[1:]
                     em = re.sub("^表情包? *", "", act).strip()
                     if em:
                         sticker_q = EMOTION_ALIAS.get(em, em)
@@ -1658,7 +1708,7 @@ class DshSoul(Star):
                 if voice:
                     self.pending_sticker.pop(umo, None)
                 self._clear_text_result(resp)
-                event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
+                self._set_reply_plan(event, ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"), [],
                     self.pending_sticker.pop(uid, [])))
                 return
             if sticker_q and not voice:
@@ -1669,7 +1719,7 @@ class DshSoul(Star):
             rc = getattr(resp, "result_chain", None)
             others = [c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]
             rows = self.pending_sticker.pop(uid, [])
-            event.set_extra("_dsh_reply_plan", ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"),
+            self._set_reply_plan(event, ReplyPlan(uid, scope.target, event.get_extra("_dsh_work"),
                 bubbles, [] if voice else rows, voice, text, others))
             # Preview is still formatted for hooks. RespondStage consumes the
             # owned plan before its empty-chain check and bypasses generic send.
@@ -1687,6 +1737,7 @@ class DshSoul(Star):
             self._err("capture", type(e).__name__)
 
     def _finish_reply(self, event):
+        self._close_feedback(event)
         plan = event.get_extra("_dsh_reply_plan")
         if plan:
             plan.finished = True
@@ -1695,6 +1746,7 @@ class DshSoul(Star):
                 or getattr(self, "request_events", {}).get(token.key) is not event):
             return  # an old finally must never erase a newer request
         key = token.key
+        self._close_request(key, token.request, "finished" if self.runtime.valid(token) else "stopped")
         trace = getattr(event, "trace", None)
         if trace is not None and hasattr(self, "resources"):
             try:
@@ -1717,6 +1769,9 @@ class DshSoul(Star):
         plan.started = True
         uid = plan.key
         try:
+            await self._settle_feedback(event)
+            accepted_feedback = self._feedback(event)["accepted"]
+            plan.bubbles = [text for text in plan.bubbles if format_qq_text(text) not in accepted_feedback]
             if plan.voice:
                 result = await self._voice_reply(plan.target, uid, plan.text, plan.token.request, plan.id)
                 plan.results.append(result)
@@ -1745,6 +1800,12 @@ class DshSoul(Star):
                     result = await self._send_sticker_row(plan.target, row)
                     plan.results.append(result)
                     if not result:
+                        if plan.sticker_only:
+                            fallback_text = "表情发送失败，暂时发不了"
+                            fallback = await self._text_fallback(plan.target, fallback_text, result)
+                            if fallback is not result:
+                                plan.results.append(fallback)
+                                self._record_assistant_turn(uid, fallback_text, fallback, plan_id=plan.id)
                         return
                     rel = "sticker_packs/" + row["pack"] + "/" + str(row["rel"]).replace(os.sep, "/")
                     self._record_assistant_turn(uid, "[表情] " + row.get("caption", ""), result,
@@ -1786,8 +1847,7 @@ class DshSoul(Star):
             key = event.get_extra("_dsh_work").key
             # F01 uses plugin history as the only model history. Never persist
             # generated assistant/tool traces as though the user had seen them.
-            rows = [{"role": h["role"], "content": h["text"]} for h in self._h(key)
-                    if h["role"] != "assistant" or h.get("delivery", {}).get("status") == "accepted"]
+            rows = [{"role": h["role"], "content": h["text"]} for h in self._context_rows(key)]
             await self.context.conversation_manager.update_conversation(event.unified_msg_origin,
                 req.conversation.cid, history=rows)
             check_current()
@@ -2840,10 +2900,12 @@ class DshSoul(Star):
     @filter.llm_tool(name="send_sticker")
     @tool_guard("send_sticker")
     @managed
-    async def send_sticker(self, event: AstrMessageEvent, query: str):
-        """发表情包（大图）。这是发表情包的唯一方式。query 为 情绪 + 描述词（如 'happy 得意拳' 或 'daily 干饭'），会从图库里语义匹配最贴切的一张发出。想让回复更生动时使用，别连发。"""
+    async def send_sticker(self, event: AstrMessageEvent, query: str, only_sticker: bool = False):
+        """选择当轮表情。query 为情绪和描述；用户明确只要表情、不带文字时 only_sticker=true。"""
         scope = self._scope(event)
         uid = scope.key
+        if only_sticker is True:
+            event.set_extra("_dsh_sticker_only", True)
         umo = scope.target
         row = _pick_sticker(query)
         if not row:
@@ -3210,99 +3272,57 @@ class DshSoul(Star):
                     item["error"] = item["error"] or "图片准备未完成"
                 item["ready"].set()
 
-    # ---------- 情境化 react 抢答（§32：LLM 极短生成贴合对方这句话的即时反应，固定语料只做兜底） ----------
+    # ---------- 请求内中性等待反馈：不另调模型，不推断尚未确认的媒体或工具结果 ----------
     @managed
     async def _make_react(self, uid, scene, last_text):
-        """生成一句 2~12 字的即时口头反应：全人设 + 最近几轮上下文 + 5s 超时（§56：
-        此前无人设无上下文只给最后一句，抢答"裸奔"导致质量低、口吻不像她、接不住语境）。
-        超时/失败/空/超长 → 固定语料兜底。
-        防复读：撞该 uid 最近 5 条已发 react 时重生成一次，再撞换兜底料（兜底也优先选没发过的）。"""
-        pool = {"quick": REACT_QUICK, "search": REACT_SEARCH, "fetch": REACT_FETCH}.get(scene, REACT_QUICK)
-        recent = self.react_recent.setdefault(uid, [])
-
-        def fallback():
-            cand = [s for s in pool if s not in recent]
-            return random.choice(cand or pool)
-
-        # §56：人设（好友语境机械替换"主人"→"对方"，与 inject 同规则）+ 最近 4 轮对话
-        is_master = (self._owner(uid))
-        try:
-            persona = open(os.path.join(DATA, "persona.md"), encoding="utf-8").read()
-            if not is_master:
-                persona = persona.replace("主人", "对方")
-        except Exception:
-            persona = ""
-        sys_prompt = ((persona or "你是主人的毒舌 AI 伙伴，嘴硬心软，说话短。") + NL
-                      + "你现在只做一件事：对对方刚说的话先回一句 2~12 个字的即时口头反应——像真人秒回时的插话，"
-                        "短、自然、带你的性格；正式回复稍后另发，所以反应里别给结论别展开别复述对方的话。")
-        ctx_lines = []
-        for h in self._context_rows(uid)[-5:-1]:
-            who = "你" if h["role"] == "assistant" else "对方"
-            ctx_lines.append(who + "：" + (h.get("text") or "").replace(NL, " ")[:50])
-        ctx = ("你们刚才在聊：" + NL + NL.join(ctx_lines) + NL) if ctx_lines else ""
-
-        text = ""
-        for _attempt in range(2):  # 撞复读重生成一次
-            try:
-                scene_hint = {"search": "你接下来要去网上查资料，反应里可以体现这一点（如'我查查'）。",
-                              "fetch": "你接下来要去点开对方给的链接看，反应里可以体现这一点。"}.get(scene, "")
-                out = await self._chat("react", timeout=5,
-                    prompt=(ctx + "对方刚说：「" + (last_text or "")[:80] + "」。" + scene_hint
-                            + "回一句 2~12 个字的即时反应，贴合这句话的内容、情绪和你们刚才的语境；"
-                              "对方在说正经事、难过的事或急事时反应要正经（'怎么了''我在听'），别调侃别玩梗。"
-                              "只输出那句话本身，不要引号不要解释。"),
-                    system_prompt=sys_prompt,
-                    max_tokens=60)
-                if out is None:
-                    break
-                t = _llm_text(out).strip()
-                t = t.splitlines()[0].strip() if t else ""
-                t = re.sub(r"^[「\"'“”‘’]+|[」\"'“”‘’。！？!~…]+$", "", t)
-                if not t or len(t) > 12:
-                    text = ""
-                    continue
-                text = t
-                if text in recent:
-                    continue  # 撞复读，重生成一次
-                break
-            except Exception as e:
-                self._err("react", e)  # 生成失败记日志便于观察
-                break
-        if not text or text in recent:
-            text = fallback()
-        recent.append(text)
-        self.react_recent[uid] = recent[-5:]
-        return text
+        """Neutral progress only: no extra model call or unverified media claim."""
+        return random.choice(("正在处理这条消息", "稍等，我整理一下"))
 
     @managed
     async def _react_and_send(self, umo, uid, scene, last_text):
-        """生成并直发一条即时反应（不扣分——bot 侧直发不过 gate 积分路径）。
-        §48：发出后记历史 + 存 last_react——此前不记历史也不进主请求，主 LLM 不知道抢答说了啥，
-        导致正式回复与抢答口径不一（自相矛盾）；现在主请求会被一次性告知、历史里也能看到。"""
+        token = current_token()
+        event = getattr(self, "request_events", {}).get(uid)
+        if not token or not token.request or event is None or event.get_extra("_dsh_work") != token:
+            return
+        state = self._feedback(event)
+        if state["closed"].is_set() or state["claimed"]:
+            return
+        state["claimed"] = True  # at most one feedback per request, not per user
+        task = asyncio.current_task()
+        state["tasks"].add(task)
         try:
+            if scene == "quick":
+                # Completion wakes this bounded wait immediately. It is not an
+                # intentional delay on the main answer or a second model call.
+                try:
+                    await asyncio.wait_for(state["closed"].wait(), timeout=.8)
+                    return
+                except TimeoutError:
+                    pass
             t = await self._make_react(uid, scene, last_text)
-            result = await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
-            if not result:
+            if state["closed"].is_set():
                 return
-            self.last_react[uid] = {"ts": time.time(), "text": t}
-            self._record_assistant_turn(uid, t, result)
-        except Exception as e:
-            self._err("react", e)
+            check_current()
+            if t not in ("正在处理这条消息", "稍等，我整理一下"):
+                t = "正在处理这条消息"
+            result = await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
+            if result:
+                state["accepted"].append(format_qq_text(t))
+                self._record_assistant_turn(uid, t, result)
+        except asyncio.CancelledError as error:
+            result = getattr(error, "delivery_result", None)
+            if result is not None and result.status == "accepted":
+                state["accepted"].append(format_qq_text(t))
+                self._record_assistant_turn(uid, t, result)
+            raise
+        except Exception as error:
+            self._err("react", type(error).__name__)
+        finally:
+            state["tasks"].discard(task)
 
     @managed
     async def _busy_notice(self, umo, uid):
-        """§59 埋头反馈：连续工具续轮第 3 轮插一句"在弄了"，固定语料池（零 LLM 成本）。
-        记历史保持口径一致（她知道自己说过这句）；总开关关或该用户回复关时不发。"""
-        try:
-            if not _conf("enabled") or not self._perm(uid, "reply"):
-                return
-            t = random.choice(BUSY_LINES)
-            result = await self._send(umo, MessageChain(chain=[_qq_plain(t)]))
-            if not result:
-                return
-            self._record_assistant_turn(uid, t, result)
-        except Exception as e:
-            self._err("busy-notice", e)
+        await self._react_and_send(umo, uid, "busy", "")
 
     def _bump_turns(self, uid, n=1):
         """H1：单调递增的轮次计数器（内存态，重启后差值重新累计即可）"""
@@ -3343,6 +3363,9 @@ class DshSoul(Star):
             elif images:
                 entry["text"] = "[图片]"
         entry["source"] = scope.source()
+        token = current_token()
+        if token and token.runtime is self.runtime and token.key == uid and token.request:
+            entry.update(request_id=token.request, request_state="active")
         hist.append(entry)
         self._group_append(uid, entry)
         _archive_append(uid, entry)

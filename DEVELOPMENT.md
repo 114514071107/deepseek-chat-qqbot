@@ -46,6 +46,11 @@ git log --oneline -5
 
 ## 检查
 
+2026-10-24 真实 QQ 验收补修及双解释器启动器见
+[本轮补修记录](docs/reviews/2026-10-24-real-qq-repair.md)和[一键启动说明](docs/tooling/one-click-bot-startup.md)。
+开发入口为 `scripts/start-bot.cmd`，默认只启动 Bot，管理控制台需 `-WithConsole`。
+本轮交付不代表生产已安装或真实 QQ 验收通过；启动器测试只用临时实例。
+
 2026-10-22 工作单 1 的访问认证、工具权限、离线验证及部署前配置说明见
 [工作单 1 交付](docs/reviews/2026-10-22-workorder-1.md)。控制台新版必须由启动环境提供
 `DSH_CONSOLE_TOKEN`，没有凭据会拒绝启动；主人特权须绑定 `DSH_OWNER_PLATFORM_ID`，

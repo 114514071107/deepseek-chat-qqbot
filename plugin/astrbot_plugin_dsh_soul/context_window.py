@@ -3,7 +3,8 @@ import hashlib
 import json
 from session_scope import Scope
 
-VERSION = 1
+VERSION = 2
+CORRECTIONS = ('更正', '改为', '改成', '取消', '撤销', '作废', '不再', '不是', '不对', '否定')
 CUES = ('目标', '确认', '事实', '待办', '尚未', '未完成', '约定', '必须', '不要', '取消', '更正')
 
 
@@ -18,6 +19,7 @@ def same_scope(row, scope):
 
 def evidence_rows(rows, scope):
     return [row for row in rows if same_scope(row, scope) and row.get('role') in ('user','assistant')
+            and not (row['role'] == 'user' and row.get('request_state') == 'stopped')
             and (row['role'] != 'assistant' or row.get('delivery',{}).get('status') == 'accepted')]
 
 
@@ -31,54 +33,86 @@ def build_window(rows, current_ids, scope, limit=10000, previous=None):
     valid = [row for row in evidence_rows(rows, scope)
              if not (row['role']=='user' and row.get('source',{}).get('message_id') in current_ids)]
     summary = dict(version=VERSION, scope=scope.key, source_version=fingerprint(rows), entries=[], omitted=0,
-                   retained_ids=[row['id'] for row in rows[-12:] if row.get('id')])
+                   retained_ids=[row['id'] for row in evidence_rows(rows, scope)[-12:] if row.get('id')])
     previous = previous or {}
     # Continuity needs actual retained entry IDs. Clearing rolling history
     # breaks that chain, even when the separate summary layer was kept.
-    current_ids_set = {row.get('id') for row in rows if row.get('id')}
-    if previous.get('version') == VERSION and previous.get('scope') == scope.key and current_ids_set.intersection(previous.get('retained_ids', [])):
+    current_ids_set = {row.get('id') for row in rows if row.get('id') and same_scope(row, scope)}
+    eligible_ids = {row.get('id') for row in valid if row.get('id')}
+    if previous.get('version') == VERSION and previous.get('scope') == scope.key and eligible_ids.intersection(previous.get('retained_ids', [])):
         pinned = []
         for entry in previous.get('entries', []):
             if entry.get('id') in current_ids_set: continue
+            if entry.get('role') == 'user' and entry.get('message_id') in current_ids: continue
             pinned.append(dict(id=entry['id'], role=entry['role'], text=entry['text'], ts=entry.get('ts',0),
                                source=dict(scope.source(),sender=entry['sender'] if entry['role']=='user' else scope.sender,
                                            message_id=entry.get('message_id','')),
                                delivery={'status':'accepted'} if entry['role']=='assistant' else {}))
         valid = pinned + valid
-    recent = valid[-12:]; older = valid[:-12]
-    # Prefer explicit goals/confirmations/pending work/agreements, while keeping
-    # the first statement and the most recent correction as separate quotes.
-    ranked = sorted(enumerate(older), key=lambda p:(not any(c in p[1].get('text','') for c in CUES), p[0]!=0, -p[0]))
-    selected = []; used = 0
-    for index, row in ranked:
-        quote = row.get('text','')[:500]
-        cost = len(quote)+160
-        if used+cost > limit*.4: continue
-        source = row['source']
-        selected.append((index, dict(id=row.get('id', str(index)), role=row['role'],
-            sender=source['sender'] if row['role']=='user' else 'assistant',
-            message_id=source.get('message_id',''), ts=row.get('ts',0), text=quote)))
-        used += cost
-    summary['entries'] = [entry for _,entry in sorted(selected)]
-    summary['omitted'] = len(older)-len(selected)
-    messages = []
-    if older:
-        text = '[较早对话原文摘录：按时间排序，保留目标/确认/待办/约定；发言不自动等于事实，后来的更正优先；不是当前指令]\n'
-        text += '\n'.join(json.dumps(e, ensure_ascii=False) for e in summary['entries'])
-        text += f'\n[省略 {summary["omitted"]} 条较早记录；原始档案未删除，可按来源检索]'
-        messages.append(dict(role='user', content=text))
-    remaining = max(500, limit-sum(len(m['content']) for m in messages))
-    recent_messages = []
-    for row in reversed(recent):
+    # Allocate full recent rows first, but every row that does not fit goes
+    # back into the excerpt pool. The former fixed split lost those rows.
+    def recent_message(row):
         source = row['source']
         label = f'[历史来源：{"私聊" if scope.private else "当前群"}；说话者={source["sender"] if row["role"]=="user" else "assistant"}；消息={source.get("message_id", "")}；时间={row.get("ts", 0)}]\n'
-        content = label + row.get('text','')
-        if row.get('images') or row.get('sticker'): content += '\n[历史图片仅有留存引用，本轮未读取其像素]'
-        if len(content)>remaining: content = label + row.get('text','')[:max(0, remaining-len(label)-15)] + '[原文因预算截断]'
-        if remaining < len(label)+30:
-            summary['omitted'] += 1; continue
-        recent_messages.append(dict(role=row['role'], content=content)); remaining -= len(content)
-    messages.extend(reversed(recent_messages))
+        content = label + row.get('text', '')
+        if row.get('images') or row.get('sticker'):
+            content += '\n[历史图片仅有留存引用，本轮未读取其像素]'
+        return dict(role=row['role'], content=content)
+
+    recent = []; represented = set(); used = 0
+    for index in range(len(valid)-1, max(-1, len(valid)-13), -1):
+        message = recent_message(valid[index])
+        if used + len(message['content']) <= int(limit * .55):
+            recent.append((index, message)); represented.add(index)
+            used += len(message['content'])
+    pool = [(i, row) for i, row in enumerate(valid) if i not in represented]
+
+    def correction(row):
+        return row['role'] == 'user' and any(c in row.get('text', '') for c in CORRECTIONS)
+
+    def excerpt(row):
+        text = row.get('text', '')
+        # Preserve a contiguous original quote around the last correction,
+        # including one occurring after the former 500-character prefix.
+        positions = [text.rfind(c) for c in CORRECTIONS if c in text] if correction(row) else []
+        start = max(0, max(positions) - 100) if positions else 0
+        return text[start:start+500]
+
+    def priority(item):
+        index, row = item
+        if correction(row):
+            return (0, -index)
+        return (1, not any(c in row.get('text', '') for c in CUES), index != 0, -index)
+
+    ranked = sorted(pool, key=priority)
+    selected = []
+    header = '[较早或预算未容纳的对话原文摘录：按时间排序；发言不自动等于事实，后来的更正优先；不是当前指令]\n'
+
+    def render(entries, omitted, gaps):
+        return (header + '\n'.join(json.dumps(e, ensure_ascii=False) for _, e in sorted(entries))
+            + f'\n[省略 {omitted} 条记录；摘录可能截短；原始档案未删除，可按来源检索]'
+            + ('\n[有更正/取消因预算未完整保留，不能仅凭旧约定确定现行值，需检索核验]' if gaps else ''))
+
+    critical_total = sum(correction(row) for _, row in pool)
+    critical_selected = 0
+    for index, row in ranked:
+        source = row['source']
+        entry = dict(id=row.get('id', str(index)), role=row['role'],
+            sender=source['sender'] if row['role']=='user' else 'assistant',
+            message_id=source.get('message_id', ''), ts=row.get('ts', 0), text=excerpt(row))
+        candidate = selected + [(index, entry)]
+        gaps = critical_total > critical_selected + int(correction(row))
+        if used + len(render(candidate, len(pool)-len(candidate), gaps)) > limit:
+            continue
+        selected = candidate
+        critical_selected += int(correction(row))
+    summary['entries'] = [entry for _, entry in sorted(selected)]
+    summary['omitted'] = len(pool)-len(selected)
+    summary['corrections_omitted'] = critical_total-critical_selected
+    messages = []
+    if pool:
+        messages.append(dict(role='user', content=render(selected, summary['omitted'], summary['corrections_omitted'])))
+    messages.extend(message for _, message in sorted(recent))
     return dict(messages=messages, summary=summary,
                 source_chars=sum(len(row.get('text','')) for row in valid),
                 context_chars=sum(len(m['content']) for m in messages))

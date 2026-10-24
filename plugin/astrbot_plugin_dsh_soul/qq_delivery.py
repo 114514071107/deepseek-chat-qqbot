@@ -114,15 +114,9 @@ def read_upload(path):
 
 
 def reply_reference(chain):
-    for component in (getattr(chain,'chain',None) or []):
-        kind=getattr(component,'type',None)
-        if getattr(kind,'value',kind)!='Reply': continue
-        value=str(getattr(component,'id','') or '')
-        if value.startswith('REFIDX_'): return value
-        event=current_event()
-        if event is not None:
-            from astrbot.core.platform.sources.qqofficial.qqofficial_message_event import QQOfficialMessageEvent
-            return QQOfficialMessageEvent._extract_self_ref_idx(event.message_obj.raw_message)
+    # QQ v2 users/groups both document message_reference as unsupported.
+    # A REFIDX prefix is not source authorization. Never substitute the
+    # current message for a missing/foreign quote or claim a card was sent.
     return None
 
 
@@ -187,6 +181,9 @@ class QQDelivery:
                 raise
         finally: _delivery_budget.reset(binding)
         result.attempt_id=attempt
+        if any(getattr(getattr(c,'type',None),'value',getattr(c,'type',None)) == 'Reply'
+               for c in (getattr(chain,'chain',None) or [])):
+            result.persistence['reference']='unsupported'
         self.record(target,result)
         return result
 

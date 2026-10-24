@@ -17,6 +17,7 @@ class ReplyPlan:
     started: bool = False
     finished: bool = False
     results: list = field(default_factory=list)
+    sticker_only: bool = False
 
 
 def owned(event,runtime):

@@ -11,7 +11,7 @@ function createConsoleServer(options = {}) {
 
 // ==================== 部署配置（使用前必改，共 2 处） ====================
 // ① AstrBot 安装根目录
-const DSH = options.dsh || "D:\\dsbot";
+const DSH = options.dsh || process.env.DSH_RUNTIME_ROOT || "D:\\dsbot";
 // ② 主人的 QQ openid（须与插件 main.py 里的 MASTER_OPENID 一致）
 const MASTER = options.master || "YOUR_MASTER_OPENID";
 // ============================================================

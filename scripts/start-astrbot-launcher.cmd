@@ -1,3 +1,3 @@
 @echo off
-rem DEPLOY: if AstrBot root is not D:\dsbot, replace the path below
-start "astrbot" /min "D:\dsbot\run-astrbot.cmd"
+call "%~dp0start-bot.cmd" %*
+exit /b %ERRORLEVEL%

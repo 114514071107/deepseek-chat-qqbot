@@ -49,7 +49,7 @@ def load_methods(guarded=False):
     __import__('atexit').register(instance._fixture_tmp.cleanup)
     fixture,_=load_pipeline(instance._fixture_tmp.name,names=())
     instance.__dict__.update(fixture.__dict__)
-    for name in ('_person_key','_reset_request','_scope','_source','_private','_owner','_perm','_group_append','_budget','_thread'):
+    for name in ('_person_key','_reset_request','_close_request','_feedback','_close_feedback','_settle_feedback','_scope','_source','_private','_owner','_perm','_group_append','_budget','_thread'):
         setattr(type(instance),name,getattr(type(fixture),name))
     instance._authorize_tool = lambda event, name, consume=True: __import__('tool_permissions').authorize(
         event, name, 'owner', lambda uid, key: True, owner_instance='fictional-bot', consume=consume)

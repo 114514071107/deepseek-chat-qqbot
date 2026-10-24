@@ -7,6 +7,33 @@ const http = require('node:http');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
+test('launcher-selected runtime root is used without reading another instance', async t => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-root-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  fs.mkdirSync(path.join(root,'dsh_data'));
+  fs.writeFileSync(path.join(root,'dsh_data','history_all.json'),JSON.stringify({fixture:[{role:'user',text:'ISOLATED-ROOT'}]}));
+  const file=path.join(__dirname,'../server.js'); const nativeRequire=require('node:module').createRequire(file);
+  const bridge=nativeRequire('./state-bridge');
+  const token=crypto.randomBytes(32).toString('hex');
+  const sandbox={module:{exports:{}},__dirname:path.dirname(file),__filename:file,
+    process:{argv:[],env:{DSH_RUNTIME_ROOT:root}},URL,console,Buffer,setTimeout,
+    require(name){
+      if(name==='./state-bridge') return {...bridge,readJson(file,fallback){
+        // Fail before disk access if the real handler selects production.
+        if(!path.resolve(file).startsWith(path.resolve(root)+path.sep)) throw Error('foreign instance read denied by fixture');
+        return bridge.readJson(file,fallback);
+      }};
+      return nativeRequire(name);
+    }};
+  vm.runInNewContext(fs.readFileSync(file,'utf8'),sandbox,{filename:file});
+  const server=sandbox.module.exports.createConsoleServer({token,port:0});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  t.after(()=>new Promise(r=>{server.closeAllConnections();server.close(r);}));
+  const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/history?uid=fixture',
+    {headers:{authorization:'Basic '+Buffer.from('dsh:'+token).toString('base64')}});
+  assert.equal(response.status,200); assert.equal((await response.json()).entries[0].text,'ISOLATED-ROOT');
+});
+
 async function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-security-'));
   t.after(() => fs.rmSync(root, {recursive:true, force:true}));

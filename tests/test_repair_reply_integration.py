@@ -137,7 +137,7 @@ async def framework_case():
             assert accepted[0]['sticker']=='sticker_packs/fixture/image.png'
         if scenario=='text':
             assert [payload['msg_seq'] for _,payload in calls]==[1,2]
-            assert calls[0][1].get('message_reference')=={'message_id':'REFIDX_original'}
+            assert 'message_reference' not in calls[0][1], 'QQ v2 native references are documented unsupported'
             assert 'message_reference' not in calls[1][1]
         await obj.runtime.stop()
 

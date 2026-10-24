@@ -303,13 +303,18 @@ class StateController:
         if name=='thoughts_v2.json': obj.th=table
         if operation=='switch' and body.get('value') is False:
             if body['key']=='enabled':
+                for scope in list(obj.scopes):
+                    if hasattr(obj, '_reset_request'): obj._reset_request(scope)
                 for scope in list(obj.scopes): obj.runtime.invalidate(scope)
             else: obj.runtime.revoke_feature(body['key'])
         if operation=='user' and body.get('value') is False:
             affected=[body['uid']] if body['uid'] in obj.scopes else [
                 scope for scope,source in obj.scopes.items() if source['sender']==body['uid']
                 and body['key'] not in table.get(scope,{})]
-            for scope in affected:
-                if body['key']=='reply': obj.runtime.invalidate(scope)
-                else: obj.runtime.revoke_feature(body['key'],scope)
+            if body['key']=='reply':
+                for scope in affected:
+                    if hasattr(obj, '_reset_request'): obj._reset_request(scope)
+                for scope in affected: obj.runtime.invalidate(scope)
+            else:
+                for scope in affected: obj.runtime.revoke_feature(body['key'],scope)
         return {'ok':True,'applied_instance':obj.runtime.id,**result}
