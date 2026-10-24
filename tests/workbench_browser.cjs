@@ -10,7 +10,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const token='fixture-token-for-workbench-12345678',server=createConsoleServer({dsh:root,token,port:0});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   let browser;const checks=[];
-  const evidence=path.resolve(__dirname,'../docs/reviews/evidence');fs.mkdirSync(evidence,{recursive:true});
+  const evidence=process.env.DSH_BROWSER_EVIDENCE||path.resolve(__dirname,'../docs/reviews/evidence');fs.mkdirSync(evidence,{recursive:true});
   try{
     browser=await chromium.launch({channel:'msedge',headless:true});
     const context=await browser.newContext({httpCredentials:{username:'dsh',password:token},viewport:{width:1280,height:960}});

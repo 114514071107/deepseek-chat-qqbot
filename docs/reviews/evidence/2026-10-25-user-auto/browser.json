@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-25",
+  "synthetic_only": true,
+  "checks": [
+    "trusted raw-author mapping automatically joins private plus two groups with visible basis",
+    "later trustworthy origin enters the existing stable automatic entry",
+    "same-note stranger remains separate, pending and honestly missing a nickname",
+    "QQ nickname source and group-card nature are distinct; HTML nickname stays inert text",
+    "private/all-group/specific-group switch preserves actual speaker, source and accepted replies",
+    "UI unlink persists refusal across refresh; stale automatic evidence cannot rejoin",
+    "explicit UI reconfirmation restores one group and stays manual, never platform-certified",
+    "UI deny records a visible decision without joining the candidate",
+    "user search finds nicknames without losing scene/query isolation",
+    "association editing pauses repaint without disabling auto-refresh; collapse resumes it",
+    "keyboard scene switching and 390px width remain usable without page overflow"
+  ],
+  "js_errors": [],
+  "history_unchanged": true
+}

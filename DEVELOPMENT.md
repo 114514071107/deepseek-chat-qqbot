@@ -46,6 +46,13 @@ git log --oneline -5
 
 ## 检查
 
+2026-10-25 用户自动归类与资料来源见[本轮记录](docs/reviews/2026-10-25-user-auto-group-review.md)。
+新版本前后端标识为 `20261025-auto-1`；插件新增 `user_profiles.py`，必须随 `main.py` 与 Console 配套发布。
+`workbench_profiles_v1.json` 是本机受保护的管理资料观察，`console_people_v1.json` 兼容旧人工组，首次人工修改后写 v2 的组及否认记录；两者均是运行数据，禁止入 Git。
+关联只改变管理展示。平台原始资料不足时显示“待人工确认”“昵称未获取”，不从昵称或正文猜测身份。人工解除会阻止同一旧证据重新关联。
+专项命令：`node --test console/tests/repair-people-auto.test.js console/tests/repair-workbench.test.js`，Python `-m unittest discover -s tests -p test_repair_user_profiles.py -v`。
+使用已有 Playwright 模块路径后运行 `node tests/user_auto_browser.cjs`，全部使用合成临时目录；原浏览器集合可设 `DSH_BROWSER_EVIDENCE` 到忽略的 local 目录以保留历史截图。
+
 2026-10-25 请求内表情数量及管理工作台聚合见
 [实施、身份关联规则、后台使用与测试](docs/reviews/2026-10-25-sticker-count-users-workbench.md)。
 用户页人工关联只影响管理展示，原 scope、身份/权限、积分账本和发送目标继续独立；旧档不猜测合并。

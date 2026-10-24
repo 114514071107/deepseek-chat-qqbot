@@ -103,3 +103,16 @@ test('oversized history is rejected before loading or mutating the file',async t
   const result=await f.get('/api/people');assert.equal(result.ok,false);assert.match(result.error,/读取上限/);
   assert.equal(fs.statSync(file).size,33*1024*1024);
 });
+
+test('deny API is authenticated, source protected, confirmed and display-only',async t=>{
+  const f=await fixture(t),list=await f.get('/api/people');
+  const body={left:byScope(list,'p1').id,right:byScope(list,'g1').id,revision:list.revision,confirm:true};
+  assert.equal((await fetch(f.base+'/api/people/deny',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).status,401);
+  assert.equal((await fetch(f.base+'/api/people/deny',{method:'POST',headers:{...f.headers,origin:'http://evil.invalid','content-type':'application/json'},body:JSON.stringify(body)})).status,403);
+  const before=fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8');
+  assert.equal((await f.post('/api/people/deny',{...body,confirm:false})).ok,false);
+  assert.equal((await f.post('/api/people/deny',body)).ok,true);
+  const next=await f.get('/api/people');assert.notEqual(byScope(next,'p1').id,byScope(next,'g1').id);
+  assert.match(byScope(next,'p1').basis.join(' '),/否认/);
+  assert.equal(fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8'),before);
+});

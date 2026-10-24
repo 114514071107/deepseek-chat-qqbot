@@ -93,7 +93,7 @@
   #people-detail select { max-width:100%; }
   details > summary { cursor:pointer; font-weight:600; }
   @media (max-width:600px) { header { flex-wrap:wrap; padding:12px; } main,nav { padding:12px; } .uchips { gap:8px; } .uchip { min-width:130px; flex:1; } .card { padding:12px; } }
-  .uchip .un { font-weight:700; font-size:14px; }
+  .uchip .un { font-weight:700; font-size:14px; overflow-wrap:anywhere; }
   .uchip .uu { color:var(--dim); font-size:11px; font-family:Consolas,monospace; }
   .badge { background:linear-gradient(135deg,#ffd76e,#f5b73d); color:#6b4a00; font-size:11px; font-weight:700; padding:1px 9px; border-radius:999px; }
   .uhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -121,7 +121,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261025-users-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261025-auto-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -183,6 +183,7 @@ function refreshNow(manual) {
   if (!manual && document.querySelector("audio") && Array.from(document.querySelectorAll("audio")).some((a) => !a.paused)) return; // 正在听语音
   if (!manual && document.getElementById("delete-panel")) return; // 保留未提交的删除选择
   if (!manual && cur === "notify") return; // 通知页有草稿
+  if (!manual && cur === "users" && window.UserWorkbench?.busy()) return;
   if (!manual && cur === "logs") return; // 日志页有自己的 5s 定时器
   VIEWS()[cur]();
   const d = new Date(), p = (n) => String(n).padStart(2, "0");

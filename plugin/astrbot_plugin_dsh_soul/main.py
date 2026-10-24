@@ -1362,6 +1362,11 @@ class DshSoul(Star):
         scope = bind_scope(event)
         self.scopes[scope.key] = scope.source()
         _save(self.scopes_path, self.scopes)
+        try:
+            from user_profiles import record_profile
+            record_profile(event, scope, os.path.dirname(self.scopes_path))
+        except Exception as exc:
+            self._err("management-profile", type(exc).__name__)
         event.set_extra("_dsh_reply_owner", self)
         # QQ output is consumed as a bounded plan. Streaming partials lack
         # per-item acceptance and can otherwise escape before capture.
