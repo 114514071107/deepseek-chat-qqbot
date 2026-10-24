@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 PLUGIN=Path(__file__).resolve().parents[1]/'plugin/astrbot_plugin_dsh_soul'
 sys.path.insert(0,str(PLUGIN))
-from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal
+from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal, sticker_only_request
 from tool_permissions import trusted_plugin_tool
 from session_scope import Scope, Target, bind_scope
 from qq_delivery import QQDelivery, DeliveryResult, failure
@@ -39,7 +39,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
     tree=ast.parse((PLUGIN/'main.py').read_text(encoding='utf-8-sig'))
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='DshSoul')
     cls.bases=[]; cls.decorator_list=[]
-    helpers=('_person_key','_reset_request','_close_request','_feedback','_close_feedback','_settle_feedback','_set_reply_plan','_scope','_source','_private','_owner','_perm','_group_append',
+    helpers=('_person_key','_reset_request','_close_request','_feedback','_feedback_suppressed','_close_feedback','_settle_feedback','_set_reply_plan','_scope','_source','_private','_owner','_perm','_group_append',
              '_finish_reply','_complete_reply','_record_assistant_turn','_record_user_turn','_synthesize_voice',
              '_drip_interval','_persist_framework_reply','_text_fallback','_record_delivery_result','_write_media','_retain_sent_media','_thread','_budget','_context_rows')
     cls.body=[n for n in cls.body if getattr(n,'name','') in names+helpers]
@@ -56,7 +56,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
         Resources=Resources,BudgetProvider=BudgetProvider,BudgetExceeded=BudgetExceeded,payload_size=payload_size,build_window=build_window,fingerprint=fingerprint,evidence_rows=evidence_rows,
         MessageChain=lambda **kw:SimpleNamespace(**kw),Record=lambda **kw:SimpleNamespace(type='Record',**kw),
         BUBBLE_CAP=2,BATCH_WAIT=0,MASTER_OPENID='owner',DATA=str(root),
-        CHAT_STYLE=CHAT_STYLE,format_qq_text=format_qq_text,preserve_literal_message=preserve_literal_message,split_chat_actions=split_chat_actions,preserve_sticker_literal=preserve_sticker_literal,
+        CHAT_STYLE=CHAT_STYLE,format_qq_text=format_qq_text,preserve_literal_message=preserve_literal_message,split_chat_actions=split_chat_actions,preserve_sticker_literal=preserve_sticker_literal,sticker_only_request=sticker_only_request,
         Scope=Scope,Target=Target,bind_scope=bind_scope,current_token=__import__('task_runtime').current_token,work_context=__import__('task_runtime').work_context,managed=__import__('task_runtime').managed,check_current=__import__('task_runtime').check_current,
         background_work=__import__('task_runtime').background_work,
         current_budget_job=__import__('task_runtime').current_budget_job,

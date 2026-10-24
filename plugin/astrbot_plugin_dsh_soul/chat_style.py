@@ -22,7 +22,7 @@ def preserve_sticker_literal(text):
                 any(protected and re.search(r'动作[:：]', line) for line, protected in _literal_lines(text)))
 
 
-def _literal_lines(text):
+def _literal_lines(text, mask_quotes=False):
     """Share original-text boundaries across action parsing and punctuation."""
     fence=None
     quotes=[]
@@ -48,14 +48,36 @@ def _literal_lines(text):
             yield line, True
             continue
         quoted=bool(quotes) or any(c in line for c in (*_QUOTES, *_QUOTES.values(), '"'))
+        visible=[]
         for char in line:
+            inside=bool(quotes)
             if char in _QUOTES:
                 quotes.append(_QUOTES[char])
             elif quotes and char == quotes[-1]:
                 quotes.pop()
-            elif char == '"':
-                quotes.append('"')
-        yield line, quoted or indented
+            elif char == '"' or (mask_quotes and char == "'"):
+                quotes.append(char)
+            visible.append(' ' if inside or quotes or char in _QUOTES.values() else char)
+        yield (''.join(visible), indented) if mask_quotes else (line, quoted or indented)
+
+
+def sticker_only_request(text):
+    """Recognize explicit request prose only, never quoted/code examples.
+
+    This suppresses optional progress text; it does not execute an action or
+    infer how many stickers a model/tool should select.
+    """
+    prose = '\n'.join(line for line, protected in _literal_lines(str(text or ''), mask_quotes=True) if not protected)
+    prose = re.sub(r'(`+).*?\1', ' ', prose, flags=re.S)
+    sticker = r'(?:表情包?|贴图)'
+    negated = r'(?:不要|别|不用|不需要|不能|不想)\s*$'
+    pure = r'(?:只(?:要|发|用|给|回(?:复)?)|仅(?:要|发|用|给|回(?:复)?)?|纯)[^。！？；\n]{0,32}?' + sticker
+    if any(not re.search(negated, prose[:m.start()]) for m in re.finditer(pure, prose)):
+        return True
+    no_text = r'(?:不要|不用|别|无需|不需要|不带|不加)\s*(?:发(?:送)?|加|带|有)?\s*(?:任何|额外|附加)?\s*(?:文字|文本|气泡)'
+    request = r'(?:发|给|回(?:复)?|来|要)[^。！？；\n]{0,32}?' + sticker
+    return bool(re.search(no_text, prose) and
+                any(not re.search(negated, prose[:m.start()]) for m in re.finditer(request, prose)))
 
 
 def split_chat_actions(text):

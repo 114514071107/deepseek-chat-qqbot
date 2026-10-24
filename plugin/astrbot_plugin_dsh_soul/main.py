@@ -21,7 +21,7 @@ import websearch
 from network_safety import fetch_public_bytes
 from tool_permissions import authorize, tool_guard, install_executor_guard, trusted_plugin_tool
 from file_safety import safe_assistant_path
-from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal
+from chat_style import CHAT_STYLE, format_qq_text, preserve_literal_message, split_chat_actions, preserve_sticker_literal, sticker_only_request
 from session_scope import Scope, Target, bind_scope, install_policy_adapters
 from task_runtime import Runtime, managed, check_current, work_context, current_token, background_work, current_budget_job
 from state_store import read_json, read_text, write_json, write_text, StateController, StateError, person_ledger_key
@@ -1154,6 +1154,17 @@ class DshSoul(Star):
             event.set_extra("_dsh_feedback", state)
         return state
 
+    def _feedback_suppressed(self, event):
+        if event.get_extra("_dsh_sticker_only") or event.get_extra("_dsh_silent_feedback"):
+            return True
+        token = event.get_extra("_dsh_work")
+        items = [event.get_extra("_dsh_input") or {}]
+        items += getattr(self, "batch_buf", {}).get(token.key if token else "", [])
+        if any(sticker_only_request(text) for text in [getattr(event, "message_str", "")] + [i.get("text", "") for i in items]):
+            event.set_extra("_dsh_silent_feedback", True)
+            return True
+        return False
+
     def _close_feedback(self, event):
         state = self._feedback(event)
         state["closed"].set()
@@ -1543,6 +1554,8 @@ class DshSoul(Star):
             item = event.get_extra("_dsh_input")
             if item is not None:
                 items = [item] + self.batch_buf.pop(uid, [])
+                if any(sticker_only_request(entry.get("text", "")) for entry in items):
+                    event.set_extra("_dsh_silent_feedback", True)
                 for pending in items:
                     ready = pending.get("ready")
                     if ready is not None and not ready.is_set():
@@ -2904,6 +2917,7 @@ class DshSoul(Star):
         uid = scope.key
         if only_sticker is True:
             event.set_extra("_dsh_sticker_only", True)
+            self._close_feedback(event)
         umo = scope.target
         row = _pick_sticker(query)
         if not row:
@@ -3283,7 +3297,7 @@ class DshSoul(Star):
         if not token or not token.request or event is None or event.get_extra("_dsh_work") != token:
             return
         state = self._feedback(event)
-        if state["closed"].is_set() or state["claimed"]:
+        if state["closed"].is_set() or state["claimed"] or self._feedback_suppressed(event):
             return
         state["claimed"] = True  # at most one feedback per request, not per user
         task = asyncio.current_task()
@@ -3297,8 +3311,10 @@ class DshSoul(Star):
                     return
                 except TimeoutError:
                     pass
+            if self._feedback_suppressed(event):
+                return
             t = await self._make_react(uid, scene, last_text)
-            if state["closed"].is_set():
+            if state["closed"].is_set() or self._feedback_suppressed(event):
                 return
             check_current()
             if t not in ("正在处理这条消息", "稍等，我整理一下"):
