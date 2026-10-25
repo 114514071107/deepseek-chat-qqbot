@@ -54,12 +54,13 @@ test('pagination, empty modes, legacy and invalid input have explicit bounds',as
   const legacy=byScope(await f.get('/api/people'),'legacy');
   assert.equal((await f.get('/api/people/history?person='+legacy.id+'&mode=legacy')).entries[0].text,'LEGACY-ONLY');
 });
-test('mapping needs confirmation/current revision and rejects legacy or fabricated persons',async t=>{
+test('mapping needs confirmation/current revision; explicit legacy identity confirmation preserves unknown scene',async t=>{
   const f=await fixture(t);const list=await f.get('/api/people');const body={left:byScope(list,'p1').id,right:byScope(list,'g1').id,revision:list.revision};
   assert.equal((await f.post('/api/people/link',body)).ok,false);
   assert.equal((await f.post('/api/people/link',{...body,confirm:true})).ok,true);
   assert.equal((await f.post('/api/people/link',{...body,confirm:true})).ok,false);
-  assert.equal((await link(f,'p1','legacy')).ok,false);
+  assert.equal((await link(f,'p1','legacy')).ok,true);
+  assert.equal(byScope(await f.get('/api/people'),'p1').sources.find(o=>o.uid==='legacy').kind,'legacy');
   assert.equal((await f.post('/api/people/unlink',{person:'fake',scope:'p1',confirm:true,revision:(await f.get('/api/people')).revision})).ok,false);
 });
 test('authentication, cross-origin, media and original scope operations remain protected',async t=>{
@@ -114,5 +115,16 @@ test('deny API is authenticated, source protected, confirmed and display-only',a
   assert.equal((await f.post('/api/people/deny',body)).ok,true);
   const next=await f.get('/api/people');assert.notEqual(byScope(next,'p1').id,byScope(next,'g1').id);
   assert.match(byScope(next,'p1').basis.join(' '),/否认/);
+  assert.equal(fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8'),before);
+});
+test('standalone confirmation preserves authentication, source checks, revision and raw data',async t=>{
+  const f=await fixture(t),list=await f.get('/api/people'),body={person:byScope(list,'p1').id,revision:list.revision,confirm:true};
+  const before=fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8');
+  assert.equal((await fetch(f.base+'/api/people/confirm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)})).status,401);
+  assert.equal((await fetch(f.base+'/api/people/confirm',{method:'POST',headers:{...f.headers,origin:'http://evil.invalid','content-type':'application/json'},body:JSON.stringify(body)})).status,403);
+  assert.equal((await f.post('/api/people/confirm',{...body,confirm:false})).ok,false);
+  assert.equal((await f.post('/api/people/confirm',body)).ok,true);
+  assert.equal((await f.post('/api/people/confirm',body)).ok,false);
+  assert.equal(byScope(await f.get('/api/people'),'p1').status,'manual_confirmed');
   assert.equal(fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8'),before);
 });

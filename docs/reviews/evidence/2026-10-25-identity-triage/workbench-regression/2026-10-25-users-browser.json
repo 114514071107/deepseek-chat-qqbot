@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-25",
+  "browser": "installed Edge / bundled Playwright",
+  "synthetic_only": true,
+  "checks": [
+    "separate unconfirmed origins; no name-based merge",
+    "UI confirmation links private plus two groups into one entry",
+    "group and specific-group filtering preserve speaker/source; unrelated replies absent",
+    "loading clears old rows; delayed specific-group response cannot replace another group",
+    "private projection and authenticated image rendering",
+    "out-of-order private response cannot replace a new person",
+    "empty mode is explicit",
+    "read error and retry recover without old private content",
+    "UI unlink detaches one origin without rewriting records",
+    "explicit source history errors are visible and its refresh recovers",
+    "explicit operation source survives refresh; points request targets only original g1",
+    "delete requires explicit g1 and selected data layer; aggregate not expanded",
+    "keyboard scene switch; 390px view has no horizontal page overflow",
+    "legacy retains a separate inspectable entry",
+    "association search finds an origin beyond the first 100-entry list page",
+    "list failure clears private content and explicit retry restores current data",
+    "empty catalog has a clear next step"
+  ],
+  "js_errors": [],
+  "history_unchanged": true
+}

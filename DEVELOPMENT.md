@@ -13,6 +13,12 @@
 
 ## Git 日常流程
 
+管理工作台的用户/待确认/旧档分区、可靠身份及资料别名规则和本轮回归见
+[用户身份盘点记录](docs/reviews/2026-10-25-user-identity-triage.md)。配套发布 Console 时新增
+`console/people-sources.js` 必须与 `user-workbench.js`、server 和 public 页面整套复制；只重启 Bot 不会更新 Node 或页面。
+`console_people_v1.json` 是仅供管理展示的映射（兼容 v1，写 v2）；来源不明旧档关联人物后仍保留未知场景。
+生产数据、映射、昵称及原始截图不得加入 Git，不因改展示而迁移原 scope/历史/账本。
+
 在源码目录打开 PowerShell：
 
 ```powershell

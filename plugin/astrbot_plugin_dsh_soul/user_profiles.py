@@ -111,6 +111,7 @@ def record_profile(event, scope, directory):
     if store.get('version') != 1 or not isinstance(store.get('sources'), dict):
         raise ValueError('unsupported management profile store')
     old = store['sources'].get(scope.key, {})
+    row['first_seen_at'] = old.get('first_seen_at', old.get('observed_at', time.time()))
     if old.get('app') and row.get('app') and old['app'] != row['app']:
         row['identity_conflict'] = True
     if old.get('identity') and row.get('identity') and old['identity'] != row['identity']:

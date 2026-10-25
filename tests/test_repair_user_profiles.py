@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from repair_pipeline_support import load_pipeline
 from test_repair_session_scope import ScopeEvent
 from session_scope import bind_scope
@@ -11,6 +12,16 @@ from user_profiles import observe, record_profile
 
 
 class ProfileCaptureRegression(unittest.TestCase):
+    def test_first_observation_stays_fixed_when_a_source_renames(self):
+        with tempfile.TemporaryDirectory() as root:
+            event,scope,_=self.event(name='第一称呼',at=100)
+            with patch('user_profiles.time.time',return_value=1000):record_profile(event,scope,root)
+            event,scope,_=self.event(name='更新称呼',at=200)
+            with patch('user_profiles.time.time',return_value=2000):record_profile(event,scope,root)
+            row=json.loads((Path(root)/'workbench_profiles_v1.json').read_text(encoding='utf-8'))['sources'][scope.key]
+            self.assertEqual(row.get('first_seen_at'),1000)
+            self.assertEqual(row['nickname']['value'],'更新称呼')
+
     def event(self, *, group='', platform='qq_official', name='平台用户名', at=100):
         event = ScopeEvent('123456',group,platform=platform)
         event.message_obj.self_id='654321'

@@ -91,6 +91,11 @@
   .scene-button[aria-pressed="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
   .source-list { padding-left:20px; overflow-wrap:anywhere; }
   #people-detail select { max-width:100%; }
+  .people-section { margin:18px 0; border-top:1px solid var(--line); padding-top:12px; }
+  .people-section h3 { margin:0; font-size:15px; }
+  #people-review { color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; width:min(640px,calc(100% - 24px)); max-height:85vh; overflow:auto; }
+  #people-review::backdrop { background:rgba(20,30,45,.4); }
+  #people-counts { grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }
   details > summary { cursor:pointer; font-weight:600; }
   @media (max-width:600px) { header { flex-wrap:wrap; padding:12px; } main,nav { padding:12px; } .uchips { gap:8px; } .uchip { min-width:130px; flex:1; } .card { padding:12px; } }
   .uchip .un { font-weight:700; font-size:14px; overflow-wrap:anywhere; }
@@ -121,7 +126,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261025-auto-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261025-triage-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });

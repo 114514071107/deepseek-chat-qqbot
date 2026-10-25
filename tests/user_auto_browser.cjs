@@ -21,7 +21,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
   f.save('scopes_v2.json',f.scopes);f.save('history_v2.json',f.histories);f.save('workbench_profiles_v1.json',profiles);
   const original=fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8');
   const server=createConsoleServer({dsh:root,port:0,token});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  const evidence=path.resolve(__dirname,'../docs/reviews/evidence/2026-10-25-user-auto');fs.mkdirSync(evidence,{recursive:true});
+  const evidence=process.env.DSH_AUTO_BROWSER_EVIDENCE||path.resolve(__dirname,'../docs/reviews/evidence/2026-10-25-user-auto');fs.mkdirSync(evidence,{recursive:true});
   let browser;const checks=[];
   try{
     browser=await chromium.launch({channel:'msedge',headless:true});
@@ -31,6 +31,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
     const catalog=async()=>(await context.request.get(base+'/api/people')).json();
     const person=async uid=>(await catalog()).people.find(p=>p.sources.some(s=>s.uid===uid));
     const settled=()=>page.waitForFunction(()=>document.querySelector('#people-range')?.textContent.includes('本页'));
+    const confirmReview=async()=>{await page.locator('#people-review-confirm').click();await page.waitForFunction(()=>!document.querySelector('#people-review')&&(!document.querySelector('#people-associations')?.open||document.querySelector('#people-link-result')?.textContent));};
     const choose=async uid=>{const p=await person(uid);await page.locator('[data-person="'+p.id+'"]').click();await settled();return p;};
     await page.goto(base);await page.waitForLoadState('networkidle');await page.locator('#auto-ref').uncheck();
     await page.getByRole('button',{name:'用户',exact:true}).click();await settled();
@@ -46,7 +47,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
     await choose('n1');assert.match(await page.locator('#people-status').innerText(),/QQ 昵称/);
     assert.equal(await page.locator('.uchip img').count(),0);assert.equal(await page.evaluate(()=>window.__profileXss),undefined);
     assert.match(await page.locator('#people-detail h3').innerText(),/<img/);
-    await page.getByText('来源与人工关联',{exact:true}).click();assert.match(await page.locator('.source-list').first().innerText(),/群名片/);
+    await page.getByText('来源与人工关联',{exact:true}).click();assert.match(await page.locator('#people-associations .source-list').first().innerText(),/群名片/);
     checks.push('QQ nickname source and group-card nature are distinct; HTML nickname stays inert text');
     await page.screenshot({path:path.join(evidence,'nickname-and-evidence.png'),fullPage:true});
     await choose('p1');await page.getByRole('button',{name:'群聊',exact:true}).click();await settled();
@@ -56,14 +57,14 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
     await page.getByRole('button',{name:'私聊',exact:true}).click();await settled();assert.equal(await page.locator('#people-history .msg').count(),2);
     checks.push('private/all-group/specific-group switch preserves actual speaker, source and accepted replies');
     await page.getByText('来源与人工关联',{exact:true}).click();await page.locator('#people-unlink-source').selectOption('g1');
-    await page.locator('#people-unlink').click();await settled();
+    await page.locator('#people-unlink').click();await confirmReview();await settled();
     assert.notEqual((await person('p1')).id,(await person('g1')).id);await page.locator('#btn-ref').click();await settled();
     assert.notEqual((await person('p1')).id,(await person('g1')).id);checks.push('UI unlink persists refusal across refresh; stale automatic evidence cannot rejoin');
     await choose('p1');await page.getByText('来源与人工关联',{exact:true}).click();await page.locator('#people-associate').selectOption((await person('g1')).id);
-    await page.locator('#people-link').click();await settled();assert.equal((await person('p1')).status,'manual_confirmed');
+    await page.locator('#people-link').click();await confirmReview();await settled();assert.equal((await person('p1')).status,'manual_confirmed');
     assert.equal((await person('p1')).sources.length,4);checks.push('explicit UI reconfirmation restores one group and stays manual, never platform-certified');
     await choose('p1');await page.getByText('来源与人工关联',{exact:true}).click();await page.locator('#people-associate').selectOption((await person('other')).id);
-    await page.locator('#people-deny').click();await settled();await choose('other');
+    await page.locator('#people-deny').click();await confirmReview();await settled();await choose('other');
     assert.match(await page.locator('#people-detail').innerText(),/人工解除\/否认不关联/);checks.push('UI deny records a visible decision without joining the candidate');
     await page.locator('#people-search').fill('新昵称');await page.getByRole('button',{name:'查找用户',exact:true}).click();await settled();
     assert.equal(await page.locator('.uchip').count(),1);assert.equal((await person('n1')).sources.length,2);

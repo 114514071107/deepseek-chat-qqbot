@@ -27,8 +27,9 @@ test('no evidence and equal strings in different domains never guess identity',t
   const list=f.w.list();assert.notEqual(by(list,'p1').id,by(list,'g1').id);
   assert.equal(by(list,'p1').status,'pending');assert.equal(by(list,'legacy').status,'legacy');
 });
-test('nickname types and newest source are visible without using a note as a QQ nickname',t=>{
+test('nickname types and an established source stay visible without using a note as a QQ nickname',t=>{
   const f=fixture(t);f.profile('p1','private-A',30,'新版');f.profile('g1','private-A',10,'旧版');
+  f.profiles.sources.p1.first_seen_at=100;f.profiles.sources.g1.first_seen_at=200;f.save('workbench_profiles_v1.json',f.profiles);
   let p=by(f.w.list(),'p1');assert.equal(p.nickname,null);assert.match(p.label,/新版/);
   assert.equal(p.profile_kind,'platform_name');assert.match(p.label,/平台用户名/);
   f.profiles.sources.p1.nickname={value:'新QQ昵称',kind:'qq_nickname',source:'onebot.sender.nickname',at:40,message_id:'new'};
@@ -83,6 +84,7 @@ test('OneBot numeric account auto merges while nickname updates remain display o
     f.scopes[uid]={...f.scopes[uid],platform:'aiocqhttp',bot:'654321',sender:'123456'};
     f.profile(uid,'123456',uid==='g2'?30:20,uid==='g2'?'改名':'老昵称');
     const p=f.profiles.sources[uid];p.app='654321';p.identity={namespace:'onebot_qq',value:'123456',basis:'onebot_message_sender'};
+    p.first_seen_at=uid==='g2'?50:100;
     p.nickname.kind='qq_nickname';p.nickname.source='onebot.sender.nickname';
     p.group_card={value:'仅群名片',kind:'group_card',source:'onebot.sender.card',at:20,message_id:'card'};
   }

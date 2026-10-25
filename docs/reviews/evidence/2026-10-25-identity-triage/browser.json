@@ -1,0 +1,23 @@
+{
+  "date": "2026-10-25",
+  "synthetic_only": true,
+  "checks": [
+    "six people / eighteen keys show 4 confirmed, 3 pending sources, 2 archives, 12 conversations in separate sections",
+    "derived metadata is inspectable and attached to actual origins, never counted as another person",
+    "category filter works; missing mappings stay separate, verified SDK placeholders join without deleting app or instance boundaries",
+    "private / all-groups / selected group preserve actual speakers, origins and accepted replies",
+    "association preview shows exact sources; cancel has keyboard focus and Escape writes nothing",
+    "explicit association updates counts; unlink persists across refresh and does not silently rejoin",
+    "denial is visible and does not expand the person",
+    "human-confirmed archive joins the person but stays in unknown-scene tab and cannot become a private/group management target",
+    "explicit independent-user confirmation and revocation keep all other mappings intact",
+    "unknown write result is never claimed unsaved and cannot be blindly resubmitted before refresh",
+    "established nickname source remains stable, its rename updates, conflicting later source is visible, HTML is inert",
+    "search includes current names and preserves classification",
+    "auto-refresh stays checked, pauses for source review and actually repaints after collapse; no residual dialog",
+    "390px layout and keyboard scene switching remain usable",
+    "all original scopes, histories, names and ledgers unchanged; no browser JavaScript errors"
+  ],
+  "js_errors": [],
+  "raw_data_unchanged": true
+}
