@@ -190,4 +190,53 @@ class LauncherRegression(unittest.TestCase):
                 print(f'launcher matrix exercised: {Path(shell).name}')
 
 
+@unittest.skipUnless(os.name == 'nt', 'Windows execution contract')
+class LauncherExitCodeRegression(unittest.TestCase):
+    def test_cmd_selects_once_and_preserves_quoted_arguments_and_exit_code(self):
+        with tempfile.TemporaryDirectory(prefix='dsh cmd args 空格 ') as tmp:
+            root=Path(tmp);entry=root/'tools with spaces';entry.mkdir()
+            shutil.copyfile(ENTRY,entry/'start-bot.cmd')
+            (entry/'start-bot.ps1').write_text("param([string]$RuntimeRoot,[string]$Marker,[int]$BotPort)\n[IO.File]::AppendAllText((Join-Path $RuntimeRoot 'calls.txt'),($PSVersionTable.PSVersion.Major.ToString()+'|'+$Marker+'|'+$BotPort+[Environment]::NewLine))\nexit 37\n",encoding='utf-8-sig')
+            base=os.environ.copy();base['DSH_LAUNCHER_NO_PAUSE']='1'
+            base['PATH']=str(Path(os.environ['SystemRoot'])/'System32')
+            command='cmd.exe /d /s /c "'+subprocess.list2cmdline([str(entry/'start-bot.cmd'),'-RuntimeRoot',str(root),'-Marker','two words & 中文 literal','-BotPort','45678'])+'"'
+            for preferred,want in [(True,'7'),(False,'5')]:
+                env=base.copy()
+                if preferred:env['PATH']=str(Path(shutil.which('pwsh.exe')).parent)+';'+env['PATH']
+                result=subprocess.run(command,cwd=os.environ['SystemRoot'],env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=15)
+                self.assertEqual(result.returncode,37,result.stdout+result.stderr)
+                lines=(root/'calls.txt').read_text(encoding='utf-8-sig').splitlines()
+                self.assertEqual(lines[-1],want+'|two words & 中文 literal|45678')
+                self.assertEqual(len(lines),1 if preferred else 2,'failed business script was retried with another shell')
+
+    def test_fast_worker_exit_before_identity_uses_its_exact_observation(self):
+        for shell in [shutil.which('pwsh.exe'),shutil.which('powershell.exe')]:
+            with self.subTest(shell=Path(shell).name),tempfile.TemporaryDirectory(prefix='dsh early exit ') as tmp:
+                root=Path(tmp);(root/'venv/Scripts').mkdir(parents=True);(root/'deployment-config').mkdir()
+                shutil.copyfile(Path(sys.base_prefix)/'python.exe',root/'venv/Scripts/astrbot.exe')
+                (root/'deployment-config/runtime.json').write_text('{"OwnerPlatformId":"fixture"}',encoding='utf-8')
+                (root/'run').write_text('import sys;sys.exit(23)',encoding='utf-8')
+                # Fault-inject unavailable process.Path in a temporary copy only.
+                copied=root/'start-bot.ps1';copied.write_text(CORE.read_text(encoding='utf-8-sig').replace('function Get-Identity($ProcessId) {','function Get-Identity($ProcessId) {\n    return $null'),encoding='utf-8-sig')
+                shutil.copyfile(ROOT/'scripts/launcher-process.cs',root/'launcher-process.cs')
+                env=os.environ.copy();env.update(PYTHONHOME=sys.base_prefix,PATH=sys.base_prefix+';'+str(Path(os.environ['SystemRoot'])/'System32'))
+                child=subprocess.run([shell,'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(copied),'-RuntimeRoot',str(root),'-BotPort',str(port()),'-TimeoutSeconds','8'],cwd=os.environ['SystemRoot'],env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=20)
+                self.assertEqual(child.returncode,23,child.stdout+child.stderr)
+
+    def test_child_exit_code_is_preserved_under_both_real_shells(self):
+        for shell in [shutil.which('pwsh.exe'), shutil.which('powershell.exe')]:
+            with self.subTest(shell=Path(shell).name), tempfile.TemporaryDirectory(prefix='dsh exit 空格 ') as tmp:
+                root=Path(tmp);(root/'venv/Scripts').mkdir(parents=True);(root/'deployment-config').mkdir()
+                shutil.copyfile(Path(sys.base_prefix)/'python.exe',root/'venv/Scripts/astrbot.exe')
+                (root/'deployment-config/runtime.json').write_text('{"OwnerPlatformId":"fixture"}',encoding='utf-8')
+                (root/'run').write_text('import sys;sys.exit(23)',encoding='utf-8')
+                env=os.environ.copy();env['PYTHONHOME']=sys.base_prefix
+                env['PATH']=sys.base_prefix+';'+str(Path(os.environ['SystemRoot'])/'System32')
+                child=subprocess.run([shell,'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(CORE),
+                    '-RuntimeRoot',str(root),'-BotPort',str(port()),'-TimeoutSeconds','8'],cwd=os.environ['SystemRoot'],
+                    env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=20)
+                self.assertIn('exit code 23',child.stdout+child.stderr)
+                self.assertEqual(child.returncode,23,child.stdout+child.stderr)
+
+
 if __name__ == '__main__': unittest.main()

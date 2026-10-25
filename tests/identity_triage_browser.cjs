@@ -5,7 +5,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-triage-browser-')),f=seedTriage(root),token='synthetic-triage-token-1234567890123456';
   const originals=Object.fromEntries(['scopes_v2.json','history_v2.json','names_all.json','points_all.json'].map(n=>[n,fs.readFileSync(path.join(f.data,n),'utf8')]));
   const server=createConsoleServer({dsh:root,port:0,token});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  const evidence=path.resolve(__dirname,'../docs/reviews/evidence/2026-10-25-identity-triage');fs.mkdirSync(evidence,{recursive:true});
+  const evidence=process.env.DSH_TRIAGE_BROWSER_EVIDENCE||path.resolve(__dirname,'../docs/reviews/evidence/2026-10-25-identity-triage');fs.mkdirSync(evidence,{recursive:true});
   let browser;const checks=[];
   try{
     browser=await chromium.launch({channel:'msedge',headless:true});

@@ -12,6 +12,27 @@ from user_profiles import observe, record_profile
 
 
 class ProfileCaptureRegression(unittest.TestCase):
+    def test_conflicting_identity_keeps_both_proofs_even_when_event_arrives_late(self):
+        with tempfile.TemporaryDirectory() as root:
+            first,scope,_=self.event(group='group-one',at=300);record_profile(first,scope,root)
+            late,newscope,raw=self.event(group='group-one',at=100);raw['author']['user_openid']='conflicting-user'
+            record_profile(late,newscope,root)
+            row=json.loads((Path(root)/'workbench_profiles_v1.json').read_text(encoding='utf-8'))['sources'][scope.key]
+            self.assertTrue(row['identity_conflict'])
+            self.assertEqual({p['identity']['value'] for p in row['identity_conflicts']},{'123456','conflicting-user'})
+            self.assertEqual(row['identity']['value'],'123456')
+
+    def test_sparse_later_event_preserves_prior_identity_evidence_and_its_time(self):
+        with tempfile.TemporaryDirectory() as root:
+            first,scope,_=self.event(group='group-one',at=200);record_profile(first,scope,root)
+            later,newscope,raw=self.event(group='group-one',at=300)
+            later.bot=None;raw['author'].pop('user_openid')
+            record_profile(later,newscope,root)
+            row=json.loads((Path(root)/'workbench_profiles_v1.json').read_text(encoding='utf-8'))['sources'][scope.key]
+            self.assertEqual(row['app'],'fixture-app')
+            self.assertEqual(row['identity']['value'],'123456')
+            self.assertEqual(row['identity_observed_at'],200)
+
     def test_first_observation_stays_fixed_when_a_source_renames(self):
         with tempfile.TemporaryDirectory() as root:
             event,scope,_=self.event(name='第一称呼',at=100)

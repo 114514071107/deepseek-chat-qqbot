@@ -13,6 +13,12 @@
 
 ## Git 日常流程
 
+2026-10-26 四项补修见[复现、规则及交付记录](docs/reviews/2026-10-26-console-lifecycle-repairs.md)。
+Console 前后端版本 `20261026-lifecycle-1`；新增 `public/reading-state.js` 必须与全部工作台文件配套发布。
+历史来源按记录只读派生；派生视图不是管理目标。Bot 回执/历史增加可选 provenance，原存储版本和来源权限不变。
+唯一用户 Bot cmd 为 `scripts/start-bot.cmd`，两个旧兼容 cmd 已从开发仓库删除；生产旧文件尚未移除。
+对应生产清理、完整文件清单和回退限制见记录，不能仅复制 cmd 或仅重启 Bot 更新控制台。
+
 管理工作台的用户/待确认/旧档分区、可靠身份及资料别名规则和本轮回归见
 [用户身份盘点记录](docs/reviews/2026-10-25-user-identity-triage.md)。配套发布 Console 时新增
 `console/people-sources.js` 必须与 `user-workbench.js`、server 和 public 页面整套复制；只重启 Bot 不会更新 Node 或页面。
@@ -144,7 +150,7 @@ Set-Location D:\dsbot
 | `plugin\astrbot_plugin_dsh_soul` | `D:\dsbot\data\plugins\astrbot_plugin_dsh_soul` |
 | `plugin\astrbot_plugin_ds_balance` | `D:\dsbot\data\plugins\astrbot_plugin_ds_balance` |
 | `console` | `D:\dsbot\dsh-console` |
-| `scripts\run-astrbot.cmd` | `D:\dsbot\run-astrbot.cmd` |
+| `scripts\start-bot.cmd`、`start-bot.ps1`、`launcher-process.cs` | `D:\dsbot` 根目录，同目录成套安装 |
 
 插件与控制台源码中的 `YOUR_*` 是公开模板占位符，只在部署副本填写；不要把已填真实身份的副本直接复制回 Git 仓库。`data_template` 仅用于新实例初始化，包含出厂人设，不含运行时记忆或图库。
 

@@ -18,7 +18,7 @@ test('trusted author mappings auto join private and two groups, including a late
   const f=fixture(t);f.profile('p1');f.profile('g1');
   assert.equal(by(f.w.list(),'p1').sources.length,2);
   f.profile('g2');const result=f.w.list(),p=by(result,'p1');
-  assert.equal(p.sources.length,3);assert.equal(result.total,3);assert.equal(p.status,'automatic_confirmed');
+  assert.equal(p.sources.length,3);assert.equal(result.total,4);assert.equal(p.status,'automatic_confirmed');
   assert.equal(by(createUserWorkbench(f.data).list(),'p1').id,p.id);
   assert.equal(by(f.w.list(),'p1').id,p.id);
 });
@@ -44,7 +44,7 @@ test('unlink of automatic sources persists rejection instead of silently rejoini
   assert.equal(f.w.unlink({person:p.id,scope:'g1',confirm:true,revision:list.revision}).ok,true);
   list=createUserWorkbench(f.data).list();assert.notEqual(by(list,'p1').id,by(list,'g1').id);
   assert.equal(by(list,'g1').status,'pending');assert.equal(by(list,'g1').conflict,true);
-  assert.equal(f.w.list().people.length,4);
+  assert.equal(f.w.list().people.length,5);
 });
 test('old manual groups stay manual and future reliable source joins without overwriting decisions',t=>{
   const f=fixture(t);f.save('console_people_v1.json',{version:1,groups:[['p1','g1']]});

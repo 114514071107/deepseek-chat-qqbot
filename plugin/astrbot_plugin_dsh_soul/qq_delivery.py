@@ -5,7 +5,8 @@ authenticated session, deliberately bypasses SDK retries and proactive fallbacks
 """
 import asyncio
 import base64
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+import copy
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 import time
@@ -17,6 +18,16 @@ from resource_budget import BudgetExceeded
 
 _delivery_budget = ContextVar('dsh_delivery_budget', default=None)
 _message_dispatch = ContextVar('dsh_message_dispatch', default=None)
+_outbound_provenance = ContextVar('dsh_outbound_provenance', default=None)
+
+
+@contextmanager
+def outbound_context(provenance):
+    saved = _outbound_provenance.set(copy.deepcopy(provenance))
+    try:
+        yield
+    finally:
+        _outbound_provenance.reset(saved)
 
 
 def check_delivery_budget():
@@ -60,6 +71,7 @@ class DeliveryResult:
     fallback_from: dict = field(default_factory=dict)
     attempt_id: str = field(default_factory=lambda:uuid.uuid4().hex)
     media: dict = field(default_factory=dict)
+    provenance: dict = field(default_factory=dict)
 
     def __bool__(self): return self.status == 'accepted'
     def public(self): return asdict(self)
@@ -161,6 +173,8 @@ class QQDelivery:
         self.permits=context._dsh_reply_permits
 
     def record(self,target,result):
+        if not result.provenance and _outbound_provenance.get():
+            result.provenance = copy.deepcopy(_outbound_provenance.get())
         if self.audit:
             try:
                 self.audit(target,result)

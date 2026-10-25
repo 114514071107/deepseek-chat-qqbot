@@ -38,7 +38,7 @@ class RealLifecycleRegression(unittest.IsolatedAsyncioTestCase):
             obj._make_react = react
             with work_context(token, event):
                 task = asyncio.create_task(obj._react_and_send(scope.target, scope.key, 'quick', 'question'))
-                await started.wait()
+                await asyncio.wait_for(started.wait(),3)
                 await obj.capture(event, SimpleNamespace(result_chain=ResultChain('已根据图片回答')))
                 release.set()
                 await asyncio.gather(task, return_exceptions=True)

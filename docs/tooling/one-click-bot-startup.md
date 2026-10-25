@@ -2,6 +2,8 @@
 
 2026-10-24。本轮仅交付开发源码与临时实例的离线证据，未安装到生产、未启动真实 Bot/Console。
 
+2026-10-26 更新：开发仓库仅保留 `scripts/start-bot.cmd` 一个用户 Bot cmd；两个旧兼容入口已删除，Console 独立入口保留。本次没有更新生产，生产五个启动文件仍在，待另行部署时按[四项补修记录](../reviews/2026-10-26-console-lifecycle-repairs.md)同步和清理。下文安装步骤以本次更新为准，原日期的安装/验收事实保留。
+
 ## 入口与使用
 
 双击仓库 `scripts/start-bot.cmd`，默认实例为 `D:\dsbot`，只启动 Bot。直接执行同一核心脚本：
@@ -28,7 +30,7 @@ powershell.exe -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\st
 | BotPort | 6185，用于检查已配置 Bot 的监听，不修改 AstrBot 配置 |
 | ConsolePort | 7850，同时作为 Console 的 `--port`、PORT 环境和监听核验端口 |
 
-`InternalWorker/Component/WorkerId` 是隐藏 worker 的内部协议，不供双击入口传入。旧 `run-astrbot.cmd`、`start-astrbot-launcher.cmd` 已改为转交新入口并保留参数；实际启动、配置、等待和退出码在 PowerShell 中实现。
+`InternalWorker/Component/WorkerId` 是隐藏 worker 的内部协议，不供双击入口传入。实际启动、配置、等待和退出码在 PowerShell 中实现。旧 `run-astrbot.cmd`、`start-astrbot-launcher.cmd` 不再作为仓库入口；维护者须在获准生产部署时更新快捷方式和调用方，再备份移出旧文件。本轮不会删除生产文件。
 
 ## 依赖与保护配置
 
@@ -60,7 +62,7 @@ worker 由 Windows 隐藏后台启动，应用由 worker 监管。每个 worker 
 - `<RuntimeRoot>\.launcher\Bot.json`、Console.json：当前 worker 身份和端口；不能手工伪造/复用其他进程 PID。
 - `<RuntimeRoot>\.launcher\<id>.json`：必要的 UTC 时间、组件、PID、阶段及退出码。正常/非零退出记录 exited；启动监管失败记录 worker-failed。被强杀或关机时可能无法写入终态，必须保留“原因/退出码未知”，不能把上一条 running 当成仍在运行。
 
-失败返回非零并给出日志位置；unknown 退出不自动重启。不要将旧生产根目录 `astrbot-run.log` 的历史内容当作这套启动器的新日志。
+已观察到的子进程业务错误保留准确退出码（例如 23），包括 worker 提前退出而尚未取得身份的路径；缺配置、冲突、超时或不能确定的失败返回 1 并给出日志位置。只在执行前选择一次解释器，业务错误不会触发另换解释器重试。unknown 退出不自动重启。不要将旧生产根目录 `astrbot-run.log` 的历史内容当作这套启动器的新日志。
 
 ## 后续获准安装与回退
 
@@ -71,7 +73,7 @@ worker 由 Windows 隐藏后台启动，应用由 worker 监管。每个 worker 
 | scripts/start-bot.cmd | start-bot.cmd |
 | scripts/start-bot.ps1 | start-bot.ps1 |
 | scripts/launcher-process.cs | launcher-process.cs，与 PS1 同目录 |
-| scripts/run-astrbot.cmd、scripts/start-astrbot-launcher.cmd | 可选替换旧兼容入口，先备份 |
+| 生产原 run-astrbot.cmd、start-astrbot-launcher.cmd | 获准后备份移出运行根目录；不再安装兼容入口 |
 
 Console 的 DSH_RUNTIME_ROOT 支持需与此次 server.js 配套发布；插件修复也须配套整套模块，按[补修记录](../reviews/2026-10-24-real-qq-repair.md)及既有发布流程保留部署常量。不要复制配置模板覆盖真实 runtime.json/凭据，也不要把受保护启动脚本及配置复制回 Git。
 

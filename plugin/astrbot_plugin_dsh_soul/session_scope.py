@@ -159,6 +159,13 @@ class Scope:
 
 def bind_scope(event):
     """Run before AstrBot's model lock/history/workspace selection. Never infer old routes."""
+    obj=getattr(event,'message_obj',None)
+    raw=getattr(obj,'raw_message',None)
+    data=raw if isinstance(raw,dict) else getattr(raw,'raw_data',{})
+    self_id=str(getattr(obj,'self_id','') or '')
+    if (self_id and event.get_sender_id()==self_id) or (isinstance(data,dict) and data.get('post_type')=='message_sent'):
+        if callable(getattr(event,'stop_event',None)): event.stop_event()
+        raise asyncio.CancelledError('platform self message is not a new user request')
     existing=event.get_extra('_dsh_scope')
     if isinstance(existing,Scope): return existing
     from tool_permissions import caller

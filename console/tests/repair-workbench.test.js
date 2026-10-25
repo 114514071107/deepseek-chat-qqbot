@@ -17,7 +17,7 @@ async function link(f,left,right){const list=await f.get('/api/people');return f
 
 test('list contains no message bodies; ambiguous QQ identities and same names remain separate',async t=>{
   const f=await fixture(t),list=await f.get('/api/people');
-  assert.equal(list.ok,true);assert.equal(list.total,5);assert.equal(list.scope_count,5);
+  assert.equal(list.ok,true);assert.equal(list.total,6);assert.equal(list.scope_count,6);
   assert.notEqual(byScope(list,'p1').id,byScope(list,'other').id);
   assert.notEqual(byScope(list,'p1').id,byScope(list,'g1').id);
   assert.ok(!JSON.stringify(list).includes('SYNTHETIC-'));
@@ -27,7 +27,7 @@ test('explicit association produces one entry for private and two groups; unlink
   const f=await fixture(t);const before=fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8');
   assert.equal((await link(f,'p1','g1')).ok,true);assert.equal((await link(f,'p1','g2')).ok,true);
   const list=await f.get('/api/people'),person=byScope(list,'p1');
-  assert.equal(person.sources.length,3);assert.equal(list.total,3);assert.equal(list.scope_count,5);
+  assert.equal(person.sources.length,3);assert.equal(list.total,4);assert.equal(list.scope_count,6);
   const result=await f.post('/api/people/unlink',{person:person.id,scope:'g2',revision:list.revision,confirm:true});assert.equal(result.ok,true);
   assert.equal(byScope(await f.get('/api/people'),'p1').sources.length,2);
   assert.equal(fs.readFileSync(path.join(f.data,'history_v2.json'),'utf8'),before);

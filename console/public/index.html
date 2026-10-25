@@ -123,10 +123,11 @@
 </header>
 <nav id="tabs"></nav>
 <main id="view"></main>
+<script src="/assets/reading-state.js"></script>
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261025-triage-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261026-lifecycle-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -147,8 +148,10 @@ const TABS = [ ["status","状态"], ["users","用户"], ["logs","日志"], ["mem
 let cur = "status", timer = null, curUid = null, logFilter = { file: "dsh", q: "", lines: 300 };
 let swCache = null; // /api/switches 缓存（用户页用）
 let scopeDetailVersion = 0;
+let memoryVersion = 0;
 
 function tab(name) {
+  memoryVersion++;
   if(window.UserWorkbench)window.UserWorkbench.leave();
   cur = name;
   if (timer) { clearInterval(timer); timer = null; }
@@ -165,14 +168,12 @@ let _lastHtml = null;
   Object.defineProperty(_el, "innerHTML", {
     set(v) {
       if (v === _lastHtml) return; // 内容没变：不动 DOM，零闪烁
-      const sy = window.scrollY;
-      const sc = _el.querySelector("pre");
-      const st = sc ? sc.scrollTop : 0;
+      const reading = _lastHtml === null || _lastHtml === "" ? null : window.ReadingState.capture(_el);
+      const minimum = _el.style.minHeight;
+      if (reading) _el.style.minHeight = _el.getBoundingClientRect().height + 'px';
       _desc.set.call(this, v);
       _lastHtml = v;
-      window.scrollTo(0, sy);
-      const sc2 = _el.querySelector("pre");
-      if (sc2) sc2.scrollTop = st;
+      if (reading) queueMicrotask(() => { _el.style.minHeight=minimum; reading.restore(); });
     },
     get() { return _desc.get.call(this); },
   });
@@ -182,15 +183,19 @@ document.querySelectorAll("nav button").forEach((b) => (b.onclick = () => tab(b.
 
 // ---------- 随时刷新：手动按钮 + 自动刷新（输入中/播放中/通知页不打断） ----------
 const VIEWS = () => ({ status: vStatus, users: vUsers, logs: vLogs, memory: vMemory, stickers: vStickers, notify: vNotify });
-function refreshNow(manual) {
+let refreshing=false;
+async function refreshNow(manual) {
+  if(refreshing)return;
   const ae = document.activeElement;
   if (!manual && ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return; // 正在输入不打扰
   if (!manual && document.querySelector("audio") && Array.from(document.querySelectorAll("audio")).some((a) => !a.paused)) return; // 正在听语音
   if (!manual && document.getElementById("delete-panel")) return; // 保留未提交的删除选择
   if (!manual && cur === "notify") return; // 通知页有草稿
   if (!manual && cur === "users" && window.UserWorkbench?.busy()) return;
+  if (!manual && window.ReadingState.hasDraft($('#view'))) return;
   if (!manual && cur === "logs") return; // 日志页有自己的 5s 定时器
-  VIEWS()[cur]();
+  refreshing=true;
+  try { await VIEWS()[cur]({refresh:true,manual}); } finally { refreshing=false; }
   const d = new Date(), p = (n) => String(n).padStart(2, "0");
   $("#hdr-time").textContent = "更新于 " + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
 }
@@ -390,7 +395,7 @@ function histEntryHtml(e) {
       '<a href="' + mediaUrl(p) + '" target="_blank"><img class="h-img" src="' + mediaUrl(p) + '"></a>').join("") + "</div>";
   if (e.files && e.files.length)
     media += "<div>" + e.files.map((p,i) => '<a href="' + mediaUrl(p) + '" download>附件 ' + (i+1) + '</a>').join(" · ") + "</div>";
-  return '<div class="msg ' + (e.role === "assistant" ? "a" : "u") + '"><div class="meta">' +
+  return (e.source_projection?'<div class="h-note">历史来源依据：'+esc(e.source_projection.basis)+'；只读派生，原字段保留</div>':'')+'<div class="msg ' + (e.role === "assistant" ? "a" : "u") + '"><div class="meta">' +
     (e.role === "assistant" ? "她" : "对方") + " · " + fmtT(e.ts) + "</div>" + esc(txt) + media + "</div>";
 }
 // 老记录「动作：表情 X」无 sticker 键：按情绪桶取一张示意图（同桶只查一次）
@@ -410,12 +415,12 @@ async function hydrateStickerSamples(root) {
   }
 }
 
-async function vUsers() {
+async function vUsers(options={}) {
   if(!window.UserWorkbench||window.UserWorkbench.version!==FE_VER){
     $("#view").innerHTML='<div class="card" role="alert">用户工作台模块未加载或版本不匹配，请刷新并核对控制台文件同版。</div>';
     return;
   }
-  return window.UserWorkbench.render();
+  return window.UserWorkbench.render(options);
 }
 
 async function renderUserDetail() {
@@ -559,11 +564,21 @@ async function vLogs() {
     '<button class="act" id="lg-go">刷新</button><span class="dim" id="lg-auto"></span>' +
     '</div><pre id="lg-out">加载中…</pre></div>';
   $("#lg-file").value = logFilter.file; $("#lg-q").value = logFilter.q; $("#lg-n").value = logFilter.lines;
+  let first=true,loading=false;
   const load = async () => {
+    if(loading)return;
+    const out=$("#lg-out");loading=true;
+    try {
     logFilter = { file: $("#lg-file").value, q: $("#lg-q").value.trim(), lines: parseInt($("#lg-n").value, 10) };
     const r = await api("/api/logs?file=" + logFilter.file + "&lines=" + logFilter.lines + "&q=" + encodeURIComponent(logFilter.q));
-    $("#lg-out").textContent = r.lines.join("\n") || "（无匹配行）";
-    $("#lg-out").scrollTop = $("#lg-out").scrollHeight;
+    if(cur!=='logs'||!out.isConnected)return;
+    const top=out.scrollTop,left=out.scrollLeft,lineHeight=parseFloat(getComputedStyle(out).lineHeight);
+    const old=out.textContent.split('\n'),index=Math.floor(top/lineHeight),anchor=old[index],offset=top-index*lineHeight;
+    out.textContent = r.lines.join("\n") || "（无匹配行）";
+    const at=r.lines.indexOf(anchor);
+    out.scrollTop=first?out.scrollHeight:at>=0&&at===r.lines.lastIndexOf(anchor)?at*lineHeight+offset:top;
+    out.scrollLeft=left;first=false;
+    } finally {loading=false;}
   };
   $("#lg-go").onclick = load;
   await load();
@@ -577,27 +592,32 @@ async function uidSelector() {
   return (swCache.users || []).map((u) => ({ uid: u.uid, master: u.master, name: u.name }));
 }
 
-async function vMemory() {
+async function vMemory({refresh=false,manual=false}={}) {
+  const version=++memoryVersion;
   const users = await uidSelector();
   if (!curUid && users.length) curUid = users[0].uid;
+  const selectedUid=curUid;
+  const read=uid=>Promise.all([api('/api/thoughts?uid='+encodeURIComponent(uid)),api('/api/notes?uid='+encodeURIComponent(uid)),api('/api/session?uid='+encodeURIComponent(uid)),api('/api/memes?uid='+encodeURIComponent(uid))]);
+  const initial=await read(selectedUid);
+  if(version!==memoryVersion||cur!=='memory'||curUid!==selectedUid||refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)))return;
+  const reading=refresh?window.ReadingState.capture($('#view')):null;
   $("#view").innerHTML =
     '<div class="row"><select id="m-uid">' + users.map((u) => '<option value="' + u.uid + '"' + (u.uid === curUid ? " selected" : "") + ">" + (u.master ? "👑 " : "👤 ") + esc(u.name || u.uid.slice(0, 16) + "…") + "</option>").join("") + '</select><button class="act" id="m-load">加载</button></div>' +
     '<div class="grid"><div class="card"><h3>念头（可删除）</h3><div id="m-th"></div></div>' +
     '<div class="card"><h3>长期记忆</h3><pre id="m-notes"></pre></div>' +
     '<div class="card"><h3>会话摘要</h3><pre id="m-sess"></pre></div>' +
     '<div class="card"><h3>本来源学习资料（旧档图鉴保留）</h3><pre id="m-memes"></pre></div></div>';
-  const load = async () => {
+  const load = async (initial=null) => {
+    const loadVersion=initial?version:++memoryVersion;
     curUid = $("#m-uid").value;
-    const [th, notes, sess, memes] = await Promise.all([
-      api("/api/thoughts?uid=" + encodeURIComponent(curUid)),
-      api("/api/notes?uid=" + encodeURIComponent(curUid)),
-      api("/api/session?uid=" + encodeURIComponent(curUid)),
-      api("/api/memes?uid="+encodeURIComponent(curUid)),
-    ]);
+    const uid=curUid;
+    const [th,notes,sess,memes]=initial||await read(uid);
+    if(loadVersion!==memoryVersion||cur!=='memory'||curUid!==uid)return;
     $("#m-th").innerHTML = th.thoughts.length ? th.thoughts.map((t, i) =>
       '<div class="kv"><span>' + esc(t.text) + ' <span class="dim">· ' + esc(t.src) + " · " + fmtT(t.t) + '</span></span>' +
       '<button class="act danger" data-thdel="' + (th.thoughts.length - 1 - i) + '">删</button></div>').join("") : '<div class="dim">无</div>';
     document.querySelectorAll("[data-thdel]").forEach((b) => (b.onclick = async () => {
+      memoryVersion++;
       const result=await post("/api/thought/del", { uid: curUid, index: parseInt(b.dataset.thdel, 10) });
       if (!result.ok) alert(result.error || "运行态未确认删除");
       await load();
@@ -606,8 +626,9 @@ async function vMemory() {
     $("#m-sess").textContent = JSON.stringify(sess.session, null, 2);
     $("#m-memes").textContent = memes.text;
   };
-  $("#m-load").onclick = load;
-  await load();
+  $("#m-load").onclick = () => load();
+  await load(initial);
+  if(reading&&cur==='memory')reading.restore();
 }
 
 // ---------- 图库页 ----------

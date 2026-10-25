@@ -1418,9 +1418,29 @@ class DshSoul(Star):
     async def _send(self, target, chain, mode="reply"):
         if not isinstance(target, Target):
             raise ValueError("an explicit target snapshot is required")
+        from dataclasses import asdict, replace
+        from qq_delivery import outbound_context
+        token = current_token()
+        source = token.source if token and token.runtime is self.runtime else None
+        if source is None and token and token.key in self.scopes:
+            source = Scope(**self.scopes[token.key])
+        if source is not None:
+            if any(getattr(source.target,k)!=getattr(target,k) for k in ('platform','instance','bot','kind','address')):
+                raise ValueError("send target does not match its bound conversation")
+            # Reply credentials were snapshotted by the caller before awaits.
+            source = replace(source,message_id=target.message_id if mode=='reply' else '',event_id=target.event_id if mode=='reply' else '',received_at=target.received_at)
+        job = current_budget_job()
+        provenance = dict(scope_key=token.key if token else '', source=source.source() if source else None,
+            target=asdict(target),request_id=token.request if token else '',job_id=job.id if job else '',
+            trigger='request' if token and token.request else 'proactive' if mode=='proactive' else 'background',
+            mode=mode,feature=token.feature if token else '',runtime_id=self.runtime.id,epoch=token.epoch if token else 0)
         budget = self._budget()
-        with self.resources.timer("send", budget):
-            return await self.delivery.send(target, chain, mode=mode, budget=budget)
+        with outbound_context(provenance), self.resources.timer("send", budget):
+            result = await self.delivery.send(target, chain, mode=mode, budget=budget)
+            # Alternate adapters also retain the exact same provenance contract.
+            if isinstance(result,DeliveryResult) and not result.provenance:
+                result.provenance=provenance
+            return result
 
     def _budget(self, event=None):
         token = event.get_extra("_dsh_work") if event is not None else current_token()
@@ -3409,20 +3429,33 @@ class DshSoul(Star):
 
     def _record_delivery_result(self, target, result):
         token = current_token()
-        if token is None or token.runtime is not self.runtime or token.key not in self.scopes:
+        provenance=result.provenance
+        key=provenance.get('scope_key') if provenance else token.key if token and token.runtime is self.runtime else ''
+        if key not in self.scopes:
             return
         # Outcome metadata has its own archive layer, never model input. Storage
         # guards still prevent invalidated work from resurrecting deleted layers.
         path = os.path.join(DATA, "delivery_receipts_v2.json")
         table = _load(path, {})
-        rows = table.setdefault(token.key, [])
-        row = {"attempt_id": result.attempt_id, "request_id": token.request or result.attempt_id, "ts": time.time(),
-               **result.public()}
+        detached=token is None or token.runtime is not self.runtime or token.key!=key
+        if detached and (not provenance or provenance.get('runtime_id')!=self.runtime.id or
+                         not self.runtime.alive or provenance.get('epoch')!=self.runtime.epochs.get(key,0)):
+            return
+        rows = table.get(key, [])
         existing = next((i for i, old in enumerate(rows) if old.get("attempt_id") == result.attempt_id), None)
+        # A detached callback may update an existing receipt, never recreate a deleted audit layer.
+        if detached and existing is None:
+            return
+        if provenance and any(provenance.get('target',{}).get(k)!=getattr(target,k) for k in ('platform','instance','bot','kind','address')):
+            raise ValueError('receipt conversation mismatch')
+        request = (provenance.get('request_id') or result.attempt_id) if provenance else token.request or result.attempt_id
+        row = {"attempt_id": result.attempt_id, "request_id": request, "ts": time.time(),
+               **result.public()}
         if existing is None:
             rows.append(row)
         else:
             rows[existing] = row
+        table[key]=rows
         _save(path, table)
 
     def _record_user_turn(self, uid, text, images=None, files=None, *, scope):
@@ -3462,11 +3495,22 @@ class DshSoul(Star):
             return None
         check_current()
         token = current_token()
-        if token is not None and token.runtime is self.runtime and token.key == uid:
-            request_id = token.request or result.attempt_id
+        provenance = result.provenance
+        if provenance and provenance.get('scope_key')!=uid:
+            raise ValueError('accepted message conversation mismatch')
+        if provenance and (not self.runtime.alive or provenance.get('runtime_id')!=self.runtime.id or
+                           provenance.get('epoch')!=self.runtime.epochs.get(uid,0) or uid not in self.scopes):
+            raise asyncio.CancelledError('accepted callback belongs to revoked work; receipt remains separate')
+        if not request_id:
+            request_id = provenance.get('request_id','') if provenance else (token.request if token is not None and token.runtime is self.runtime and token.key==uid else '')
         request_id = request_id or result.attempt_id
         text = format_qq_text(text)
         hist = self._h(uid)
+        previous=next((row for row in hist if row.get('role')=='assistant' and
+            (row.get('delivery',{}).get('attempt_id')==result.attempt_id or
+             (result.message_id and row.get('delivery',{}).get('message_id')==result.message_id))),None)
+        if previous is not None:
+            return previous
         entry = {"role": "assistant", "text": text, "ts": time.time(), "id": uuid.uuid4().hex,
                  "request_id": request_id, "delivery": {"status": "accepted", "message_id": result.message_id,
                  "seq": result.seq, "ref_idx": result.ref_idx, "attempt_id": result.attempt_id}}
@@ -3475,7 +3519,9 @@ class DshSoul(Star):
         media = result.media if media is None else media
         if media:
             entry.update(media)
-        entry.update(self._source(uid))
+        entry['source']=dict(provenance['source']) if provenance.get('source') else self._source(uid)['source']
+        if provenance:
+            entry['provenance']=copy.deepcopy(provenance)
         hist.append(entry)
         self.h[uid] = hist[-150:]
         for layer, write in (("rolling", lambda: _save(self.h_path, self.h)),
@@ -3489,7 +3535,7 @@ class DshSoul(Star):
         self.last_reply[uid] = text
         self._bump_turns(uid)
         try:
-            self._record_delivery_result(Scope(**self.scopes[uid]).target, result)
+            self._record_delivery_result(Scope(**entry['source']).target, result)
         except (Exception, asyncio.CancelledError):
             result.persistence["receipt"] = "failed"
         return entry
@@ -3863,6 +3909,9 @@ class DshSoul(Star):
             self._err("proactive-send", e)
 
     def _spawn(self, coro, **kw):
+        key=kw.get('key')
+        if key in self.scopes and 'source' not in kw:
+            kw['source']=Scope(**self.scopes[key])
         return self.runtime.spawn(coro, **kw)
 
     @managed

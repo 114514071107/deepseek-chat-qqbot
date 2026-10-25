@@ -24,7 +24,7 @@ const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261025-triage-1";
+const API_VER = "20261026-lifecycle-1";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -148,6 +148,7 @@ function execFileP(cmd, args, timeout) {
 const api = {
   "GET /api/people": async q => workbench.list(q),
   "GET /api/people/history": async q => workbench.history(q),
+  "GET /api/people/outbound": async q => workbench.outbound(q),
   "GET /api/admin/result": async q => {
     const id=q.get("id") || "";
     if (!/^[a-f0-9]{32}$/.test(id)) return {ok:false,error:"无效命令编号"};
@@ -291,7 +292,7 @@ const api = {
 };
 
 // ---- AstrBot 进程启停（与备忘录同一套：launcher 脚本起、taskkill /T /F 停） ----
-const LAUNCHER = DSH + "\\start-astrbot-launcher.cmd";
+const LAUNCHER = path.join(DSH, "start-bot.cmd");
 async function botPids() {
   const r = await execFileP("tasklist", ["/FI", "IMAGENAME eq astrbot.exe", "/FO", "CSV", "/NH"]);
   const pids = [];
@@ -308,7 +309,7 @@ async function botStop() {
 }
 function botStart() {
   // 独立 detached 进程启动 launcher，控制台自身重启/退出不影响机器人
-  const child = spawn("cmd", ["/d", "/c", LAUNCHER], { detached: true, stdio: "ignore", windowsHide: true });
+  const child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", '""'+LAUNCHER+'" -RuntimeRoot "'+DSH+'""'], { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments:true });
   child.unref();
 }
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -418,9 +419,9 @@ const server = http.createServer(async (req, res) => {
       res.end(fs.readFileSync(path.join(__dirname, "public", "index.html")));
       return;
     }
-    if (req.method === "GET" && u.pathname === "/assets/user-workbench.js") {
+    if (req.method === "GET" && ["/assets/user-workbench.js","/assets/reading-state.js"].includes(u.pathname)) {
       res.writeHead(200, {"content-type":"application/javascript; charset=utf-8", "cache-control":"no-store"});
-      res.end(fs.readFileSync(path.join(__dirname,"public","user-workbench.js")));
+      res.end(fs.readFileSync(path.join(__dirname,"public",path.basename(u.pathname))));
       return;
     }
     if (req.method === "GET" && api["GET " + u.pathname]) {

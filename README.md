@@ -9,6 +9,10 @@
 
 DeepSeek 娘（ds娘）是以 DeepSeek 官方人设为灵感的 AI 娘角色：嘴毒心软、会怼你也会哄你。本仓库是她的完整实现——QQ 官方接口（QQ 开放平台 Bot API）+ AstrBot 插件，让她真正活在你的好友列表里。
 
+## Windows 启动入口
+
+使用唯一 Bot 入口 `scripts/start-bot.cmd`（pwsh 优先，无 pwsh 时使用系统 PowerShell 5.1）。安装、参数、日志及旧入口清理见[一键启动说明](docs/tooling/one-click-bot-startup.md)。Console 独立入口保持；生产部署须单独安排。
+
 ## 聊天实例
 
 聊天截图见 [上游项目](https://github.com/Mentha-Azure/deepseek-chan-qqbot#聊天实例)。

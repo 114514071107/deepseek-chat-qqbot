@@ -35,7 +35,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
     const choose=async uid=>{const p=await person(uid);await page.locator('[data-person="'+p.id+'"]').click();await settled();return p;};
     await page.goto(base);await page.waitForLoadState('networkidle');await page.locator('#auto-ref').uncheck();
     await page.getByRole('button',{name:'用户',exact:true}).click();await settled();
-    assert.equal(await page.locator('.uchip').count(),4);await choose('p1');
+    assert.equal(await page.locator('.uchip').count(),5);await choose('p1');
     assert.match(await page.locator('#people-status').innerText(),/自动确认/);assert.equal((await person('p1')).sources.length,3);
     checks.push('trusted raw-author mapping automatically joins private plus two groups with visible basis');
     const prior=(await person('p1')).id;f.scopes.g3={...f.scopes.g1,group:'group-three',sender:'member-A-3'};qq('g3');

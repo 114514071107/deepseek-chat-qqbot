@@ -32,6 +32,7 @@ class Token:
     epoch: int
     request: str
     feature: str
+    source: object = field(default=None,compare=False)
 
 
 @contextmanager
@@ -99,12 +100,13 @@ class Runtime:
             task.add_done_callback(lambda t:self.borrowed.pop(t,None))
         self.borrowed[task]=token
 
-    def spawn(self,coro,*,key=None,feature=None,exclusive=None):
+    def spawn(self,coro,*,key=None,feature=None,exclusive=None,source=None):
         parent=_work.get()
         key=key if key is not None else (parent.key if parent and parent.runtime is self else '')
         name=coro.cr_frame.f_locals.get('name',coro.cr_code.co_name)
         feature=feature or FEATURES.get(name,'reply')
         token=self.token(key,feature,request=parent.request if parent and parent.key==key else '')
+        token=replace(token,source=source or (parent.source if parent and parent.key==key else None))
         job=(key,name)
         if not self.alive or len(self.tasks)>=self.max_tasks or job in self.jobs or (exclusive and exclusive in self.exclusive):
             coro.close(); return self.jobs.get(job) or self.exclusive.get(exclusive)
@@ -184,7 +186,8 @@ def managed(fn):
                            else self.runtime.begin(scope.key))
                     event.set_extra('_dsh_work',token)
                 self.runtime.borrow(token)
-                token=replace(token,feature=self._entry_feature(event) if name=='gate' else 'harvest' if name=='harvest_images' else FEATURES.get(name,'reply'))
+                token=replace(token,source=scope,feature=self._entry_feature(event) if name=='gate' else 'harvest' if name=='harvest_images' else FEATURES.get(name,'reply'))
+                event.set_extra('_dsh_work',token)
             elif parent and parent.runtime is self.runtime and parent.key:
                 token=replace(parent,feature=FEATURES.get(name,parent.feature))
             else:
@@ -194,6 +197,11 @@ def managed(fn):
                 token=self.runtime.token(key,FEATURES.get(name,'reply'),request='')
                 if key:
                     own_budget=JobBudget();saved_budget=_budget_job.set(own_budget)
+            if token.key and token.source is None:
+                from session_scope import Scope
+                source=values.get('scope')
+                if not isinstance(source,Scope) and token.key in self.scopes: source=Scope(**self.scopes[token.key])
+                token=replace(token,source=source)
             with work_context(token,event):
                 self.runtime.check(token)
                 if event is not None:

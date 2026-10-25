@@ -8,9 +8,9 @@ function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-triage-
 test('derived name/ledger key belongs to its exact source instead of a phantom legacy user',t=>{
   const f=fixture(t),alias=mem(f.scopes.g1);f.save('names_all.json',{[alias]:'历史称呼'});f.save('points_all.json',{[alias]:{balance:777}});
   const before=fs.readFileSync(path.join(f.data,'points_all.json'),'utf8'),list=f.w.list();
-  assert.equal(list.total,5);assert.equal(by(list,'g1').sources[0].name,'历史称呼');
+  assert.equal(list.total,6);assert.equal(by(list,'g1').sources[0].name,'历史称呼');
   assert.equal(by(list,'g1').sources[0].index_aliases[0].uid,alias);
-  assert.deepEqual(list.counts,{confirmed_users:0,pending_sources:4,legacy_archives:1,unassigned_legacy_archives:1,conversation_sources:4,metadata_keys:1,raw_keys:6});
+  assert.deepEqual(list.counts,{confirmed_users:0,pending_sources:5,legacy_archives:1,unassigned_legacy_archives:1,conversation_sources:5,metadata_keys:1,raw_keys:6});
   assert.equal(list.metadata[0].has_points,true);assert.ok(!JSON.stringify(list).includes('777'));
   assert.equal(fs.readFileSync(path.join(f.data,'points_all.json'),'utf8'),before);
 });
@@ -33,9 +33,9 @@ test('legacy person confirmation keeps its scene unknown and out of private/grou
 test('settings-only keys are inspectable metadata while a real new inbound source stays pending',t=>{
   const f=fixture(t);f.scopes.new={...f.scopes.p1,sender:'new-user',message_id:'real-inbound'};f.save('scopes_v2.json',f.scopes);
   f.save('names_all.json',{'only-note':'不是聊天','old-empty':'空索引'});f.save('points_all.json',{'only-ledger':{balance:12345}});
-  const list=f.w.list();assert.equal(list.total,6);assert.equal(by(list,'new').status,'pending');
+  const list=f.w.list();assert.equal(list.total,7);assert.equal(by(list,'new').status,'pending');
   assert.equal(list.counts.metadata_keys,3);assert.equal(list.metadata.length,3);assert.ok(!JSON.stringify(list).includes('12345'));
-  assert.equal(list.counts.conversation_sources,5);
+  assert.equal(list.counts.conversation_sources,6);
 });
 test('explicit standalone confirmation can be revoked without touching other peoples decisions',t=>{
   const f=fixture(t);let list=f.w.list();
@@ -47,7 +47,7 @@ test('explicit standalone confirmation can be revoked without touching other peo
 });
 test('category counts explain confirmed users, pending sources and archives without claiming a total population',t=>{
   const f=fixture(t);f.save('console_people_v1.json',{version:1,groups:[['p1','g1','g2']]});
-  const all=f.w.list();assert.equal(all.counts.confirmed_users,1);assert.equal(all.counts.pending_sources,1);
+  const all=f.w.list();assert.equal(all.counts.confirmed_users,1);assert.equal(all.counts.pending_sources,2);
   assert.equal(f.w.list(new URLSearchParams('category=confirmed')).people.length,1);
   assert.equal(f.w.list(new URLSearchParams('category=legacy')).people[0].sources[0].uid,'legacy');
   assert.throws(()=>f.w.list(new URLSearchParams('category=unknown')),/分类/);

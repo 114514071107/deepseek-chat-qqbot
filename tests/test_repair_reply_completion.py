@@ -79,7 +79,7 @@ class ReplyCompletionRegression(unittest.IsolatedAsyncioTestCase):
                     kind='text' if hasattr(chain.chain[0],'text') else 'voice';sent.append(kind)
                     if kind=='voice' and scenario in ('upload','message'):return failure('failed',scenario,'media')
                     if kind=='voice' and scenario in ('unknown','permission'):return failure(scenario if scenario=='unknown' else 'failed','message','network' if scenario=='unknown' else 'permission')
-                    return DeliveryResult('accepted',message_id='accepted-'+kind)
+                    return DeliveryResult('accepted',message_id='accepted-'+kind+'-'+str(len(sent)))
                 obj._send=send
                 await obj.capture(event,resp);await obj._complete_reply(event)
                 key=event.get_extra('_dsh_scope').key

@@ -12,7 +12,14 @@ function readBounded(file,fallback,max=32*1024*1024){
 }
 function sourceValid(s){return s&&['platform','instance','bot','sender'].every(k=>typeof s[k]==='string'&&s[k].length>0&&s[k].length<=256)&&
   typeof s.private==='boolean'&&typeof s.group==='string'&&(s.private?s.group==='':s.group.length>0);}
-function same(a,b){return sourceValid(a)&&['platform','instance','bot','sender','group','private'].every(k=>a[k]===b[k]);}
+function same(a,b){return sourceValid(a)&&sourceValid(b)&&['platform','instance','bot','sender','group','private'].every(k=>a[k]===b[k]);}
+function outboundBound(row,source,origin){
+  const p=row.provenance,t=p?.target;
+  if(!p||!t||!same(p.source,source)||![origin.original_uid||origin.uid,...(origin.history_aliases||[])].includes(p.scope_key)||
+    !['platform','instance','bot'].every(k=>t[k]===source[k])||t.kind!==(source.private?'private':'group')||
+    t.address!==(source.private?source.sender:source.group))return false;
+  return p.mode==='proactive'&&p.trigger==='proactive'||p.mode==='reply'&&!!p.request_id&&row.request_id===p.request_id&&t.message_id===row.source?.message_id;
+}
 function number(q,key,fallback,max){const raw=q.get(key);if(raw===null)return fallback;
   if(!/^\d{1,6}$/.test(raw)||Number(raw)>max||(key==='limit'&&Number(raw)<1))fail('分页参数无效');return Number(raw);}
 
@@ -33,6 +40,8 @@ function profileFor(s,p){
     identity_origin:qq&&text(p.app)?hash([s.platform,s.instance,p.app,s.private?'user_openid':'member_openid',s.group,s.sender]):'',
     identity_domain:valid?hash([s.platform,s.instance,p.app,i.namespace]):'',identity_value:valid?i.value:'',
     identity_basis:valid?(qq?'平台同一 author 的 user_openid 映射（限当前应用/实例）':'OneBot 已核验 QQ 帐号（限当前机器人/实例）'):'',
+    identity_at:valid?(p.identity_observed_at||p.observed_at):null,identity_message_id:valid?(p.identity_message_id||p.message_id):'',
+    identity_conflict_count:Array.isArray(p.identity_conflicts)?p.identity_conflicts.length:0,
     identity_conflict:p.identity_conflict===true};
 }
 
@@ -104,7 +113,12 @@ function createUserWorkbench(data){
   const mappingFile=path.join(data,'console_people_v1.json');
   function snapshot(){
     const sources=readBounded(path.join(data,'scopes_v2.json'),{});
-    const histories={...readBounded(path.join(data,'history_all.json'),{}),...readBounded(path.join(data,'history_v2.json'),{})};
+    const rawHistories=Object.create(null);
+    for(const store of ['history_all.json','history_v2.json'])for(const [uid,rows]of Object.entries(readBounded(path.join(data,store),{}))){
+      if(!Array.isArray(rows))continue;
+      const earlier=rawHistories[uid]||[],seen=new Set(earlier.filter(row=>row?.id).map(row=>JSON.stringify(row)));
+      rawHistories[uid]=earlier.concat(rows.filter(row=>!row?.id||!seen.has(JSON.stringify(row))));
+    }
     const names=readBounded(path.join(data,'names_all.json'),{});
     const friends=readBounded(path.join(data,'friends_all.json'),{});
     const points=readBounded(path.join(data,'points_all.json'),{});
@@ -113,7 +127,7 @@ function createUserWorkbench(data){
     const mapping=readBounded(mappingFile,{version:1,groups:[]},1024*1024);
     if(![1,2].includes(mapping.version)||!Array.isArray(mapping.groups)||mapping.groups.length>2000||
       (mapping.denied!==undefined&&(!Array.isArray(mapping.denied)||mapping.denied.length>10000||mapping.denied.some(pair=>!Array.isArray(pair)||pair.length!==2||pair.some(v=>!/^([a-f0-9]{64})$/.test(v))))))fail('管理关联文件格式不受支持');
-    const {origins,metadata,aliasOwners,raw_key_count}=collectSources({sources,histories,names,friends,points,sourceValid,profileFor,profiles:profiles.sources});
+    const {origins,metadata,archiveIndexes,aliasOwners,raw_key_count,projectedHistories:histories,projectedSources,outboundArchives}=collectSources({sources,histories:rawHistories,names,friends,points,sourceValid,profileFor,profiles:profiles.sources,receipts:readBounded(path.join(data,'delivery_receipts_v2.json'),{})});
     const observedApps=new Map();for(const o of origins.values())if(o.observed_app){
       if(!observedApps.has(o.base))observedApps.set(o.base,new Set());observedApps.get(o.base).add(o.observed_app);
     }
@@ -134,7 +148,7 @@ function createUserWorkbench(data){
         status_label:({legacy:'来源不明旧档',pending:'待人工确认',manual_confirmed:'人工已确认',automatic_confirmed:'自动确认'})[status],
         basis:[...(manual?['维护者明确确认的展示关联']:[]),...(exact&&!legacy?['相同原始身份（平台、实例、应用/机器人及身份域均一致）']:[]),...[...new Set(rows.map(o=>o.identity_basis).filter(Boolean))],...(rejected?['已记录人工解除/否认不关联；仅重新人工确认可移除该限制']:[]),...(conflict?['证据冲突或人工已解除/否认；不自动合回']:[])],
         category:['manual_confirmed','automatic_confirmed'].includes(status)?'confirmed':status==='legacy'?'legacy':'pending',
-        manual,legacy,origin_count:rows.length,last_at:last,sources:rows.map(({base,decision_aliases,identity_origin,identity_key,identity_domain,identity_value,identity_conflict,...o})=>o)};
+        manual,legacy,origin_count:rows.length,last_at:last,sources:rows.map(({source,base,decision_aliases,identity_origin,identity_key,identity_domain,identity_value,identity_conflict,...o})=>o)};
     }).sort((a,b)=>b.last_at-a.last_at||a.id.localeCompare(b.id));
     const counts={confirmed_users:people.filter(p=>p.category==='confirmed').length,
       pending_sources:people.filter(p=>p.category==='pending').flatMap(p=>p.sources).filter(o=>!o.legacy).length,
@@ -143,7 +157,7 @@ function createUserWorkbench(data){
       conversation_sources:[...origins.values()].filter(o=>!o.legacy).length,metadata_keys:metadata.length,raw_keys:raw_key_count};
     const unresolved_mapping_references=new Set(mapping.groups.flat().filter(uid=>!origins.has(uid)&&aliasOwners.get(uid)?.length!==1)).size;
     const revisionFor=value=>hash([value,[...origins.values()].map(o=>[o.uid,o.base,o.identity_origin,o.observed_app,o.identity_key,o.identity_conflict,o.index_aliases]),[...aliasOwners]]);
-    return {people,sources,histories,mapping,origins,metadata,aliasOwners,counts,unresolved_mapping_references,revisionFor,revision:revisionFor(mapping),scope_count:origins.size};
+    return {people,sources,histories,projectedSources,outboundArchives,archiveIndexes,mapping,origins,metadata,aliasOwners,counts,unresolved_mapping_references,revisionFor,revision:revisionFor(mapping),scope_count:origins.size};
   }
   function list(q=new URLSearchParams()){
     const s=snapshot(),limit=number(q,'limit',100,100),offset=number(q,'offset',0,10000),query=q.get('q')||'';
@@ -153,28 +167,35 @@ function createUserWorkbench(data){
     const metaOffset=number(q,'metadata_offset',0,10000),metadata=s.metadata.filter(m=>!query||JSON.stringify(m).toLowerCase().includes(query.toLowerCase()));
     return {ok:true,people:people.slice(offset,offset+limit),total:people.length,scope_count:s.scope_count,offset,
       next_offset:offset+limit<people.length?offset+limit:null,revision:s.revision,counts:s.counts,unresolved_mapping_references:s.unresolved_mapping_references,
+      outbound_archives:s.outboundArchives.map(({entries,...a})=>({...a,count:entries.length})),
+      archive_indexes:s.archiveIndexes,
       metadata:metadata.slice(metaOffset,metaOffset+100),metadata_total:metadata.length,metadata_next_offset:metaOffset+100<metadata.length?metaOffset+100:null};
   }
+  function outbound(q){const a=snapshot().outboundArchives.find(a=>a.uid===q.get('uid'));if(!a)fail('未找到待核 Bot 出站旧档');return {ok:true,source:a.source,reason:a.reason,entries:a.entries.slice(-150)};}
   function history(q){
     const s=snapshot(),p=s.people.find(p=>p.id===q.get('person')),mode=q.get('mode');
     if(!p||!['private','group','legacy'].includes(mode))fail('用户入口或场景无效，请刷新列表');
     const group=q.get('group')||'',limit=number(q,'limit',150,200),offset=number(q,'offset',0,10000);
     if(group&&!p.sources.some(o=>o.kind==='group'&&o.group===group))fail('群不属于该用户入口');
     const selected=p.sources.filter(o=>o.kind===mode&&(!group||o.group===group));
-    const entries=[];let excluded=0;
+    const entries=[],delivery_outcomes=[],receipts=readBounded(path.join(data,'delivery_receipts_v2.json'),{});let excluded=0;
     for(const o of selected){
-      const source=s.sources[o.uid],rows=(s.histories[o.uid]||[]).slice(-150);
+      const source=s.projectedSources[o.uid],rows=(s.histories[o.uid]||[]).slice(-150);
+      const occurrences=new Map();
+      const ids=new Map();for(const row of rows)if(row.id)ids.set(row.id,(ids.get(row.id)||0)+1);
       const userRequests=new Set(rows.filter(r=>r.role==='user'&&same(r.source,source)).map(r=>r.request_id).filter(Boolean));
+      for(const alias of [o.original_uid||o.uid,...(o.history_aliases||[])])for(const receipt of receipts[alias]||[])if(same(receipt.provenance?.source,source))delivery_outcomes.push(receipt);
       for(const row of rows){
         if(!['user','assistant'].includes(row.role))continue;
         if(!o.legacy&&(!same(row.source,source)||(row.role==='assistant'&&(row.delivery?.status!=='accepted'||
-          (mode==='group'&&!userRequests.has(row.request_id)))))){excluded++;continue;}
-        entries.push({...row,scope_uid:o.uid,scene:o.kind,group:o.group,speaker:row.role==='assistant'?'机器人':
+          (row.provenance?!outboundBound(row,source,o):mode==='group'&&!userRequests.has(row.request_id)))))){excluded++;continue;}
+        const content=row.id&&ids.get(row.id)===1?String(row.id):hash(row),occurrence=(occurrences.get(content)||0)+1;occurrences.set(content,occurrence);
+        entries.push({...row,view_key:hash([o.uid,content,occurrence]),scope_uid:o.uid,scene:o.kind,group:o.group,speaker:row.role==='assistant'?'机器人':
           o.profile?o.profile.value+(o.profile.kind==='platform_name'?'（平台用户名）':''):'昵称未获取'+(o.name?' / 备注：'+o.name:''),speaker_profile:o.profile||null});
       }
     }
     entries.sort((a,b)=>(Number(b.ts)||0)-(Number(a.ts)||0)||String(a.id||'').localeCompare(String(b.id||''))||a.scope_uid.localeCompare(b.scope_uid));
-    return {ok:true,person:p.id,mode,group,entries:entries.slice(offset,offset+limit),count:entries.length,next_offset:offset+limit<entries.length?offset+limit:null,
+    return {ok:true,person:p.id,mode,group,entries:entries.slice(offset,offset+limit),count:entries.length,next_offset:offset+limit<entries.length?offset+limit:null,delivery_outcomes:delivery_outcomes.slice(-150),
       recent_only:true,per_scope_limit:150,source_count:selected.length,excluded_unverified:excluded};
   }
   function mutate(operation,body){
@@ -220,6 +241,6 @@ function createUserWorkbench(data){
     return {ok:true,revision:s.revisionFor(mapping),note:'仅更新管理展示关联；原身份、权限、积分、历史及发送目标未修改'};
     }finally{fs.closeSync(lock);fs.unlinkSync(mappingFile+'.lock');}
   }
-  return {list,history,link:body=>mutate('link',body),unlink:body=>mutate('unlink',body),deny:body=>mutate('deny',body),confirm:body=>mutate('confirm',body)};
+  return {list,history,outbound,link:body=>mutate('link',body),unlink:body=>mutate('unlink',body),deny:body=>mutate('deny',body),confirm:body=>mutate('confirm',body)};
 }
 module.exports={createUserWorkbench};

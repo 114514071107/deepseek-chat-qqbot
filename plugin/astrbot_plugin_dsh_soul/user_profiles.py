@@ -111,6 +111,17 @@ def record_profile(event, scope, directory):
     if store.get('version') != 1 or not isinstance(store.get('sources'), dict):
         raise ValueError('unsupported management profile store')
     old = store['sources'].get(scope.key, {})
+    # A sparse later adapter event cannot erase a previously witnessed mapping.
+    # Retain its original observation time; it is not a newly witnessed identity.
+    if row.get('identity'):
+        row['identity_observed_at'] = row['observed_at']
+        row['identity_message_id'] = row['message_id']
+    if not row.get('app') and old.get('app'):
+        row['app'] = old['app']
+    if not row.get('identity') and row.get('app') == old.get('app') and old.get('identity'):
+        row['identity'] = old['identity']
+        row['identity_observed_at'] = old.get('identity_observed_at', old.get('observed_at'))
+        row['identity_message_id'] = old.get('identity_message_id', old.get('message_id'))
     row['first_seen_at'] = old.get('first_seen_at', old.get('observed_at', time.time()))
     if old.get('app') and row.get('app') and old['app'] != row['app']:
         row['identity_conflict'] = True
@@ -120,9 +131,21 @@ def record_profile(event, scope, directory):
             row['identity_conflict'] = True
     if old.get('identity_conflict'):
         row['identity_conflict'] = True
+    if row.get('identity_conflict'):
+        conflicts = list(old.get('identity_conflicts', []))
+        for proof in (old, row):
+            if proof.get('identity'):
+                item = dict(app=proof.get('app', ''),identity=proof['identity'],
+                    at=proof.get('identity_observed_at', proof.get('observed_at')),
+                    message_id=proof.get('identity_message_id', proof.get('message_id')))
+                if item not in conflicts:
+                    conflicts.append(item)
+        row['identity_conflicts'] = conflicts
     if (row['observed_at'], row['message_id']) < (old.get('observed_at', 0), old.get('message_id', '')):
         if row.get('identity_conflict') and not old.get('identity_conflict'):
-            row = {**old, 'identity_conflict': True}
+            row = {**old, 'identity_conflict': True, 'identity_conflicts': row['identity_conflicts']}
+        elif row.get('identity_conflicts') != old.get('identity_conflicts'):
+            row = {**old, 'identity_conflict': True, 'identity_conflicts': row['identity_conflicts']}
         else:
             event.set_extra('_dsh_profile_observed', True)
             return

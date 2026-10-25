@@ -40,6 +40,7 @@ function Read-Json($Path) {
 function Get-Identity($ProcessId) {
     try {
         $process = Get-Process -Id $ProcessId -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($process.Path)) { return $null }
         return @{ pid=$process.Id; ticks=$process.StartTime.ToUniversalTime().Ticks.ToString(); exe=$process.Path }
     } catch { return $null }
 }
@@ -67,6 +68,11 @@ function Stop-Owned($State) {
         Stop-Process -Id $State.pid -Force -ErrorAction SilentlyContinue
         for ($i=0; $i -lt 20 -and (Test-Worker $State); $i++) { Start-Sleep -Milliseconds 50 }
     }
+}
+function Throw-ComponentExit($Name, $Observation) {
+    $failure = New-Object System.Exception($Name + ' exited; exit code ' + $Observation.exit_code + '; inspect component logs')
+    $failure.Data['DshExitCode'] = [int]$Observation.exit_code
+    throw $failure
 }
 function Assert-Component($Name) {
     if ($Name -eq 'Bot') {
@@ -162,8 +168,22 @@ try {
                 $nonce = [Guid]::NewGuid().ToString('N')
                 $arguments = ' -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -InternalWorker -RuntimeRoot "' + $root + '" -Component ' + $name + ' -WorkerId ' + $nonce + ' -ConsolePort ' + $ConsolePort
                 $created = Start-Process -FilePath $shellExe -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -PassThru
-                $identity = Get-Identity $created.Id
-                if (!$identity) { throw ($name + ' worker exited before identity was established') }
+                $identityDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+                do {
+                    $identity = Get-Identity $created.Id
+                    if ($identity -or $created.HasExited) { break }
+                    Start-Sleep -Milliseconds 50
+                } while ([DateTime]::UtcNow -lt $identityDeadline)
+                if (!$identity) {
+                    $observed = Read-Json (Join-Path $control ($nonce + '.json'))
+                    if ($observed -and [int]$observed.pid -eq $created.Id -and $observed.component -eq $name -and $observed.phase -in @('exited','worker-failed')) {
+                        Throw-ComponentExit $name $observed
+                    }
+                    if ($created.HasExited -and $created.ExitCode -ne 0) {
+                        Throw-ComponentExit $name @{ exit_code=$created.ExitCode }
+                    }
+                    throw ($name + ' worker identity unavailable; inspect the nonce observation before any retry')
+                }
                 $state = @{ pid=$identity.pid; ticks=$identity.ticks; exe=$identity.exe; nonce=$nonce; root=$root; component=$name; port=$port; status='created' }
                 Save-Json $statePath $state
                 Write-Output ($name + ' created; waiting for owned listener')
@@ -173,10 +193,10 @@ try {
             try {
                 while ([DateTime]::UtcNow -lt $deadline) {
                     $observed = Read-Json (Join-Path $control ($state.nonce + '.json'))
-                    if ($observed -and $observed.phase -in @('exited','worker-failed')) { throw ($name + ' exited; exit code ' + $observed.exit_code + '; inspect component logs') }
+                    if ($observed -and $observed.phase -in @('exited','worker-failed')) { Throw-ComponentExit $name $observed }
                     if (!(Test-Worker $state)) {
                         $observed = Read-Json (Join-Path $control ($state.nonce + '.json'))
-                        if ($observed -and $observed.phase -in @('exited','worker-failed')) { throw ($name + ' exited; exit code ' + $observed.exit_code + '; inspect component logs') }
+                        if ($observed -and $observed.phase -in @('exited','worker-failed')) { Throw-ComponentExit $name $observed }
                         throw ($name + ' worker disappeared; inspect exit observation and logs')
                     }
                     $listeners = @([DshLauncherProcess]::ListeningPids($port))
@@ -197,5 +217,9 @@ try {
 } catch {
     Write-Output ('Launcher failed: ' + $_.Exception.Message)
     Write-Output ('Check protected runtime settings/dependencies and logs: ' + $logRoot)
-    exit 1
+    $failureCode = 1
+    if ($_.Exception.Data.Contains('DshExitCode') -and [int]$_.Exception.Data['DshExitCode'] -ne 0) {
+        $failureCode = [int]$_.Exception.Data['DshExitCode']
+    }
+    exit $failureCode
 }
