@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-26",
+  "version": "20261026-lifecycle-2",
+  "scope": "same-version production page continuation; not a full new acceptance run",
+  "private_identity_or_chat_included": false,
+  "checks": {
+    "actual_browser_version_loaded": true,
+    "initial_dialogs_absent": true,
+    "in_flight_draft_321_preserved": true,
+    "draft_focus_preserved": true,
+    "blurred_draft_preserved": true,
+    "original_input_restored_without_save": true,
+    "private_and_group_scope_isolation": true,
+    "specific_group_filter": true,
+    "explicit_management_target_and_clear_on_scene_switch": true,
+    "unlink_preview_cancel_only": true,
+    "association_panel_pauses_refresh": true,
+    "automatic_history_request_and_actual_history_redraw_resumed": true,
+    "final_auto_refresh_on": true,
+    "final_dialogs_and_panels_absent": true,
+    "final_operation_target_empty": true,
+    "continued_session_data_hashes_unchanged": true
+  },
+  "aggregate_counts": {
+    "confirmed_users": 3,
+    "pending_sources": 2,
+    "legacy_archives": 4,
+    "conversation_sources": 8
+  },
+  "fresh_browser_errors": 0,
+  "focused_regressions": {
+    "node_legacy_scenes": {
+      "passed": 10,
+      "failed": 0,
+      "duration_ms": 185.4635
+    },
+    "python_user_profiles": {
+      "passed": 10,
+      "failed": 0,
+      "seconds": 0.106
+    }
+  },
+  "limitations": [
+    "production status data was not artificially mutated; changed-data and failed-request cases retain prior isolated evidence",
+    "mapping and history changed during interruption; latest snapshot preserved; no write or restoration by this acceptance",
+    "original tab debugger unattached; supported recovery used a temporary tab in the same Edge",
+    "first worker disappearance remains unexplained; current finite uptime is not a root cause"
+  ]
+}
