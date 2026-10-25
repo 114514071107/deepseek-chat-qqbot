@@ -6,17 +6,17 @@
 
 ## 入口与使用
 
-双击仓库 `scripts/start-bot.cmd`，默认实例为 `D:\dsbot`，只启动 Bot。直接执行同一核心脚本：
+双击 `start-bot.cmd`，默认实例为 `D:\dsbot`，**同时启动 Bot 和 127.0.0.1:7850 管理控制台**。开发入口为 `scripts/start-bot.cmd`，配套部署后运行根同名文件也有此行为。无需再加 `-WithConsole`，已运行的同实例组件通过严格归属核验后复用；缺 Node/凭据或端口冲突会明确失败，不把只启动了 Bot 当作全部成功。直接执行同一核心脚本：
 
 ```powershell
 pwsh -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\start-bot.ps1'
-# 需要管理控制台时明确加开关：
+# 直接运行 PS1 默认只启 Bot，需要控制台时加开关：
 pwsh -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\start-bot.ps1' -WithConsole
 # 自选实例；可从任意当前目录执行：
 powershell.exe -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\start-bot.ps1' -RuntimeRoot 'D:\实例 空格' -TimeoutSeconds 45
 ```
 
-这些是维护者后续主动启动时的命令，本轮没有对默认生产根目录执行它们。
+以上 PS1 方式保留维护者只启动 Bot 的能力；cmd 用进程内默认值启用 Console，不重复拼接参数，显式 `-ConsolePort` 和 `-WithConsole` 可正常传递。默认 7850，改端口不修改生产配置或认证。2026-10-26 本轮实际部署/启动与验证见[五项 P2 补修记录](../reviews/2026-10-26-console-lifecycle-p2-fix.md)，更早“尚未更新生产”的表述保留为当时历史。
 
 `start-bot.cmd` 先查 PATH 中的 pwsh，再查标准安装位置 `%ProgramFiles%\PowerShell\7\pwsh.exe`，没有则调用系统 Windows PowerShell 5.1。没有硬编码 Codex 私有缓存路径。Explorer 与 Codex 的 PATH 可以不同；测试分别提供最小系统 PATH 和显式 pwsh PATH，实际走过 5.1 回退和 7 优先路径。
 
@@ -25,7 +25,7 @@ powershell.exe -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\st
 | 参数 | 默认与行为 |
 | --- | --- |
 | RuntimeRoot | `D:\dsbot`，显式指定实例，不使用当前工作目录猜测 |
-| WithConsole | 缺省 false；Bot 不需要 Node，只有选 Console 才检查 Node 和 Console 凭据 |
+| WithConsole | cmd 默认 true；直接 PS1 默认 false。启用 Console 必须检查 Node、server.js 和 Console 凭据 |
 | TimeoutSeconds | 30，允许 1—120 秒；锁等待和组件就绪分别有界，不无限重试 |
 | BotPort | 6185，用于检查已配置 Bot 的监听，不修改 AstrBot 配置 |
 | ConsolePort | 7850，同时作为 Console 的 `--port`、PORT 环境和监听核验端口 |
@@ -83,4 +83,4 @@ Console 的 DSH_RUNTIME_ROOT 支持需与此次 server.js 配套发布；插件�
 
 命令：`D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s tests -p test_repair_launcher.py`。
 
-测试使用临时中文/空格路径、复制到临时目录的 Python 可执行文件作为 astrbot.exe、合成 run 文件、随机本机端口及有限生命周期 Node 替身；没有导入生产插件或启动真实 Bot。覆盖默认 Bot 无 Node、可选 Console 和临时 DPAPI 凭据、并发冷启动、重复启动、失效 PID、启动时间不符、端口冲突、缺依赖/配置、非零退出、超时清理、UTF-8 中文配置与日志、真实 cmd 入口的两种解释器选择及父 Job 独立性。解释器版本与最终结果见补修记录；不能据此宣称真实 QQ 已验收。
+测试使用临时中文/空格路径、复制到临时目录的 Python 可执行文件作为 astrbot.exe、合成 run 文件、随机本机端口及有限生命周期 Node 替身；没有导入生产插件或启动真实 Bot。覆盖 PS1 默认 Bot 无 Node、cmd 默认双组件及缺 Console 失败、临时 DPAPI 凭据、并发冷启动、重复启动、失效 PID、启动时间不符、端口冲突、非零退出、超时清理、UTF-8 中文配置与日志、真实 cmd 入口的两种解释器选择及父 Job 独立性。解释器版本与最终结果见补修记录；不能据此宣称真实 QQ 已验收。

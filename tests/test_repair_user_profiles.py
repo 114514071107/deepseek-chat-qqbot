@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from dataclasses import replace
 from repair_pipeline_support import load_pipeline
 from test_repair_session_scope import ScopeEvent
 from session_scope import bind_scope
@@ -42,6 +43,18 @@ class ProfileCaptureRegression(unittest.TestCase):
             row=json.loads((Path(root)/'workbench_profiles_v1.json').read_text(encoding='utf-8'))['sources'][scope.key]
             self.assertEqual(row.get('first_seen_at'),1000)
             self.assertEqual(row['nickname']['value'],'更新称呼')
+
+    def test_first_reliable_older_identity_enriches_latest_sparse_observation(self):
+        with tempfile.TemporaryDirectory() as root:
+            sparse,scope,raw=self.event(group='group-one',at=300,name='最新称呼')
+            raw['author'].pop('user_openid');record_profile(sparse,scope,root)
+            earlier,earlier_scope,earlier_raw=self.event(group='group-one',at=200,name='旧称呼')
+            earlier_raw['id']='earlier-proof';earlier_scope=replace(earlier_scope,message_id='earlier-proof')
+            record_profile(earlier,earlier_scope,root)
+            row=json.loads((Path(root)/'workbench_profiles_v1.json').read_text(encoding='utf-8'))['sources'][scope.key]
+            self.assertEqual(row['observed_at'],300);self.assertEqual(row['nickname']['value'],'最新称呼')
+            self.assertIsNotNone(row['identity']);self.assertEqual(row['identity']['value'],'123456')
+            self.assertEqual(row['identity_observed_at'],200);self.assertEqual(row['identity_message_id'],earlier_scope.message_id)
 
     def event(self, *, group='', platform='qq_official', name='平台用户名', at=100):
         event = ScopeEvent('123456',group,platform=platform)

@@ -1,0 +1,13 @@
+{
+  "synthetic_only": true,
+  "real_timer": true,
+  "original": "30",
+  "before": {
+    "value": "321",
+    "focused": true
+  },
+  "after": {
+    "value": "30",
+    "focused": true
+  }
+}

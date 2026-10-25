@@ -1,0 +1,10 @@
+{
+  "synthetic_only": true,
+  "app": "fixture-app",
+  "latest_observed_at": 300.0,
+  "latest_message_id": "sparse-message",
+  "nickname": "LATEST SYNTHETIC NAME",
+  "identity": null,
+  "expected_identity_basis": "qq_author_pair",
+  "expected_identity_observed_at": 200
+}

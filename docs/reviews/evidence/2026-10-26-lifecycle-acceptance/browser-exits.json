@@ -1,0 +1,26 @@
+[
+  {
+    "script": "console_refresh_browser",
+    "exit": 0
+  },
+  {
+    "script": "identity_lifecycle_browser",
+    "exit": 0
+  },
+  {
+    "script": "refresh_races_browser",
+    "exit": 0
+  },
+  {
+    "script": "workbench_browser",
+    "exit": 0
+  },
+  {
+    "script": "user_auto_browser",
+    "exit": 0
+  },
+  {
+    "script": "identity_triage_browser",
+    "exit": 0
+  }
+]

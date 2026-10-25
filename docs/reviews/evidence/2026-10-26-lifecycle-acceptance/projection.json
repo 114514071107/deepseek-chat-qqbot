@@ -1,0 +1,75 @@
+{
+  "head": "54f1a531f1be3bd75ab574f9f92142974ec8701d",
+  "synthetic_only": true,
+  "results": [
+    {
+      "case": "assistant-only without source cannot create a confirmed user",
+      "location": "console/people-sources.js:41",
+      "expected": {
+        "total": 0,
+        "outbound_archives": 1,
+        "confirmed_users_after_ordinary_confirmation": 0
+      },
+      "actual": {
+        "total": 1,
+        "outbound_archives": 0,
+        "confirmed_users_after_ordinary_confirmation": 1
+      },
+      "pass": false
+    },
+    {
+      "case": "a whole-file old reference remains unresolved after nonunique partition",
+      "location": "console/people-sources.js:37",
+      "expected": {
+        "confirmed_users": 0,
+        "unresolved_mapping_references": 1,
+        "archive_indexes": 1
+      },
+      "actual": {
+        "confirmed_users": 1,
+        "unresolved_mapping_references": 0,
+        "archive_indexes": 0,
+        "people": [
+          {
+            "status": "manual_confirmed",
+            "sources": [
+              {
+                "uid": "mixed",
+                "original_uid": "mixed",
+                "kind": "legacy"
+              }
+            ]
+          },
+          {
+            "status": "pending",
+            "sources": [
+              {
+                "uid": "legacy_90f7748df3c4f966e7fffd6d107029de32b41cbf706b9728bee5774bff623dae",
+                "original_uid": "mixed",
+                "kind": "group"
+              }
+            ]
+          }
+        ]
+      },
+      "pass": false
+    },
+    {
+      "case": "older recovered aliases do not evict newer recent history",
+      "location": "console/people-sources.js:62 and console/user-workbench.js:183",
+      "expected": {
+        "recent_user_rows": 150,
+        "newest_visible_ts": 1149,
+        "list_last_at": 1149
+      },
+      "actual": {
+        "count": 150,
+        "recent_user_rows": 0,
+        "old_outbound_rows": 150,
+        "newest_visible_ts": 149,
+        "list_last_at": 149
+      },
+      "pass": false
+    }
+  ]
+}

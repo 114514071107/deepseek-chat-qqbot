@@ -1,5 +1,8 @@
 @echo off
 setlocal
+rem User entry starts Bot and the authenticated Console (default port 7850).
+rem Keep defaults in the core so explicit switches/ports are never duplicated.
+set "DSH_LAUNCH_WITH_CONSOLE=1"
 set "DSH_LAUNCH_SHELL="
 for /f "delims=" %%I in ('where.exe pwsh.exe 2^>nul') do if not defined DSH_LAUNCH_SHELL set "DSH_LAUNCH_SHELL=%%I"
 if not defined DSH_LAUNCH_SHELL if exist "%ProgramFiles%\PowerShell\7\pwsh.exe" set "DSH_LAUNCH_SHELL=%ProgramFiles%\PowerShell\7\pwsh.exe"

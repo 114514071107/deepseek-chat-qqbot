@@ -3,6 +3,9 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {atomicJson}=require('./state-bridge');
 const {collectSources}=require('./people-sources');
 const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const at=row=>Number.isFinite(Number(row.ts))?Number(row.ts):0;
+// Recovered aliases can be older than the base file. Select recent rows before paging.
+const recent=rows=>rows.slice().sort((a,b)=>at(a)-at(b)||String(a.id||'').localeCompare(String(b.id||''))||hash(a).localeCompare(hash(b))).slice(-150);
 const decisionKeys=o=>[o.base,...(o.identity_origin?[o.identity_origin]:[]),...(o.decision_aliases||[])];
 const fail=message=>{throw Object.assign(new Error(message),{statusCode:400});};
 function readBounded(file,fallback,max=32*1024*1024){
@@ -142,7 +145,7 @@ function createUserWorkbench(data){
         '昵称未获取'+(rows.find(o=>o.name)?' / '+(legacy?'历史称呼：':'备注：')+rows.find(o=>o.name).name:'');
       const identities=[...new Set(rows.map(o=>o.identity_key).filter(Boolean))].sort();
       const key=manual?['manual',manualKeys]:status==='automatic_confirmed'?(identities.length?['identity',identities]:['source',rows[0].identity_origin||rows[0].base]):rows.map(o=>o.uid);
-      let last=0;for(const uid of members)for(const row of (histories[uid]||[]).slice(-150))last=Math.max(last,Number(row.ts)||0);
+      let last=0;for(const uid of members)for(const row of histories[uid]||[])last=Math.max(last,at(row));
       return {id:'person_'+hash(key),label,nickname:chosen?.kind==='qq_nickname'?chosen.value:null,profile_kind:chosen?.kind||null,
         profile_at:chosen?.at||null,profile_source_uid:chosen?.uid||null,nickname_conflict:new Set(fields.map(n=>n.kind+':'+n.value)).size>1,status,conflict,
         status_label:({legacy:'来源不明旧档',pending:'待人工确认',manual_confirmed:'人工已确认',automatic_confirmed:'自动确认'})[status],
@@ -171,7 +174,7 @@ function createUserWorkbench(data){
       archive_indexes:s.archiveIndexes,
       metadata:metadata.slice(metaOffset,metaOffset+100),metadata_total:metadata.length,metadata_next_offset:metaOffset+100<metadata.length?metaOffset+100:null};
   }
-  function outbound(q){const a=snapshot().outboundArchives.find(a=>a.uid===q.get('uid'));if(!a)fail('未找到待核 Bot 出站旧档');return {ok:true,source:a.source,reason:a.reason,entries:a.entries.slice(-150)};}
+  function outbound(q){const a=snapshot().outboundArchives.find(a=>a.uid===q.get('uid'));if(!a)fail('未找到待核 Bot 出站旧档');return {ok:true,source:a.source,reason:a.reason,entries:recent(a.entries)};}
   function history(q){
     const s=snapshot(),p=s.people.find(p=>p.id===q.get('person')),mode=q.get('mode');
     if(!p||!['private','group','legacy'].includes(mode))fail('用户入口或场景无效，请刷新列表');
@@ -180,7 +183,7 @@ function createUserWorkbench(data){
     const selected=p.sources.filter(o=>o.kind===mode&&(!group||o.group===group));
     const entries=[],delivery_outcomes=[],receipts=readBounded(path.join(data,'delivery_receipts_v2.json'),{});let excluded=0;
     for(const o of selected){
-      const source=s.projectedSources[o.uid],rows=(s.histories[o.uid]||[]).slice(-150);
+      const source=s.projectedSources[o.uid],rows=recent(s.histories[o.uid]||[]);
       const occurrences=new Map();
       const ids=new Map();for(const row of rows)if(row.id)ids.set(row.id,(ids.get(row.id)||0)+1);
       const userRequests=new Set(rows.filter(r=>r.role==='user'&&same(r.source,source)).map(r=>r.request_id).filter(Boolean));

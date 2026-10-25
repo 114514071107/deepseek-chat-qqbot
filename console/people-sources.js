@@ -34,11 +34,11 @@ function collectSources({sources,histories,names,friends,points,sourceValid,prof
       buckets.get(signature).rows.push(recovered||receipt?{...row,source:s,...(provenance?{provenance}:{}),...(recovered?{source_projection:{basis,original_uid:uid,...(row.source?{original_source:row.source}:{})}}:{})}:row);
     }
     if(tableKnown&&!buckets.has(hash(identity(stored))))buckets.set(hash(identity(stored)),{source:stored,rows:[],basis:'已接收入站的原 scope 表；该来源暂无匹配的已存记录'});
-    const preferred=tableKnown&&buckets.has(hash(identity(stored)))?hash(identity(stored)):buckets.has('unknown')?'unknown':buckets.size===1?[...buckets.keys()][0]:null;
+    const preferred=tableKnown&&buckets.has(hash(identity(stored)))?hash(identity(stored)):buckets.size===1?[...buckets.keys()][0]:null;
     const related=[];
     for(const [signature,bucket]of buckets){
       const id=signature===preferred?uid:'legacy_'+hash([uid,signature]),s=bucket.source,known=!!s;
-      if(known&&bucket.rows.length&&bucket.rows.every(r=>r.role==='assistant')&&!(tableKnown&&signature===hash(identity(stored)))){
+      if(bucket.rows.length&&bucket.rows.every(r=>r.role==='assistant')&&!(tableKnown&&known&&signature===hash(identity(stored)))){
         outboundArchives.push({uid:id,original_uid:uid,source:s,entries:bucket.rows,reason:'仅有 Bot 出站记录，缺少已核入站来源；不将发送者视为新用户'});continue;
       }
       const base=known?signature:hash(['legacy',uid]);related.push(id);
@@ -57,6 +57,7 @@ function collectSources({sources,histories,names,friends,points,sourceValid,prof
     if(preferred===null){const parts=[...buckets.keys()].map(signature=>'legacy_'+hash([uid,signature]));archiveIndexes.push({uid,label:'混合旧档索引',related_sources:parts});aliasOwners.set(uid,parts);}
   }
   for(const archive of outboundArchives.slice()){
+    if(!archive.source)continue;
     const matches=[...origins.values()].filter(o=>!o.legacy&&o.base===hash(identity(archive.source)));
     if(matches.length!==1)continue;
     const o=matches[0];projectedHistories[o.uid].push(...archive.entries);

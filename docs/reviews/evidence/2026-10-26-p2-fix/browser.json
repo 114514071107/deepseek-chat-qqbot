@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-26",
+  "synthetic_only": true,
+  "checks": [
+    "status data changed while the real timer awaited: new draft 321 and focus survive DOM commit",
+    "blurred unsaved draft also defers the next automatic redraw",
+    "successful explicit save clears only that submitted draft; automatic updates resume with new data",
+    "failed in-flight status request also preserves a draft begun during the wait",
+    "unknown-source Bot-only archive is readable and has no user confirmation controls",
+    "partial-unknown whole-file mapping stays unresolved with a visible archive index; original decision unchanged",
+    "390px archive controls remain usable and no browser JavaScript errors"
+  ],
+  "js_errors": []
+}

@@ -11,7 +11,7 @@ DeepSeek 娘（ds娘）是以 DeepSeek 官方人设为灵感的 AI 娘角色：�
 
 ## Windows 启动入口
 
-使用唯一 Bot 入口 `scripts/start-bot.cmd`（pwsh 优先，无 pwsh 时使用系统 PowerShell 5.1）。安装、参数、日志及旧入口清理见[一键启动说明](docs/tooling/one-click-bot-startup.md)。Console 独立入口保持；生产部署须单独安排。
+使用 Bot 入口 `scripts/start-bot.cmd`，默认同时启动 Bot 和 7850 管理控制台（pwsh 优先，无 pwsh 时使用系统 PowerShell 5.1）。安装、参数、认证、日志及旧入口说明见[一键启动说明](docs/tooling/one-click-bot-startup.md)。Console 独立入口保持；配套部署按当前维护流程执行。
 
 ## 聊天实例
 

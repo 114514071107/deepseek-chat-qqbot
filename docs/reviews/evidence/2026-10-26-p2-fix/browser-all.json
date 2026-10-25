@@ -1,0 +1,128 @@
+{
+  "date": "2026-10-26",
+  "synthetic_only": true,
+  "passed": 76,
+  "reports": [
+    {
+      "command": "node tests/console_p2_browser.cjs",
+      "passed": 7,
+      "checks": [
+        "status data changed while the real timer awaited: new draft 321 and focus survive DOM commit",
+        "blurred unsaved draft also defers the next automatic redraw",
+        "successful explicit save clears only that submitted draft; automatic updates resume with new data",
+        "failed in-flight status request also preserves a draft begun during the wait",
+        "unknown-source Bot-only archive is readable and has no user confirmation controls",
+        "partial-unknown whole-file mapping stays unresolved with a visible archive index; original decision unchanged",
+        "390px archive controls remain usable and no browser JavaScript errors"
+      ]
+    },
+    {
+      "command": "node tests/console_refresh_browser.cjs",
+      "passed": 15,
+      "checks": [
+        "first real timer preserves page middle",
+        "page middle survives two real timer rounds",
+        "new content updates above reading anchor without shifting it",
+        "removed rows preserve surviving reading content",
+        "user scroll during request wins over earlier position",
+        "page bottom survives two real timer rounds",
+        "independent list and detail scrollers survive two real timer rounds",
+        "390px page and detail positions survive two real timer rounds",
+        "focused and blurred unsubmitted draft both block repaint",
+        "query, category, person and scene remain selected",
+        "timer leaves confirmation open; cancel never writes or reopens it",
+        "assistant proactive message and real job trace persist in correct group across timers, unknown stays unknown",
+        "memory independent scrollbar retained",
+        "log reader retains position",
+        "log position survives second real timer round"
+      ],
+      "errors": []
+    },
+    {
+      "command": "node tests/identity_lifecycle_browser.cjs",
+      "passed": 8,
+      "checks": [
+        "successful standalone decision repaints immediately with current revision",
+        "successive decision uses new revision and revokes confirmation",
+        "old private scene is readable while person stays pending and management stays disabled",
+        "mixed records retain separate known group and unknown scene views",
+        "assistant-only unmatched archive is inspectable without generating a user or claiming delivery success",
+        "reliable frozen receipt joins the existing group as assistant with original job and no new source",
+        "fully known mixed file has a separate index and never masquerades as no-chat settings",
+        "no JavaScript errors"
+      ]
+    },
+    {
+      "command": "node tests/refresh_races_browser.cjs",
+      "passed": 3,
+      "checks": [
+        "late timer cannot overwrite committed delete or restore stale action indices",
+        "failed timer preserves draft, focus and live controls",
+        "failed in-flight history refresh preserves a newly opened confirmation and cancel context"
+      ]
+    },
+    {
+      "command": "node tests/workbench_browser.cjs",
+      "passed": 17,
+      "checks": [
+        "separate unconfirmed origins; no name-based merge",
+        "UI confirmation links private plus two groups into one entry",
+        "group and specific-group filtering preserve speaker/source; unrelated replies absent",
+        "loading clears old rows; delayed specific-group response cannot replace another group",
+        "private projection and authenticated image rendering",
+        "out-of-order private response cannot replace a new person",
+        "empty mode is explicit",
+        "read error and retry recover without old private content",
+        "UI unlink detaches one origin without rewriting records",
+        "explicit source history errors are visible and its refresh recovers",
+        "explicit operation source survives refresh; points request targets only original g1",
+        "delete requires explicit g1 and selected data layer; aggregate not expanded",
+        "keyboard scene switch; 390px view has no horizontal page overflow",
+        "legacy retains a separate inspectable entry",
+        "association search finds an origin beyond the first 100-entry list page",
+        "transient refresh failure preserves the current authorized reading context; explicit retry restores current data",
+        "empty catalog has a clear next step"
+      ],
+      "js_errors": []
+    },
+    {
+      "command": "node tests/user_auto_browser.cjs",
+      "passed": 11,
+      "checks": [
+        "trusted raw-author mapping automatically joins private plus two groups with visible basis",
+        "later trustworthy origin enters the existing stable automatic entry",
+        "same-note stranger remains separate, pending and honestly missing a nickname",
+        "QQ nickname source and group-card nature are distinct; HTML nickname stays inert text",
+        "private/all-group/specific-group switch preserves actual speaker, source and accepted replies",
+        "UI unlink persists refusal across refresh; stale automatic evidence cannot rejoin",
+        "explicit UI reconfirmation restores one group and stays manual, never platform-certified",
+        "UI deny records a visible decision without joining the candidate",
+        "user search finds nicknames without losing scene/query isolation",
+        "association editing pauses repaint without disabling auto-refresh; collapse resumes it",
+        "keyboard scene switching and 390px width remain usable without page overflow"
+      ],
+      "js_errors": []
+    },
+    {
+      "command": "node tests/identity_triage_browser.cjs",
+      "passed": 15,
+      "checks": [
+        "six people / eighteen keys show 4 confirmed, 3 pending sources, 2 archives, 12 conversations in separate sections",
+        "derived metadata is inspectable and attached to actual origins, never counted as another person",
+        "category filter works; missing mappings stay separate, verified SDK placeholders join without deleting app or instance boundaries",
+        "private / all-groups / selected group preserve actual speakers, origins and accepted replies",
+        "association preview shows exact sources; cancel has keyboard focus and Escape writes nothing",
+        "explicit association updates counts; unlink persists across refresh and does not silently rejoin",
+        "denial is visible and does not expand the person",
+        "human-confirmed archive joins the person but stays in unknown-scene tab and cannot become a private/group management target",
+        "explicit independent-user confirmation and revocation keep all other mappings intact",
+        "unknown write result is never claimed unsaved and cannot be blindly resubmitted before refresh",
+        "established nickname source remains stable, its rename updates, conflicting later source is visible, HTML is inert",
+        "search includes current names and preserves classification",
+        "auto-refresh stays checked, pauses for source review and actually repaints after collapse; no residual dialog",
+        "390px layout and keyboard scene switching remain usable",
+        "all original scopes, histories, names and ledgers unchanged; no browser JavaScript errors"
+      ]
+    }
+  ]
+}

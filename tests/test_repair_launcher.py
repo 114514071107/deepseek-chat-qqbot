@@ -98,11 +98,11 @@ class LauncherRegression(unittest.TestCase):
                     env['PATH'] = str(Path(os.environ['SystemRoot'])/'System32')
                     entry_command = 'cmd.exe /d /s /c "' + subprocess.list2cmdline([str(ENTRY), *args]) + '"'
                     fallback = subprocess.run(entry_command, env=env, capture_output=True, encoding='utf-8', errors='replace', timeout=30)
-                    self.assertEqual(fallback.returncode, 0, fallback.stdout+fallback.stderr)
+                    self.assertNotEqual(fallback.returncode, 0, 'cmd must require its Console dependency, not report Bot-only success')
                     self.assertIn('5.1', fallback.stdout)
                     env['PATH'] = str(Path(shells[0]).parent) + ';' + env['PATH']
                     preferred = subprocess.run(entry_command, env=env, capture_output=True, encoding='utf-8', errors='replace', timeout=30)
-                    self.assertEqual(preferred.returncode, 0, preferred.stdout+preferred.stderr)
+                    self.assertNotEqual(preferred.returncode, 0, 'cmd must report missing Console setup')
                     self.assertIn('PowerShell 7', preferred.stdout)
                     # Concurrent launches serialize on this instance's file lock.
                     command = [shell,'-NoProfile','-NonInteractive','-File',str(CORE),*args]
@@ -141,7 +141,10 @@ class LauncherRegression(unittest.TestCase):
                     probe=subprocess.run([shell,'-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,encoding='utf-8',timeout=15)
                     self.assertEqual(probe.stdout.strip(),'41',probe.stdout)
                     console_env=fixture_env.copy();console_env['PATH']=str(Path(shutil.which('node.exe')).parent)+';'+console_env['PATH']
-                    together=run(('-WithConsole','-ConsolePort',str(console_port)),env=console_env)
+                    # The user cmd must start both by default; explicit ConsolePort
+                    # forwards once, avoiding duplicate switch/default arguments.
+                    both_command='cmd.exe /d /s /c "'+subprocess.list2cmdline([str(ENTRY),*args,'-ConsolePort',str(console_port)])+'"'
+                    together=subprocess.run(both_command,env={**console_env,'DSH_LAUNCHER_NO_PAUSE':'1'},capture_output=True,encoding='utf-8',errors='replace',timeout=45)
                     self.assertEqual(together.returncode,0,together.stdout+together.stderr)
                     self.assertIn('Console ready',together.stdout)
                     repeated=run(('-WithConsole','-ConsolePort',str(console_port)),env=console_env)

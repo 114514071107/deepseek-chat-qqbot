@@ -1,0 +1,51 @@
+// Real timer/DOM and isolated API; no real data, admin worker, QQ or model.
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {chromium}=require('playwright'),{createConsoleServer}=require('../console/server'),{seedTriage}=require('../console/tests/triage-fixture');
+(async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-console-p2-')),f=seedTriage(root),token='synthetic-console-p2-token-01234567890',checks=[];
+ const server=createConsoleServer({dsh:root,port:0,token});await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
+ const evidence=process.env.DSH_P2_EVIDENCE||path.resolve('docs/reviews/evidence/2026-10-26-p2-fix');fs.mkdirSync(evidence,{recursive:true});
+ try{
+  browser=await chromium.launch({channel:'msedge',headless:true});const context=await browser.newContext({httpCredentials:{username:'dsh',password:token}}),page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(String(e)));const base='http://127.0.0.1:'+server.address().port;
+  await page.goto(base);await page.locator('#pt-daily').waitFor();await page.locator('#auto-ref').uncheck();
+  let release,enter,finished;const held=new Promise(r=>release=r),entered=new Promise(r=>enter=r),done=new Promise(r=>finished=r);let first=true;
+  await page.route('**/api/status',async route=>{if(!first)return route.continue();first=false;const response=await route.fetch();enter();await held;await route.fulfill({response});finished();});
+  f.histories.pA.push({role:'user',text:'NEW STATUS DATA',source:f.scopes.pA,ts:9000});f.flush();
+  await page.locator('#auto-ref').check();await page.locator('#view h3').first().click();
+  await Promise.race([entered,new Promise((_,reject)=>setTimeout(()=>reject(Error('timer did not start')),8000))]);
+  await page.locator('#pt-daily').fill('321');release();await done;await page.waitForTimeout(400);
+  assert.equal(await page.locator('#pt-daily').inputValue(),'321');assert.equal(await page.locator('#pt-daily').evaluate(e=>e===document.activeElement),true);
+  fs.writeFileSync(path.join(evidence,'status-draft.json'),JSON.stringify({synthetic_only:true,real_timer:true,status_data_changed:true,value_after_response:await page.locator('#pt-daily').inputValue(),focus_preserved:await page.locator('#pt-daily').evaluate(e=>e===document.activeElement)},null,2));
+  await page.screenshot({path:path.join(evidence,'status-draft-preserved.png')});
+  checks.push('status data changed while the real timer awaited: new draft 321 and focus survive DOM commit');
+  await page.locator('#view h3').first().click();await page.waitForTimeout(5200);assert.equal(await page.locator('#pt-daily').inputValue(),'321');
+  checks.push('blurred unsaved draft also defers the next automatic redraw');
+  await page.route('**/api/points/conf',async route=>{assert.deepEqual(route.request().postDataJSON(),{daily:321});f.save('dsh_soul_conf.json',{points_daily:321});await route.fulfill({json:{ok:true}});});
+  await page.locator('#pt-save').click();await page.waitForFunction(()=>document.querySelector('#pt-daily').defaultValue==='321');await page.locator('#view h3').first().click();
+  let refreshed=false;page.on('request',r=>{if(r.url().endsWith('/api/status'))refreshed=true;});await page.waitForTimeout(5500);
+  assert.equal(refreshed,true);assert.equal(await page.locator('#pt-daily').inputValue(),'321');assert.match(await page.locator('#view').innerText(),/3 条历史/);
+  checks.push('successful explicit save clears only that submitted draft; automatic updates resume with new data');
+  await page.locator('#auto-ref').uncheck();await page.unroute('**/api/status');let fail,failEnter;const blocked=new Promise(r=>fail=r),began=new Promise(r=>failEnter=r);let errorFirst=true;
+  await page.route('**/api/status',async route=>{if(!errorFirst)return route.continue();errorFirst=false;failEnter();await blocked;await route.abort();});
+  await page.locator('#auto-ref').check();await page.locator('#view h3').first().click();await Promise.race([began,new Promise((_,reject)=>setTimeout(()=>reject(Error('error timer did not start')),8000))]);
+  await page.locator('#pt-daily').fill('654');fail();await page.waitForTimeout(400);assert.equal(await page.locator('#pt-daily').inputValue(),'654');
+  checks.push('failed in-flight status request also preserves a draft begun during the wait');
+  await page.locator('#auto-ref').uncheck();await page.unroute('**/api/status');
+  f.save('history_all.json',{botOnly:[{id:'old-bot',role:'assistant',text:'SYNTHETIC SOURCELESS BOT OUTPUT',ts:1}],mixed:[{id:'known',role:'user',text:'KNOWN-SUBSET',source:f.scopes.gC,ts:1},{id:'unknown',role:'user',text:'UNKNOWN-SUBSET',ts:2}]});
+  f.save('console_people_v1.json',{version:2,groups:[['gD1','gD2'],['mixed']],denied:[]});
+  const original=fs.readFileSync(path.join(f.data,'console_people_v1.json'),'utf8');
+  await page.getByRole('button',{name:'用户',exact:true}).click();await page.locator('#people-outbound-archives summary').waitFor();
+  await page.locator('#people-outbound-archives summary').click();assert.match(await page.locator('#people-outbound-archives').innerText(),/目标来源未获取/);
+  await page.locator('[data-outbound]').click();await page.locator('#people-outbound-records .msg').first().waitFor();assert.match(await page.locator('#people-outbound-records').innerText(),/SYNTHETIC SOURCELESS BOT OUTPUT/);
+  assert.equal(await page.locator('#people-outbound-archives [data-person],#people-outbound-archives #people-confirm').count(),0);
+  checks.push('unknown-source Bot-only archive is readable and has no user confirmation controls');
+  assert.match(await page.locator('#view').innerText(),/1 个旧关联引用尚无法唯一对应来源/);await page.locator('#people-archive-indexes summary').click();
+  assert.match(await page.locator('#people-archive-indexes').innerText(),/mixed/);assert.equal(fs.readFileSync(path.join(f.data,'console_people_v1.json'),'utf8'),original);
+  checks.push('partial-unknown whole-file mapping stays unresolved with a visible archive index; original decision unchanged');
+  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(evidence,'unknown-outbound-and-mixed-index.png'),fullPage:true});assert.deepEqual(errors,[]);
+  checks.push('390px archive controls remain usable and no browser JavaScript errors');
+  fs.writeFileSync(path.join(evidence,'browser.json'),JSON.stringify({date:'2026-10-26',synthetic_only:true,checks,js_errors:errors},null,2));console.log(JSON.stringify({passed:checks.length,checks}));
+ }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));fs.rmSync(root,{recursive:true,force:true});}
+})().catch(e=>{console.error(e);process.exitCode=1;});

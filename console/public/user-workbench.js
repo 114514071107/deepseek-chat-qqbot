@@ -54,10 +54,10 @@ window.UserWorkbench=(()=>{
         '<p class="dim">当前筛选 '+r.total+' 个展示入口；已加载 '+r.people.length+' 个。此数不是自然人数。</p><div class="row"><button class="act" id="people-prev" '+(state.listOffset?'':'disabled')+'>上一页用户</button><button class="act" id="people-next" '+(r.next_offset===null?'disabled':'')+'>下一页用户</button></div>'+
         '<details class="card" id="people-metadata"><summary>无聊天资料键（'+r.metadata_total+'）</summary><p class="dim">这些键只用于备注、积分或设置；未列作用户，原数据未移动。精确对应多个来源时不猜测归属。</p><ul class="source-list">'+r.metadata.map(m=>'<li>'+esc(m.label||'无称呼')+' / '+(m.related_count?'精确关联 '+m.related_count+' 个来源':'未找到会话来源')+'<br><span class="mono">'+esc(m.uid)+'</span></li>').join('')+'</ul><span class="dim">最多显示 100 项；更多可按资料键搜索。</span></details><div id="people-detail"></div>';
       $('#people-archive-indexes')?.remove();
-      if(r.archive_indexes?.length)$('#view').insertAdjacentHTML('beforeend','<details class="card" id="people-archive-indexes"><summary>混合旧档索引（'+r.archive_indexes.length+'）</summary><p class="dim">按记录分场景，原文件索引不计用户或纯资料；不能把整个混合文件当作一项确定人物证据。</p><ul>'+r.archive_indexes.map(a=>'<li>'+esc(a.uid)+' → '+a.related_sources.map(esc).join('、')+'</li>').join('')+'</ul></details>');
+      if(r.archive_indexes?.length)$('#view').insertAdjacentHTML('beforeend','<details class="card" id="people-archive-indexes"><summary>混合旧档索引（'+r.archive_indexes.length+'）</summary><p class="dim">按记录分场景，原文件索引不计用户或纯资料；不能把整个混合文件当作一项确定人物证据。</p><ul class="source-list">'+r.archive_indexes.map(a=>'<li>'+esc(a.uid)+' → '+a.related_sources.map(esc).join('、')+'</li>').join('')+'</ul></details>');
       $('#people-outbound-archives')?.remove();
       if(r.outbound_archives?.length){
-        $('#view').insertAdjacentHTML('beforeend','<details class="card" id="people-outbound-archives"><summary>仅 Bot 出站旧档（'+r.outbound_archives.length+'）</summary><p class="dim">保留原记录。目标场景与用户入站来源分开：缺少可信入站或唯一原会话时不增加用户、待确认来源或会话来源，也不猜任务。</p>'+r.outbound_archives.map(a=>'<p>'+esc(a.source.private?'私聊目标 '+a.source.sender:'群目标 '+a.source.group)+' / '+a.count+' 条 / '+esc(a.reason)+' <button class="act" data-outbound="'+esc(a.uid)+'">查看出站记录</button></p>').join('')+'<div id="people-outbound-records">'+outboundHtml(state.outbound)+'</div></details>');
+        $('#view').insertAdjacentHTML('beforeend','<details class="card" id="people-outbound-archives"><summary>仅 Bot 出站旧档（'+r.outbound_archives.length+'）</summary><p class="dim">保留原记录。目标场景与用户入站来源分开：缺少可信入站或唯一原会话时不增加用户、待确认来源或会话来源，也不猜任务。</p>'+r.outbound_archives.map(a=>'<p>'+esc(a.source?(a.source.private?'私聊目标 '+a.source.sender:'群目标 '+a.source.group):'目标来源未获取')+' / '+a.count+' 条 / '+esc(a.reason)+' <button class="act" data-outbound="'+esc(a.uid)+'">查看出站记录</button></p>').join('')+'<div id="people-outbound-records">'+outboundHtml(state.outbound)+'</div></details>');
         document.querySelectorAll('[data-outbound]').forEach(button=>button.onclick=async()=>{try{const a=await get('/api/people/outbound?uid='+encodeURIComponent(button.dataset.outbound),controller.signal);if(!live(id))return;state.outbound=button.dataset.outbound;outboundCache.set(state.outbound,a.entries);$('#people-outbound-records').innerHTML=outboundHtml(state.outbound);}catch(error){if(live(id))$('#people-outbound-records').textContent='读取失败：'+error.message;}});
       }
       document.querySelectorAll('[data-person]').forEach(button=>button.onclick=()=>{
@@ -147,5 +147,5 @@ window.UserWorkbench=(()=>{
       hydrateStickerSamples(target);
     }catch(error){if(!live(id)||error.name==='AbortError')return;target.innerHTML='<p role="alert">记录加载失败：'+esc(error.message)+' <button class="act" id="people-history-retry">重试记录</button></p>';$('#people-history-retry').onclick=()=>loadHistory(id);}
   }
-  return {render,leave,busy,version:'20261026-lifecycle-1'};
+  return {render,leave,busy,version:'20261026-lifecycle-2'};
 })();

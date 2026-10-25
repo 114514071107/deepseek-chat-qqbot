@@ -62,3 +62,27 @@ test('fully identified mixed archives retain an ambiguous file index without bec
  const list=f.w.list();assert.equal(list.counts.conversation_sources,2);assert.equal(list.counts.metadata_keys,0);
  assert.equal(list.archive_indexes.length,1);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.counts.confirmed_users,0);
 });
+test('source-less assistant-only history is readable outbound evidence and cannot confirm a person',t=>{
+ const f=fixture(t);f.save('history_all.json',{old:[{id:'bot-only',role:'assistant',text:'BOT-ONLY',ts:1,delivery:{status:'accepted'}}]});
+ const list=f.w.list();assert.equal(list.total,0);assert.equal(list.counts.confirmed_users,0);assert.equal(list.outbound_archives.length,1);
+ const a=list.outbound_archives[0];assert.equal(a.source,null);assert.match(a.reason,/来源|入站/);
+ assert.equal(f.w.outbound(new URLSearchParams({uid:a.uid})).entries[0].text,'BOT-ONLY');
+ assert.throws(()=>f.w.confirm({person:a.uid,revision:list.revision,confirm:true}));assert.equal(f.w.list().counts.confirmed_users,0);
+});
+test('partial unknown mixed-file human references stay unresolved rather than shrink to one subset',t=>{
+ const f=fixture(t);f.save('history_all.json',{mixed:[f.row(f.source('group-A'),'KNOWN'),{id:'unknown',role:'user',text:'UNKNOWN',ts:2}]});
+ f.save('console_people_v1.json',{version:2,groups:[['mixed']],denied:[]});const before=fs.readFileSync(path.join(f.root,'console_people_v1.json'),'utf8');
+ const list=f.w.list();assert.equal(list.counts.confirmed_users,0);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.archive_indexes.length,1);
+ assert.equal(list.archive_indexes[0].related_sources.length,2);assert.ok(list.people.every(p=>p.sources.every(o=>o.uid!=='mixed')));
+ assert.equal(fs.readFileSync(path.join(f.root,'console_people_v1.json'),'utf8'),before);
+});
+test('older recovered outbound aliases cannot evict newer inbound records or regress latest activity',t=>{
+ const f=fixture(t),s=f.source('group-A'),provenance={scope_key:'oldOut',source:s,target:{platform:s.platform,instance:s.instance,bot:s.bot,kind:'group',address:s.group},mode:'proactive',trigger:'proactive',request_id:''};
+ f.save('scopes_v2.json',{existing:s});f.save('history_all.json',{
+   existing:Array.from({length:150},(_,i)=>({id:'new-'+i,role:'user',text:'NEW',ts:1000+i,source:s})),
+   oldOut:Array.from({length:150},(_,i)=>({id:'old-'+i,role:'assistant',text:'OLD',ts:i,source:s,provenance,delivery:{status:'accepted',message_id:'out-'+i}}))});
+ const before=fs.readFileSync(path.join(f.root,'history_all.json'),'utf8'),list=f.w.list(),p=list.people[0];
+ const h=f.w.history(new URLSearchParams({person:p.id,mode:'group'}));assert.equal(h.entries.length,150);assert.ok(h.entries.every(r=>r.role==='user'));
+ assert.equal(h.entries[0].ts,1149);assert.equal(p.last_at,1149);assert.equal(h.next_offset,null);
+ assert.equal(fs.readFileSync(path.join(f.root,'history_all.json'),'utf8'),before);
+});

@@ -24,7 +24,7 @@ const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261026-lifecycle-1";
+const API_VER = "20261026-lifecycle-2";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];

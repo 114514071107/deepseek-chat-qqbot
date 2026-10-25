@@ -1,6 +1,6 @@
 ﻿param(
     [string]$RuntimeRoot = 'D:\dsbot',
-    [switch]$WithConsole,
+    [switch]$WithConsole = ($env:DSH_LAUNCH_WITH_CONSOLE -eq '1'),
     [ValidateRange(1,120)][int]$TimeoutSeconds = 30,
     [ValidateRange(1,65535)][int]$BotPort = 6185,
     [ValidateRange(1,65535)][int]$ConsolePort = 7850,

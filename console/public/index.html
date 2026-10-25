@@ -127,7 +127,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261026-lifecycle-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261026-lifecycle-2"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -273,18 +273,20 @@ function bindBlockedSilence(reload) {
 }
 
 // ---------- 状态页 ----------
-async function vStatus() {
+async function vStatus({refresh=false,manual=false}={}) {
+  const defer=()=>refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||
+    /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)||document.getElementById('delete-panel'));
   let s, r;
   try {
     [s, r] = await Promise.all([api("/api/status"), api("/api/switches")]);
   } catch (e) {
-    if(cur!=="status")return;
+    if(cur!=="status"||defer())return;
     $("#hdr-status").innerHTML = '<span class="tag bad">服务未连接</span>';
     $("#view").innerHTML = '<div class="card"><h3>连不上控制台服务</h3>' +
       '<p class="dim">请确认已双击 start-dsh-console.vbs 启动控制台（127.0.0.1:7850）。页面每 5 秒会自动重试，服务恢复后自动显示。</p></div>';
     return;
   }
-  if(cur!=="status")return;
+  if(cur!=="status"||defer())return;
   // 前后端版本不一致 = 旧进程在跑老代码，提示重开控制台
   if (s.api_ver && s.api_ver !== FE_VER) {
     $("#view").innerHTML = '<div class="card" style="border:2px solid #e74c3c"><h3 style="color:#e74c3c">控制台后端已过期</h3>' +
@@ -360,8 +362,9 @@ async function vStatus() {
     if (!resp.ok) { e.target.checked = !e.target.checked; alert("保存失败"); }
   };
   $("#pt-save").onclick = async () => {
-    const resp = await post("/api/points/conf", { daily: parseInt($("#pt-daily").value, 10) });
-    if (resp.ok) { const t = $("#pt-saved"); t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 1200); }
+    const input=$("#pt-daily"),submitted=input.value;
+    const resp = await post("/api/points/conf", { daily: parseInt(submitted, 10) });
+    if (resp.ok) { if(input.isConnected&&input.value===submitted)input.defaultValue=submitted;const t = $("#pt-saved"); if(t){t.style.opacity = 1; setTimeout(() => (t.style.opacity = 0), 1200);} }
     else alert("保存失败：" + (resp.error || ""));
   };
 }

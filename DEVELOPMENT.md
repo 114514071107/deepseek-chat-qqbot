@@ -13,6 +13,10 @@
 
 ## Git 日常流程
 
+2026-10-26 五项 P2 补修见[失败回归及部署记录](docs/reviews/2026-10-26-console-lifecycle-p2-fix.md)。
+前后端版本 `20261026-lifecycle-2`。`scripts/start-bot.cmd` 现在默认启动 Bot 和 7850 Console；
+需已有 Node 与受保护 Console 凭据，缺失时明确失败。直接运行 PS1 仍可只启动 Bot，详见启动说明。
+
 2026-10-26 四项补修见[复现、规则及交付记录](docs/reviews/2026-10-26-console-lifecycle-repairs.md)。
 Console 前后端版本 `20261026-lifecycle-1`；新增 `public/reading-state.js` 必须与全部工作台文件配套发布。
 历史来源按记录只读派生；派生视图不是管理目标。Bot 回执/历史增加可选 provenance，原存储版本和来源权限不变。

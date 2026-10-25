@@ -146,6 +146,11 @@ def record_profile(event, scope, directory):
             row = {**old, 'identity_conflict': True, 'identity_conflicts': row['identity_conflicts']}
         elif row.get('identity_conflicts') != old.get('identity_conflicts'):
             row = {**old, 'identity_conflict': True, 'identity_conflicts': row['identity_conflicts']}
+        elif row.get('identity') and not old.get('identity') and not row.get('identity_conflict') and row.get('app') and old.get('app', row['app']) == row['app']:
+            # Enrich the first reliable proof without replacing newer display/event fields.
+            row = {**old, 'app': row['app'], 'identity': row['identity'],
+                   'identity_observed_at': row['identity_observed_at'],
+                   'identity_message_id': row['identity_message_id']}
         else:
             event.set_extra('_dsh_profile_observed', True)
             return
