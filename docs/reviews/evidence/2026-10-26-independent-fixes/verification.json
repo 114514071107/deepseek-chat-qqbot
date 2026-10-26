@@ -1,17 +1,17 @@
 {
   "date": "2026-10-26",
-  "version": "20261026-review-1",
-  "synthetic_only": true,
+  "version": "20261026-review-2",
+  "regression_data_synthetic_only": true,
   "python": {
-    "total": 254,
-    "passed": 253,
+    "total": 258,
+    "passed": 257,
     "skipped": 1,
-    "seconds": 295.036,
+    "seconds": 347.638,
     "skip_reason": "unknown images no longer automatically collected; original assertions retained"
   },
   "node": {
     "passed": 63,
-    "seconds": 1.659
+    "seconds": 1.3708896
   },
   "balance_passed": 2,
   "browsers": {
@@ -22,10 +22,10 @@
   },
   "actual_lifecycle": {
     "both_shells": true,
-    "api_and_faults_seconds": 110.652
+    "api_and_faults_seconds": 127.072
   },
   "static": {
-    "python_ast": 70,
+    "python_ast": 72,
     "js_cjs": 26,
     "script_blocks": 3
   },
@@ -36,11 +36,25 @@
     "preserved": true
   },
   "production_acl_applied": false,
+  "final_document_checks": {
+    "task_files_scanned": 36,
+    "known_sensitive_values_checked": 8,
+    "sensitive_matches": 0,
+    "missing_local_document_links": 0,
+    "summary_counts_and_versions_consistent": true,
+    "source_changes_since_functional_commit": 0
+  },
   "qq_or_paid_acceptance": false,
   "public_gallery": {
     "existing_public_content_files": 138,
     "unknown_auto_collected_files": 5,
     "sqlite_opened_for_inventory": false
+  },
+  "prior_review_1_full_run": {
+    "total": 254,
+    "passed": 253,
+    "skipped": 1,
+    "seconds": 295.036
   },
   "post_deployment_block_fix": {
     "python": {
@@ -70,5 +84,63 @@
     "js_cjs": 26,
     "script_blocks": 3,
     "unknown_status_browser_red_then_green": true
+  },
+  "production_deployment": {
+    "functional_commit": "d62fe254a6c1d3ae53233f31bb0391ad8bcaf9bd",
+    "version": "20261026-review-2",
+    "status": "deployed_pending_acceptance",
+    "files_verified": 34,
+    "files_changed_from_review_1": 7,
+    "stopped_snapshot_files": 414,
+    "stopped_snapshot_bytes": 35323876,
+    "includes_db_wal_shm": true,
+    "backup": "D:\\dsbot\\deployment-backups\\20261026-independent-fixes-qq-ready",
+    "rollback_executed": false,
+    "backup_rollback_scripts": {
+      "duplicate_type_failure_reproduced_before_fix": true,
+      "fresh_shell_per_controlled_call": true,
+      "pwsh_synthetic_cases_passed": 2,
+      "windows_powershell_51_synthetic_cases_passed": 2,
+      "production_rollback_executed": false,
+      "business_data_unchanged": true
+    },
+    "operator_same_host_add_type_failure": "recovered through runtime entry in fresh shell; no false success",
+    "console_restart": {
+      "initial_status": "pending",
+      "initial_ok": false,
+      "final_status": "succeeded",
+      "old_node_pid": 5776,
+      "new_node_pid": 33716,
+      "api_and_frontend_version": "20261026-review-2"
+    },
+    "bot_start_reused_same_worker": true,
+    "final_readonly_time": "2026-10-26T16:55:01+08:00",
+    "bot_worker_pid": 34796,
+    "bot_application_pid": 17556,
+    "console_worker_pid": 49144,
+    "process_identity_family_and_listeners_verified": true,
+    "surviving_service_process_owners_match_current_account": true,
+    "exited_transient_status_processes_skipped_after_identity_check": 2,
+    "served_html_hash_matches": true,
+    "unauthenticated_http": 401,
+    "cross_origin_http": 403,
+    "final_readonly_http_writes": 0,
+    "protected_config_checks_against_two_snapshots": 8,
+    "protected_configs_unchanged": true,
+    "original_acl_sddl_checks": 4,
+    "production_acl_applied": false,
+    "gallery_snapshot_files_hash_unchanged": 149,
+    "live_sqlite_opened": false,
+    "production_alarm_file": "absent in stopped snapshot and final runtime; preservation tested on synthetic old data",
+    "qq_sdk_connection": {
+      "configured": 1,
+      "ready": 1,
+      "status": "ready",
+      "heartbeat_age_seconds": 0.094,
+      "proves_client_delivery": false
+    },
+    "real_qq_or_paid_acceptance": false,
+    "production_keyboard_acceptance_repeated": false,
+    "pushed_or_merged_main": false
   }
 }

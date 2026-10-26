@@ -1,6 +1,6 @@
 # 2026-10-26 独立评审补修配套发布
 
-实施与限制见 [评审记录](../reviews/2026-10-26-independent-fixes.md)。本轮版本 `20261026-review-1`；仅本地 dev，未推送/PR/main 合并。发布状态及功能 commit 在实际执行后追加。
+实施与限制见 [评审记录](../reviews/2026-10-26-independent-fixes.md)。当前实际版本 `20261026-review-2`，功能提交 `d62fe254a6c1d3ae53233f31bb0391ad8bcaf9bd`，34/34配套文件已核；状态为**已部署，待验收/试用**。仅本地 dev，未推送/PR/main 合并。下文保留首次review-1和后续补充过程，最终生效记录在末尾。
 
 ## 发布清单与备份方案
 
@@ -39,3 +39,19 @@ SDK配置 bot_log=false，现有启动日志不能证明 QQ READY；因此不把
 ### review-2 待发布补充
 
 Bot只读QQ连接观察及未知状态卡修正后，前后端/插件统一使用 `20261026-review-2`。16:42 接续核对旧34/34及原进程仍匹配。后续受限目录为 `D:\dsbot\deployment-backups\20261026-independent-fixes-qq-ready`，保留此前已生效review-1作为回退基线，不覆盖首次发布备份或旧快照。等待同版自检与本地提交后，重新停写备份并配套部署，实际结果待追加。
+
+### review-2 实际生效及收尾
+
+本地提交`d62fe254a6c1d3ae53233f31bb0391ad8bcaf9bd`后，16:46:25/26受控停止Console/Bot，端口释放。受保护目录`D:\dsbot\deployment-backups\20261026-independent-fixes-qq-ready`保存414份/35,323,876字节停写快照、原代码、34份manifest/暂存源码、源码zip（CRC通过）、配置哈希及可执行回退。快照包括DB/WAL/SHM，备份及收尾未打开活跃SQLite。
+
+34/34安装哈希通过，其中7份变化。首次在同一PowerShell操作宿主先后加载不同路径的同名C#类型，Add-Type重复导致启动失败；改用新Shell调用运行实例原入口后16:47:27就绪，无代码补写、无假成功、无回退。Bot worker34796/应用17556，插件review-2，QQ只读SDK观察ready（配置1/就绪1）；Console初始Node5776。
+
+16:49实际Console自重启经认证API受理pending/ok=false→最终succeeded，Node5776→33716、worker49144，API/前端均review-2；随后Bot start复用原worker/ticks。原始脱敏操作记录为同目录`actual-lifecycle-v2.json`。16:55`final-readonly-verify.ps1`核验34/34、服务身份/家族/监听、HTML实际返回哈希、无认证401/跨来源403、心跳0.094秒及SDK ready1/1，结果为`final-readonly-verification.json`。只读核验中瞬时状态查询子进程退出导致的WMI失败单独保留为核验器竞态，确认原身份退出后再核通过；没有据此重启服务。
+
+四份配置/凭据与两轮部署前记录共8项哈希均一致，两组ACL Plan四目标原SDDL不变；图库149份文件与停写快照哈希不变。实际alarms.json在该快照和收尾均不存在，旧数据保留由合成测试验证。没有真实数据迁移、图库清理、身份重写、依赖安装或生产ACL Apply。
+
+回退入口为该目录`rollback-code.ps1`，只停止核实的本实例、核当前/原哈希并恢复previous-code，不恢复业务/配置快照。此补充目录退回review-1（已含R01边界），首次发布目录退回更早版本会重新带入R01风险；不要混用。此次未执行任何回退。需要回退时先审阅脚本及manifest，按同一受控入口恢复启动并重新核版本/心跳/认证；数据恢复另需授权。
+
+收尾通过临时合成实例发现两份回退脚本在切换旧启动器时也会遇同宿主Add-Type冲突；原脚本已受限留存，现每次启动器调用均独立Shell。有效失败（停止两次、代码已恢复、启动失败）→修复后pwsh/Windows PowerShell5.1各两个备份脚本均通过，精确停止两次/启动一次、代码恢复及合成业务文件哈希不变。证据为受保护同目录`rollback-red-valid.json`、`rollback-green.json`、`rollback-green-ps51.json`及`test-rollback-offline.py`；未对生产执行回退，不改变34份发布文件。
+
+本轮离线最终Python258项（257通过、1明示跳过）、Node63/63、余额2/2、双Shell真实临时生命周期127.072秒、浏览器键盘7/跨刷新5等通过。SDK ready不等于真实QQ投递或长期稳定，本轮未获QQ/付费验收许可、未发送测试消息；R05生产ACL待授权，源码实际远程免费交付及素材权利链仍缺口。文档收尾提交仅固化记录，不触发重复部署。
