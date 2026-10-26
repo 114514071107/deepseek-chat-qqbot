@@ -18,13 +18,17 @@
 - 同入口 `test_repair_admin_service.py`：5/5，3.723秒，通过；临时数据验证管理任务取消隔离、原子写入冲突及退出原因。
 - `node --test console/tests/*.test.js`：64/64，通过。
 - 产品源码相对功能提交无变化，源码及运行 manifest 36/36；`git diff --check`通过。
-- 写本文前，36份待推文件和42个待推历史blob对照10项本机已知敏感值，命中0；文档链接无缺失。提交前连同新记录再核。
+- 提交前，37份待推文件和42个待推历史blob对照10项本机已知敏感值，命中0；文档链接无缺失。结项文档另核。
 
 本轮证据单独保存于受限本机目录 `D:\dsbot\deployment-backups\20261027-dev-publication`，没有覆盖原部署和实测证据。核验仅作读取和受限证据落盘，没有调用生产生命周期写接口。
 
 ## 推送与对应源码
 
-推送前：本轮明确推送授权已核，准备把两个既有本地提交及本文普通推送至衍生仓库 origin/dev。main保持 `5641b0a1e01f76b55293fa427b319136f1f7b837`；不向upstream写入、不强推、不创建PR或增加长期分支。实际远端结果、对应功能提交源码的匿名下载核对在成功后追加。
+本轮明确推送授权已核，普通 `git push origin HEAD:refs/heads/dev` 成功：远端dev由 `e4c9de7` 前进至 `1f46c70a55374c9233fe7ce59b2cfaecb0520d81`，包含功能001b64d、测试/验收收尾f23c892及本文。远端dev、本地HEAD和origin/dev一致，工作区干净。结项只追加文档并在同一授权范围再次普通推送，最终提交SHA由仓库外TASKS.md记录，避免在提交内递归记录自身hash。
+
+以不提供认证信息的HTTPS请求下载[运行功能对应的完整源码ZIP](https://codeload.github.com/114514071107/deepseek-chat-qqbot/zip/001b64d98d240e9356fa9a2f250ae14b98c848ac)，返回200，CRC通过，236/236文件与本地对应Git archive逐项SHA256一致。下载包为2,888,410字节，SHA256 `b04a41786c901f1f612b9bb5465ba2c638bad910c2fb6994a847c3abbb2e5de1`，核验副本留在本轮受限证据目录；本次新功能对应源码已可免费远程获取。素材权利链没有因此关闭。
+
+03:51推送后再核36/36、原运行进程、心跳0.102秒、QQ ready1/1、前后端/实际HTML和401/403均通过；随后只读管理状态报告bot_running=true、readiness=ready、status=succeeded。两次现场核验均未重启服务或发QQ消息。main远端仍为 `5641b0a1e01f76b55293fa427b319136f1f7b837`，没有upstream写入、强推、PR或新增长期分支。结果为**当前新功能在线运行，定向验证通过并已发布origin/dev**。
 
 ## 备份、回退与保留项
 
