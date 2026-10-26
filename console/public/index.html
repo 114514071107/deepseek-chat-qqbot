@@ -53,8 +53,11 @@
   .pill { font-size:11px; color:var(--warn); }
 
   /* ---------- 滑动 toggle（纯 CSS checkbox） ---------- */
-  .tg { display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
-  .tg input { display:none; }
+  .tg { position:relative; display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+  .tg input { position:absolute; width:1px; height:1px; padding:0; margin:0; opacity:0; overflow:hidden; clip-path:inset(50%); }
+  .tg input:focus-visible + i { outline:3px solid var(--acc); outline-offset:4px; }
+  .tg input:disabled + i { opacity:.45; cursor:not-allowed; }
+  .tg:has(input:disabled) { cursor:not-allowed; }
   .tg i { position:relative; width:38px; height:21px; border-radius:999px; background:#cdd6e4; transition:background .18s; flex:none; }
   .tg i::after { content:""; position:absolute; top:2.5px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:left .18s; }
   .tg input:checked + i { background:var(--ok); }
@@ -127,7 +130,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261026-lifecycle-2"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261026-review-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -149,6 +152,12 @@ let cur = "status", timer = null, curUid = null, logFilter = { file: "dsh", q: "
 let swCache = null; // /api/switches 缓存（用户页用）
 let scopeDetailVersion = 0;
 let memoryVersion = 0;
+const botOperation={busy:false,message:''};
+function paintBotOperation(){
+  const output=$('#bot-saved');
+  if(output){output.setAttribute('role','status');output.style.opacity=botOperation.message?'1':'0';output.textContent=botOperation.message;}
+  document.querySelectorAll('#bot-start,#bot-stop,#bot-restart').forEach(button=>button.disabled=botOperation.busy);
+}
 
 function tab(name) {
   memoryVersion++;
@@ -213,18 +222,21 @@ const FEAT_META = {
   proactive: ["主动消息", "久没聊时主动开口找她/他"],
   sprinkle:  ["碎碎念",   "回复后偶发补一句「突然想起」"],
   revive:    ["复活救场", "冷场几分钟后尝试救活话题"],
-  harvest:   ["收图采集", "自动收藏对方发来的表情包"],
+  harvest:   ["收图采集 · 平台缺失", "当前缺少可靠表情标识，普通图与未知类型均不自动入共享库"],
   safety:    ["安全闸",   "极端内容两道拦截（仅全局，不可按用户关）"],
   reminders: ["定时提醒", "午饭/晚饭/睡觉到点提醒"],
-  kimi:      ["Kimi外包", "允许她把重活外包给 Kimi Code（她仍需先请示）"],
+  kimi:      ["Kimi外包 · 权限禁止", "当前执行策略禁止，开关不能恢复该工具"],
 };
 const USER_KEY_CN = {
   reply: "回复", voice: "语音", proactive: "主动消息", desire: "念头",
   sprinkle: "碎碎念", revive: "复活", harvest: "收图", reminders: "提醒",
-  alarm: "闹钟", files: "文件助理",
+  alarm: "闹钟 · 政策暂缓", files: "文件助理 · 仅主人独立目录",
 };
-const tg = (checked, attrs, big, label) =>
-  '<label class="tg' + (big ? " big" : "") + '"><input type="checkbox" ' + attrs + (checked ? " checked" : "") + "><i></i>" + (label ? "<span>" + label + "</span>" : "") + "</label>";
+const tg = (checked, attrs, big, label) => {
+  const key=(attrs.match(/data-k="([^"]+)"/)||[])[1], unavailable=['harvest','kimi','alarm'].includes(key)||(key==='files'&&attrs.includes('data-ordinary="1"'));
+  const name=label||(FEAT_META[key]||[])[0]||(attrs.includes('ms-toggle')?'机器人总开关':'功能开关');
+  return '<label class="tg'+(big?' big':'')+'"><input type="checkbox" aria-label="'+esc(name)+'" '+attrs+(unavailable?' disabled title="当前不可用，不能由开关恢复"':'')+(!unavailable&&checked?' checked':'')+'><i aria-hidden="true"></i>'+(label?'<span>'+label+'</span>':'')+'</label>';
+};
 
 // 总开关大卡（状态页用）：切换只局部刷新这张卡
 function masterStatHtml(enabled) {
@@ -235,8 +247,10 @@ function masterStatHtml(enabled) {
 }
 function bindMasterToggle() {
   $("#ms-toggle").onchange = async (e) => {
-    const on = e.target.checked;
+    const control=e.target,on=control.checked; control.disabled=true;
     const resp = await post("/api/switch", { key: "enabled", value: on });
+    control.disabled=false;
+    if (!control.isConnected) return;
     if (resp.ok) {
       $("#ms-card").classList.toggle("off", !on);
       const st = $("#ms-st");
@@ -255,8 +269,9 @@ function featGridHtml(conf, confKeys) {
 }
 function bindFeatToggles() {
   document.querySelectorAll('input[data-scope="conf"]').forEach((cb) => (cb.onchange = async () => {
-    const resp = await post("/api/switch", { key: cb.dataset.k, value: cb.checked });
-    if (!resp.ok) { cb.checked = !cb.checked; alert("保存失败"); }
+    if(cb.disabled)return;const key=cb.dataset.k,value=cb.checked;cb.disabled=true;
+    const resp = await post("/api/switch", { key, value }); cb.disabled=false;
+    if (!resp.ok&&cb.isConnected) { cb.checked = !value; alert("保存失败"); }
   }));
 }
 function blockedSilenceHtml(r) {
@@ -297,11 +312,11 @@ async function vStatus({refresh=false,manual=false}={}) {
   }
   $("#hdr-status").innerHTML = s.bot_running
     ? '<span class="tag ok">机器人在线</span>'
-    : '<span class="tag bad">机器人进程未检测到</span>';
+    : '<span class="tag bad">机器人未就绪或状态未知</span>';
   const enabled = (s.conf || {}).enabled !== false;
   $("#view").innerHTML =
     '<div class="stat-row">' +
-      '<div class="stat"><div class="lb">运行状态</div><div class="vl ' + (s.bot_running ? "ok" : "bad") + '">' + (s.bot_running ? "在线" : "未运行") + '</div><div class="sb">astrbot.exe 进程</div>' +
+      '<div class="stat"><div class="lb">运行状态</div><div class="vl ' + (s.bot_running ? "ok" : "bad") + '">' + (s.bot_running ? "在线" : "未运行") + '</div><div class="sb">本实例进程、版本与心跳核验</div>' +
       '<div style="margin-top:8px">' +
         (s.bot_running
           ? '<button class="act" id="bot-restart">重启</button> <button class="act danger" id="bot-stop">停止</button>'
@@ -339,23 +354,30 @@ async function vStatus({refresh=false,manual=false}={}) {
       return '<div class="card"><h3>今日模型调用</h3><div class="row">' +
         '<div class="stat" style="min-width:150px"><div class="lb">调用总次数</div><div class="vl">' + u.calls + '</div><div class="sb">插件侧字符估算 ≈' + tok(u.in + u.out) + " tok</div></div>" +
         '<div class="grid" style="flex:1">' + (rows || '<span class="dim">今天还没有模型调用记录</span>') + "</div></div>" +
-        '<div class="dim" style="font-size:12px">main 行 = 主对话轮（API 实返 token + DeepSeek 前缀缓存命中率，成本大头在这）；其余行 = react/安全闸/desire/记忆提炼/摘要/主动聊天/提醒/闹钟/问候/图库打标等插件侧调用（字符估算，量级可忽略）。</div></div>';
+        '<div class="dim" style="font-size:12px">main 行为 API 返回 token；其他行为字符估算，不能据此保证实际费用或延迟。当前缺少完整费用测量。</div></div>';
     })() +
     '<div class="card"><h3>黑名单 / 休眠</h3>' + blockedSilenceHtml(r) + "</div>";
+  $("#view").insertAdjacentHTML("beforeend",'<div class="card"><h3>能力与隐私</h3><p>聊天、必要上下文、识图图片及相关请求可能发送到配置的外部模型；记录保存在本机，主人可在受保护后台查看朋友私聊与媒体。可用：当前来源聊天、识图（需提供商支持）、获准共享表情。平台缺失：可靠来图表情标识及真实 QQ 号/全场景昵称。政策暂缓：闹钟，旧任务保留但暂停投递。权限禁止：宿主命令、外包、普通用户文件工具及 QQ 查询他人私聊。禁用功能不能由旧开关恢复。</p></div>');
   bindMasterToggle();
   bindFeatToggles();
   bindBlockedSilence(vStatus);
   // 机器人进程启停
   const botAct = async (action, label) => {
+    if(botOperation.busy)return;
     if (!confirm("确认" + label + " ds娘（astrbot.exe）？")) return;
-    $("#bot-saved").textContent = "执行中…";
-    const resp = await post("/api/bot", { action });
-    $("#bot-saved").textContent = resp.ok ? "✓ 已执行" : "失败：" + (resp.error || "");
-    setTimeout(vStatus, 1200);
+    botOperation.busy=true;botOperation.message='进行中…';paintBotOperation();
+    try{
+      let resp = await post("/api/bot", { action });
+      const deadline=Date.now()+120000;
+      while(resp.id&&['pending','running'].includes(resp.status)&&Date.now()<deadline){await new Promise(r=>setTimeout(r,700));resp=await api('/api/lifecycle?id='+encodeURIComponent(resp.id));}
+      botOperation.message=resp.status==='succeeded'?'✓ 已核实完成':(resp.status==='failed'?'失败：':'结果未知，请核查后再操作：')+(resp.error||'等待超时');
+    }catch{botOperation.message='结果未知：连接中断，请查询实例操作记录后再操作';}
+    finally{botOperation.busy=false;paintBotOperation();}
   };
   if ($("#bot-start")) $("#bot-start").onclick = () => botAct("start", "启动");
   if ($("#bot-stop")) $("#bot-stop").onclick = () => botAct("stop", "停止");
   if ($("#bot-restart")) $("#bot-restart").onclick = () => botAct("restart", "重启");
+  paintBotOperation();
   // 积分系统：开关与每日赠送默认
   $("#pt-enabled").onchange = async (e) => {
     const resp = await post("/api/points/conf", { enabled: e.target.checked });
@@ -455,7 +477,7 @@ async function renderUserDetail() {
         '<div class="row"><span class="dim">每日赠送覆盖</span><input id="pt-grant" type="number" min="0" style="width:70px" placeholder="跟随全局(' + esc(r.points_daily) + ')"' + (pt.grant != null ? ' value="' + pt.grant + '"' : "") + '>' +
         '<button class="act" id="pt-grant-btn">保存</button><button class="act" id="pt-grant-clear">跟随全局</button></div>' +
         '<h3 style="margin-top:12px">功能开关（全局 AND 用户 同时开才生效）</h3><div class="ukeys">' +
-        (r.user_keys || []).map((k) => tg(ent[k] !== false, 'data-scope="user" data-k="' + k + '" data-uid="' + esc(u.uid) + '"', false, esc(USER_KEY_CN[k] || k))).join("") +
+        (r.user_keys || []).map((k) => tg(ent[k] !== false, 'data-scope="user" data-k="' + k + '" data-uid="' + esc(u.uid) + '"'+(!u.master?' data-ordinary="1"':''), false, esc(USER_KEY_CN[k] || k))).join("") +
       "</div></div>" +
       '<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">聊天记录 <span class="dim" id="h-info"></span></h3>' +
       '<span><button class="act" id="h-load">刷新</button> <button class="act danger" id="h-clear">选择删除范围</button></span></div>' +
@@ -479,9 +501,11 @@ async function renderUserDetail() {
   };
   // 用户十键
   document.querySelectorAll('input[data-scope="user"]').forEach((cb) => (cb.onchange = async () => {
-    const resp = await post("/api/user", { uid: cb.dataset.uid, key: cb.dataset.k, value: cb.checked });
-    if (!resp.ok) { cb.checked = !cb.checked; alert("保存失败"); return; }
-    (swCache.friends[cb.dataset.uid] = swCache.friends[cb.dataset.uid] || {})[cb.dataset.k] = cb.checked;
+    if(cb.disabled)return;const uid=cb.dataset.uid,key=cb.dataset.k,value=cb.checked;cb.disabled=true;
+    const resp = await post("/api/user", { uid, key, value });cb.disabled=false;
+    if (!resp.ok) { if(cb.isConnected)cb.checked = !value; alert("保存失败"); return; }
+    (swCache.friends[uid] = swCache.friends[uid] || {})[key] = value;
+    if(!cb.isConnected||curUid!==uid)return;
     const tip = $("#u-saved");
     if (tip) { tip.style.opacity = 1; setTimeout(() => (tip.style.opacity = 0), 1200); }
   }));

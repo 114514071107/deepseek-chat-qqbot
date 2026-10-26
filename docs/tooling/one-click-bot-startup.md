@@ -1,5 +1,11 @@
 # Windows 一键启动 Bot
 
+## 2026-10-26：独立评审 R01—R07 补修
+
+共享图库按可核来源与内容哈希读取，未知来图停止自动采集；Console 启停和自重启统一实例启动器及可查询最终状态；闹钟不可用且旧数据保留；隐私/能力说明和原生开关键盘支持同步修正。R05 仅脚本、Plan 与合成验证，生产权限未应用。版本 `20261026-review-1`，根因、实际验证及限制见[本轮记录](../reviews/2026-10-26-independent-fixes.md)。
+
+同一核心支持 `-Component Bot|Console -Action Start|Stop|Restart|Status -VerifyReady`。Console 仅调用此契约；`-DetachOperation -OperationId` 为受控外部重启内部协议，普通入口无需使用。操作 `.launcher/operations` 的受理与最终结果分别记录；unknown 不得直接重试。
+
 2026-10-24。本轮仅交付开发源码与临时实例的离线证据，未安装到生产、未启动真实 Bot/Console。
 
 2026-10-26 更新：开发仓库仅保留 `scripts/start-bot.cmd` 一个用户 Bot cmd；两个旧兼容入口已删除，Console 独立入口保留。本次没有更新生产，生产五个启动文件仍在，待另行部署时按[四项补修记录](../reviews/2026-10-26-console-lifecycle-repairs.md)同步和清理。下文安装步骤以本次更新为准，原日期的安装/验收事实保留。

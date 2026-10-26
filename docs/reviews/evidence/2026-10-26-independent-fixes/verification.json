@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-26",
+  "version": "20261026-review-1",
+  "synthetic_only": true,
+  "python": {
+    "total": 254,
+    "passed": 253,
+    "skipped": 1,
+    "seconds": 295.036,
+    "skip_reason": "unknown images no longer automatically collected; original assertions retained"
+  },
+  "node": {
+    "passed": 63,
+    "seconds": 1.659
+  },
+  "balance_passed": 2,
+  "browsers": {
+    "keyboard": 7,
+    "lifecycle_across_refresh": 5,
+    "status_regression": 7,
+    "refresh_races": 3
+  },
+  "actual_lifecycle": {
+    "both_shells": true,
+    "api_and_faults_seconds": 110.652
+  },
+  "static": {
+    "python_ast": 70,
+    "js_cjs": 26,
+    "script_blocks": 3
+  },
+  "first_full_python": {
+    "failures": 4,
+    "errors": 2,
+    "skipped": 1,
+    "preserved": true
+  },
+  "production_acl_applied": false,
+  "qq_or_paid_acceptance": false,
+  "public_gallery": {
+    "existing_public_content_files": 138,
+    "unknown_auto_collected_files": 5,
+    "sqlite_opened_for_inventory": false
+  }
+}

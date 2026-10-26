@@ -6,7 +6,11 @@
     [ValidateRange(1,65535)][int]$ConsolePort = 7850,
     [switch]$InternalWorker,
     [ValidateSet('Bot','Console')][string]$Component = 'Bot',
-    [string]$WorkerId
+    [string]$WorkerId,
+    [ValidateSet('Start','Stop','Restart','Status')][string]$Action = 'Start',
+    [switch]$VerifyReady,
+    [switch]$DetachOperation,
+    [string]$OperationId
 )
 # Same core for Windows PowerShell 5.1 and PowerShell 7. No elevation/policy changes.
 $ErrorActionPreference = 'Stop'
@@ -49,7 +53,9 @@ function Test-Worker($State) {
     $identity = Get-Identity $State.pid
     if (!$identity -or $identity.ticks -ne $State.ticks -or $identity.exe -ne $State.exe) { return $false }
     $process = Get-CimInstance Win32_Process -Filter ("ProcessId = " + [int]$State.pid)
-    return ($process.CommandLine -like ('*' + $State.nonce + '*') -and $process.CommandLine -like '* -InternalWorker *')
+    return ($process.CommandLine -like ('*' + $State.nonce + '*') -and $process.CommandLine -like '* -InternalWorker *' -and
+        $process.CommandLine.Contains('-RuntimeRoot "'+$root+'"') -and
+        $process.CommandLine -match ('-Component '+[regex]::Escape([string]$State.component)+'(?:\s|$)'))
 }
 function Get-Family($ProcessId) {
     $parentIdentity=Get-Identity $ProcessId
@@ -63,11 +69,51 @@ function Get-Family($ProcessId) {
     return $result
 }
 function Stop-Owned($State) {
-    if (Test-Worker $State) {
-        # Worker owns a KILL_ON_JOB_CLOSE job. No process-name matching.
-        Stop-Process -Id $State.pid -Force -ErrorAction SilentlyContinue
-        for ($i=0; $i -lt 20 -and (Test-Worker $State); $i++) { Start-Sleep -Milliseconds 50 }
+    if (!(Test-Worker $State)) { throw 'Worker identity is not verified; refusing stop' }
+    $identities=@(Get-Family $State.pid | ForEach-Object { Get-Identity $_ })
+    # Keep the verified process handle open: PID reuse cannot redirect Kill().
+    $owned=Get-Process -Id $State.pid -ErrorAction Stop
+    if ($owned.StartTime.ToUniversalTime().Ticks.ToString() -ne $State.ticks -or !(Test-Worker $State)) { throw 'Worker identity changed before stop' }
+    $owned.Kill()
+    $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $alive=@($identities | Where-Object { $current=Get-Identity $_.pid; $current -and $current.ticks -eq $_.ticks })
+        $listeners=@([DshLauncherProcess]::ListeningPids([int]$State.port))
+        if (!$alive.Count -and !$listeners.Count) { return }
+        Start-Sleep -Milliseconds 100
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'Stop timeout: owned process family or port has not exited; no restart attempted'
+}
+
+function Confirm-Ready($Name,$State) {
+    if (!(Test-Worker $State)) { return $false }
+    $family=@(Get-Family $State.pid); $listeners=@([DshLauncherProcess]::ListeningPids([int]$State.port))
+    if (!$listeners.Count -or @($listeners | Where-Object { $family -notcontains $_ }).Count) { return $false }
+    if (!$VerifyReady) { return $true }
+    if ($Name -eq 'Bot') {
+        $live=Read-Json (Join-Path $root 'dsh_data\admin_v2\live.json')
+        $build=Join-Path $root 'data\plugins\astrbot_plugin_dsh_soul\build_info.py'
+        if (!(Test-Path -LiteralPath $build)) { return $false }
+        $expected=[regex]::Match([IO.File]::ReadAllText($build),'BUILD_VERSION = "([^"]+)"').Groups[1].Value
+        return ($live -and !$live.stopped -and $family -contains [int]$live.pid -and $expected -and $live.version -eq $expected -and
+            ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000-[double]$live.at) -lt 5 -and [double]$live.at -gt 0)
     }
+    try {
+        $credential=Import-Clixml -LiteralPath (Join-Path $root 'deployment-config\console-credential.clixml')
+        $auth='Basic '+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('dsh:'+$credential.GetNetworkCredential().Password))
+        $base='http://127.0.0.1:'+$State.port
+        $health=Invoke-RestMethod -Uri ($base+'/api/health') -Headers @{Authorization=$auth} -TimeoutSec 2
+        $source=[IO.File]::ReadAllText((Join-Path $root 'dsh-console\server.js'))
+        $expected=[regex]::Match($source,'const API_VER = "([^"]+)"').Groups[1].Value
+        if (!$expected -or $health.api_ver -ne $expected -or $health.frontend_ver -ne $expected -or $family -notcontains [int]$health.pid) { return $false }
+        try { Invoke-WebRequest -UseBasicParsing -Uri ($base+'/api/health') -TimeoutSec 2 | Out-Null; return $false }
+        catch { return ([int]$_.Exception.Response.StatusCode -eq 401) }
+    } catch { return $false }
+}
+function Publish-Operation($Status,$Message,$Running=$null) {
+    $value=@{ok=($Status -eq 'succeeded');status=$Status;component=$Component;action=$Action;running=$Running;time=[DateTime]::UtcNow.ToString('o');error=$Message}
+    if ($OperationId) { $value.id=$OperationId; Save-Json (Join-Path $control ('operations\'+$OperationId+'.json')) $value }
+    Write-Output ($value | ConvertTo-Json -Compress -Depth 6)
 }
 function Throw-ComponentExit($Name, $Observation) {
     $failure = New-Object System.Exception($Name + ' exited; exit code ' + $Observation.exit_code + '; inspect component logs')
@@ -91,6 +137,7 @@ function Assert-Component($Name) {
     }
 }
 function Get-ComponentCommand($Name) {
+    $env:DSH_LAUNCH_SHELL=$shellExe
     $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'
     $env:PATH=(Join-Path $root 'venv\Scripts')+';'+$env:PATH+';'+(Join-Path $root 'bin')
     if ($Name -eq 'Bot') {
@@ -113,6 +160,23 @@ try {
     if (!(Test-Path -LiteralPath $root -PathType Container)) { throw 'RuntimeRoot does not exist' }
     New-Item -ItemType Directory -Path $control,$logRoot -Force | Out-Null
     Add-Type -Path (Join-Path $PSScriptRoot 'launcher-process.cs')
+    if ($OperationId -and !$DetachOperation) { Publish-Operation 'running' 'Controller started; checking instance lock' }
+    if ($OperationId -and $OperationId -notmatch '^[0-9a-f]{32}$') { throw 'Invalid operation identity' }
+    if ($DetachOperation) {
+        if (!$OperationId) { throw 'Operation identity required' }
+        # WMI creates an external controller outside the Console worker Job.
+        # It invokes this same instance contract, never a second kill/start path.
+        $command='"'+$shellExe+'" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -RuntimeRoot "'+$root+'" -Component '+$Component+' -Action '+$Action+' -OperationId '+$OperationId+' -TimeoutSeconds '+$TimeoutSeconds+' -ConsolePort '+$ConsolePort+' -BotPort '+$BotPort
+        if ($VerifyReady) { $command+=' -VerifyReady' }
+        $controllerLog=Join-Path $control ('operations\'+$OperationId+'-controller.log')
+        # Preserve diagnostics even if the external shell fails before the script.
+        $command='"'+$env:SystemRoot+'\System32\cmd.exe" /d /s /c "'+$command+' > "'+$controllerLog+'" 2>&1"'
+        $startup=New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow=[uint16]0}
+        $created=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=$command;CurrentDirectory=$root;ProcessStartupInformation=$startup}
+        if ($created.ReturnValue -ne 0) { throw 'External lifecycle controller could not start' }
+        Write-Output (@{ok=$false;accepted=$true;status='pending';id=$OperationId} | ConvertTo-Json -Compress)
+        exit 0
+    }
     if ($InternalWorker) {
         if ($WorkerId -notmatch '^[0-9a-f]{32}$') { throw 'Invalid worker identity' }
         $observation = Join-Path $control ($WorkerId + '.json')
@@ -146,23 +210,45 @@ try {
     }
     try {
         $components = @('Bot'); if ($WithConsole) { $components += 'Console' }
+        if ($PSBoundParameters.ContainsKey('Component')) { $components=@($Component) }
+        if ($OperationId) { Publish-Operation 'running' '' }
         foreach ($name in $components) {
             $port = if ($name -eq 'Bot') { $BotPort } else { $ConsolePort }
-            Assert-Component $name
+            if ($Action -in @('Start','Restart')) { Assert-Component $name }
             $statePath = Join-Path $control ($name + '.json')
             $state = Read-Json $statePath
+            if ($state -and $state.component -ne $name) { throw 'State component mismatch; refusing operation' }
             $existing = (Test-Worker $state)
+            if ($state -and !$existing -and (Get-Process -Id ([int]$state.pid) -ErrorAction SilentlyContinue)) { throw 'Stored PID exists but ownership is unknown (port conflict or stale identity); refusing operation' }
             if ($existing -and ([int]$state.port -ne $port)) { throw ($name + ' already managed with another port; check instance settings') }
             $listeners = @([DshLauncherProcess]::ListeningPids($port))
+            if ($Action -eq 'Status') {
+                $ready=$existing -and (Confirm-Ready $name $state)
+                if ($ready) { Publish-Operation 'succeeded' '' $true }
+                elseif (!$existing -and !$listeners.Count) { Publish-Operation 'succeeded' '' $false }
+                else { Publish-Operation 'unknown' 'Owned instance is not ready or listener ownership is unverified' }
+                continue
+            }
+            if ($Action -in @('Stop','Restart')) {
+                if ($existing) { Stop-Owned $state }
+                elseif ($listeners.Count) { throw 'Port is occupied without verified ownership; refusing stop' }
+                if ($Action -eq 'Stop') { continue }
+                $existing=$false; $listeners=@()
+            }
             if ($listeners.Count) {
                 if ($existing) {
                     $family = @(Get-Family $state.pid)
                     if (@($listeners | Where-Object { $family -notcontains $_ }).Count -eq 0) {
-                        Write-Output ($name + ' reuse: owned listener ready; QQ connection not checked')
-                        continue
+                        if (Confirm-Ready $name $state) {
+                            Write-Output ($name + ' reuse: verified ready; QQ client delivery not checked')
+                            continue
+                        }
+                    } else {
+                        throw ($name + ' port conflict: listener is not a verified process of this instance')
                     }
+                } else {
+                    throw ($name + ' port conflict: listener is not a verified process of this instance')
                 }
-                throw ($name + ' port conflict: listener is not a verified process of this instance')
             }
             if (!$existing) {
                 $nonce = [Guid]::NewGuid().ToString('N')
@@ -203,16 +289,23 @@ try {
                     if ($listeners.Count) {
                         $family = @(Get-Family $state.pid)
                         if (@($listeners | Where-Object { $family -notcontains $_ }).Count) { throw ($name + ' port conflict during startup') }
-                        $ready=$true; break
+                        if (Confirm-Ready $name $state) { $ready=$true; break }
                     }
                     Start-Sleep -Milliseconds 150
                 }
                 if (!$ready) { throw ($name + ' startup timeout; owned worker will be stopped; inspect logs') }
                 $state.status='ready'; Save-Json $statePath $state
                 Write-Output ($name + ' ready: owned listener; QQ connection not checked')
-            } catch { Stop-Owned $state; throw }
+            } catch {
+                $startupFailure=$_
+                if (Test-Worker $state) {
+                    try { Stop-Owned $state } catch { Write-Output ('Owned startup cleanup failed: '+$_.Exception.Message) }
+                }
+                throw $startupFailure
+            }
         }
     } finally { if ($lock) { $lock.Dispose() } }
+    if ($Action -ne 'Status') { Publish-Operation 'succeeded' '' ($Action -ne 'Stop') }
     exit 0
 } catch {
     Write-Output ('Launcher failed: ' + $_.Exception.Message)
@@ -221,5 +314,6 @@ try {
     if ($_.Exception.Data.Contains('DshExitCode') -and [int]$_.Exception.Data['DshExitCode'] -ne 0) {
         $failureCode = [int]$_.Exception.Data['DshExitCode']
     }
+    if (!$InternalWorker -and (!$OperationId -or $OperationId -match '^[0-9a-f]{32}$')) { Publish-Operation 'failed' $_.Exception.Message }
     exit $failureCode
 }

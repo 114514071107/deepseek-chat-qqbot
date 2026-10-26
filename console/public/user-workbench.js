@@ -147,5 +147,5 @@ window.UserWorkbench=(()=>{
       hydrateStickerSamples(target);
     }catch(error){if(!live(id)||error.name==='AbortError')return;target.innerHTML='<p role="alert">记录加载失败：'+esc(error.message)+' <button class="act" id="people-history-retry">重试记录</button></p>';$('#people-history-retry').onclick=()=>loadHistory(id);}
   }
-  return {render,leave,busy,version:'20261026-lifecycle-2'};
+  return {render,leave,busy,version:'20261026-review-1'};
 })();

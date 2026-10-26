@@ -1,5 +1,6 @@
 """Real AstrBot classes are imported only in a disposable isolated interpreter."""
 import asyncio
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -51,6 +52,8 @@ async def framework_case():
     root=Path(os.environ['ASTRBOT_ROOT'])
     pack=root/'sticker_packs'/'fixture';pack.mkdir(parents=True)
     (pack/'image.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='))
+    (root/'sticker_packs/shared_gallery_v1.json').write_text(json.dumps({'version':1,'files':{'fixture/image.png':{
+        'basis':'owner-explicit-share','source':'synthetic fixture','sha256':__import__('hashlib').sha256((pack/'image.png').read_bytes()).hexdigest()}}}),encoding='utf-8')
     for scenario in ('text','sticker','first-failed','partial-failed','unknown','empty','tool-failed','cancelled','intermediate','no-yield-sticker','ordinary-image','mixed-image','direct-image'):
         directory=root/scenario;directory.mkdir()
         obj,ns=load_pipeline(directory,names=('capture','_clear_text_result','_set_first_bubble_result','_send','_send_sticker_row'),guarded=True)

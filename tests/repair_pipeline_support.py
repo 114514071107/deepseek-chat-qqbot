@@ -23,6 +23,7 @@ from task_runtime import Runtime
 from batch_input import merge_request
 from resource_budget import Resources, BudgetProvider, BudgetExceeded, payload_size
 from context_window import build_window, fingerprint, evidence_rows
+from gallery_policy import shared_file, auto_collectible
 
 
 class Plain:
@@ -45,7 +46,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
     cls.body=[n for n in cls.body if getattr(n,'name','') in names+helpers]
     for fn in cls.body:
         fn.decorator_list=[d for d in fn.decorator_list if guarded and isinstance(d,ast.Name) and d.id=='managed']
-    globals_to_keep={'_cap_bubbles','_bubbles_napcat','_split_bubbles','_llm_text','_qq_plain'}
+    globals_to_keep={'_cap_bubbles','_bubbles_napcat','_split_bubbles','_llm_text','_qq_plain','_gallery_shared'}
     fns=[n for n in tree.body if getattr(n,'name','') in globals_to_keep]
     def save(path,value): Path(path).write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
     def archive(uid,entry):
@@ -63,7 +64,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
         trusted_plugin_tool=trusted_plugin_tool,CHATTER_DISCIPLINE='',TOOL_GUIDE_LINES=[],PLATFORM_LINE='',
         _save=save,_load=lambda *a:{},_jf=lambda uid,name:str(root/(name+'.json')),read_text=__import__('state_store').read_text,
         _archive_append=archive,_read_notes=lambda uid:[],_read_memes=lambda *args:[],
-        _meme_catalog_text=lambda:'',_now_period_line=lambda:'fixture',_user_perm=lambda *a:True,
+        _meme_catalog_text=lambda:'',_now_period_line=lambda:'fixture',_user_perm=lambda *a:True,shared_file=shared_file,auto_collectible=auto_collectible,
         EMOTION_ALIAS={},_pick_sticker=lambda query:None)
     exec(compile(ast.fix_missing_locations(ast.Module(body=fns+[cls],type_ignores=[])),str(PLUGIN/'main.py'),'exec'),ns)
     obj=ns['DshSoul']()

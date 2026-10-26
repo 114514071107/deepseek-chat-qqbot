@@ -7,6 +7,7 @@ const { execFile, spawn } = require("child_process");
 const crypto = require("crypto");
 const {createStateBridge,readJson: readStateJson} = require("./state-bridge");
 const {createUserWorkbench} = require("./user-workbench");
+const {createLifecycle} = require("./lifecycle");
 
 function createConsoleServer(options = {}) {
 
@@ -24,7 +25,7 @@ const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261026-lifecycle-2";
+const API_VER = "20261026-review-1";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -44,6 +45,7 @@ function argVal(name, dflt) {
 }
 const HOST = options.host || argVal("host", process.env.HOST || "127.0.0.1");
 const PORT = options.port ?? parseInt(argVal("port", process.env.PORT || "7850"), 10);
+const lifecycle = options.lifecycle || createLifecycle(DSH,PORT);
 if (HOST !== "127.0.0.1") throw new Error("控制台只允许监听 127.0.0.1");
 const TOKEN = options.token ?? process.env.DSH_CONSOLE_TOKEN;
 if (typeof TOKEN !== "string" || TOKEN.length < 32 || /[\s:]/.test(TOKEN)) {
@@ -154,11 +156,13 @@ const api = {
     if (!/^[a-f0-9]{32}$/.test(id)) return {ok:false,error:"无效命令编号"};
     return readJson(path.join(DATA,"admin_v2","responses",id+".json"),{ok:false,pending:true,id});
   },
+  "GET /api/lifecycle": async q => lifecycle.result(q.get("id")),
+  "GET /api/health": async () => ({api_ver:API_VER,pid:process.pid,frontend_ver:(fs.readFileSync(path.join(__dirname,"public/index.html"),"utf8").match(/const FE_VER = "([^"]+)"/)||[])[1]}),
   "GET /api/targets": async () => ({targets:knownTargets()}),
   // 状态总览：进程、文件新鲜度、各 uid 数据量、模型与开关摘要
   "GET /api/status": async () => {
-    const proc = await execFileP("tasklist", ["/FI", "IMAGENAME eq astrbot.exe", "/FO", "CSV", "/NH"]);
-    const running = proc.ok && proc.out.includes("astrbot.exe");
+    const processState = await lifecycle.status();
+    const running = processState.running === true;
     const hist = histories();
     const th = thoughts();
     const users = Object.keys(hist).map((uid) => ({
@@ -171,12 +175,13 @@ const api = {
     const ps = cfg.provider_settings || {};
     const stat = (f) => { try { return fs.statSync(f).mtimeMs; } catch (e) { return 0; } };
     return {
-      bot_running: running, now: Date.now(),
+      bot_running: running, bot_state: processState, now: Date.now(),
       model: prov.model, modalities: prov.modalities, extra_body: prov.custom_extra_body,
       caption_provider: ps.default_image_caption_provider_id,
       err_log_mtime: stat(ERR_LOG), run_log_mtime: stat(RUN_LOG),
       users,
       api_ver: API_VER,
+      capabilities: {harvest:'platform_missing',alarm:'policy_deferred',host_commands:'permission_denied',kimi:'permission_denied',ordinary_files:'permission_denied',vision:'available_when_provider_supports'},
       conf: readJson(path.join(DATA, "dsh_soul_conf.json"), {}),
       blocked: readJson(path.join(DATA, "blocked_all.json"), []),
       usage: (() => {  // 今日模型调用（插件侧计量 usage_all.json；主对话调用在框架内不在此列）
@@ -260,98 +265,25 @@ const api = {
       master: MASTER,
     };
   },
-  // 图库统计（借 venv python 查 sqlite 索引）
   "GET /api/stickers": async () => {
-    const code = "import sqlite3,json,glob,os;" +
-      "out={};" +
-      "base=r'" + DATA.replace(/\\/g, "\\\\") + "\\\\sticker_packs';" +
-      "[out.setdefault(os.path.basename(os.path.dirname(db)),dict(sqlite3.connect(db).execute('SELECT tag,COUNT(*) FROM memes GROUP BY tag').fetchall())) for db in glob.glob(base+'\\\\*\\\\index.db')];" +
-      "print(json.dumps(out,ensure_ascii=False))";
-    const r = await execFileP(VENV_PY, ["-c", code]);
-    try { return { packs: JSON.parse(r.out.trim().split("\n").pop()) }; }
-    catch (e) { return { packs: {}, error: r.out.slice(0, 300) }; }
+    const r=await execFileP(VENV_PY,["-B",path.join(DSH,"data/plugins/astrbot_plugin_dsh_soul/gallery_query.py"),DATA,"stats"]);
+    try {return JSON.parse(r.out.trim());} catch {return {packs:{},error:"共享图库不可用，请核对配套部署"};}
   },
-  // 老记录示意：某情绪桶任取一张图的相对路径（借 venv python 查各 pack 的 index.db）
-  "GET /api/sticker_sample": async (q) => {
-    const tag = String(q.get("tag") || "").trim();
-    if (!/^[A-Za-z0-9_-]{1,30}$/.test(tag)) return { rel: "" };
-    const code = "import sqlite3,json,glob,os,random;" +
-      "base=r'" + DATA.replace(/\\/g, "\\\\") + "\\\\sticker_packs';" +
-      "tag=" + JSON.stringify(tag) + ";" +
-      "res=None;" +
-      "dbs=glob.glob(base+'\\\\*\\\\index.db');" +
-      "random.shuffle(dbs);" +
-      "exec(\"for db in dbs:\\n rows=sqlite3.connect(db).execute('SELECT path FROM memes WHERE tag=? LIMIT 30',(tag,)).fetchall()\\n if rows:\\n  res={'pack':os.path.basename(os.path.dirname(db)),'rel':random.choice(rows)[0]}\\n  break\");" +
-      "print(json.dumps(res,ensure_ascii=False))";
-    const r = await execFileP(VENV_PY, ["-c", code]);
-    try {
-      const j = JSON.parse(r.out.trim().split("\n").pop());
-      return j && j.rel ? { rel: "sticker_packs/" + j.pack + "/" + String(j.rel).replace(/\\/g, "/") } : { rel: "" };
-    } catch (e) { return { rel: "", error: r.out.slice(0, 200) }; }
+  "GET /api/sticker_sample": async q => {
+    const tag=String(q.get("tag")||"").trim();
+    if(!/^[A-Za-z0-9_-]{1,30}$/.test(tag))return {rel:""};
+    const r=await execFileP(VENV_PY,["-B",path.join(DSH,"data/plugins/astrbot_plugin_dsh_soul/gallery_query.py"),DATA,"sample",tag]);
+    try {return JSON.parse(r.out.trim());} catch {return {rel:"",error:"共享示例不可用"};}
   },
 };
-
-// ---- AstrBot 进程启停（与备忘录同一套：launcher 脚本起、taskkill /T /F 停） ----
-const LAUNCHER = path.join(DSH, "start-bot.cmd");
-async function botPids() {
-  const r = await execFileP("tasklist", ["/FI", "IMAGENAME eq astrbot.exe", "/FO", "CSV", "/NH"]);
-  const pids = [];
-  for (const line of r.out.split(/\r?\n/)) {
-    const m = line.match(/"?astrbot\.exe"?,"?(\d+)"?/i);
-    if (m) pids.push(parseInt(m[1], 10));
-  }
-  return pids;
-}
-async function botStop() {
-  const pids = await botPids();
-  for (const pid of pids) await execFileP("taskkill", ["/PID", String(pid), "/T", "/F"]);
-  return pids;
-}
-function botStart() {
-  // 独立 detached 进程启动 launcher，控制台自身重启/退出不影响机器人
-  const child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", '""'+LAUNCHER+'" -RuntimeRoot "'+DSH+'""'], { detached: true, stdio: "ignore", windowsHide: true, windowsVerbatimArguments:true });
-  child.unref();
-}
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 const post = {
   "/api/people/link": async body => workbench.link(body),
   "/api/people/unlink": async body => workbench.unlink(body),
   "/api/people/deny": async body => workbench.deny(body),
   "/api/people/confirm": async body => workbench.confirm(body),
-  // 机器人进程开关：start / stop / restart
-  "/api/bot": async (b) => {
-    const action = String(b.action || "");
-    if (action === "stop") {
-      const killed = await botStop();
-      return { ok: true, action, killed, running: (await botPids()).length > 0 };
-    }
-    if (action === "start") {
-      if ((await botPids()).length > 0) return { ok: true, action, note: "已在运行" };
-      botStart();
-      await sleep(4000);
-      return { ok: true, action, running: (await botPids()).length > 0 };
-    }
-    if (action === "restart") {
-      await botStop();
-      await sleep(1500);
-      botStart();
-      await sleep(4000);
-      return { ok: true, action, running: (await botPids()).length > 0 };
-    }
-    return { ok: false, error: "action 须为 start/stop/restart" };
-  },
-
-  // 控制台自重启：进程自我退出可由非提权 shell 触发（绕过 taskkill 拒绝访问）
-  "/api/console": async (b) => {
-    if (String(b.action || "") !== "restart") return { ok: false, error: "action 须为 restart" };
-    setTimeout(() => {
-      const child = spawn(process.execPath, [__filename, "--port", String(PORT)], { detached: true, stdio: "ignore", windowsHide: true, cwd: __dirname });
-      child.unref();
-      setTimeout(() => process.exit(0), 500);
-    }, 300);
-    return { ok: true, action: "restart", note: "控制台将在 1 秒内自重启" };
-  },
+  "/api/bot": async b => lifecycle.request("Bot", String(b.action || "")),
+  "/api/console": async b => String(b.action || "") === "restart" ? lifecycle.request("Console","restart") : {ok:false,status:"failed",error:"action 须为 restart"},
 
   "/api/delete/preview": async b => applyState("preview", b),
   "/api/history/clear": async b => applyState("delete", b),

@@ -3,6 +3,8 @@ import asyncio
 from pathlib import Path
 import re
 import time
+import os
+from build_info import BUILD_VERSION
 from state_store import read_json, write_json
 from task_runtime import work_context
 
@@ -12,7 +14,7 @@ async def serve_inbox(root,runtime,apply):
     requests.mkdir(parents=True,exist_ok=True); responses.mkdir(parents=True,exist_ok=True); processing.mkdir(parents=True,exist_ok=True)
     try:
         while runtime.alive:
-            write_json(root/'live.json',{'instance':runtime.id,'at':time.time()})
+            write_json(root/'live.json',{'instance':runtime.id,'at':time.time(),'pid':os.getpid(),'version':BUILD_VERSION})
             for path in sorted(requests.glob('*.json'))[:32]:
                 if not re.fullmatch(r'[a-f0-9]{32}\.json',path.name): continue
                 # At most once: interruption or acknowledgment failure must not

@@ -5,7 +5,8 @@ import inspect
 import sys
 
 DENIED = '（权限拒绝：此身份或场景不允许使用该工具）'
-DISABLED = frozenset(('peek_user_data', 'run_command', 'ask_kimi', 'download_file', 'zip_files', 'unzip_file', 'read_word', 'write_word'))
+DISABLED = frozenset(('peek_user_data', 'run_command', 'ask_kimi', 'download_file', 'zip_files', 'unzip_file', 'read_word', 'write_word',
+                      'set_alarm','list_alarms','cancel_alarm'))
 OWNER_PRIVATE = frozenset(('read_local_file', 'write_local_file', 'list_files', 'search_in_files',
                            'read_word', 'write_word', 'send_local_file', 'retag_sticker', 'delete_sticker'))
 ORDINARY = frozenset(('recall', 'learn_meme', 'record_thought', 'record_note', 'delete_note',
@@ -39,6 +40,8 @@ def caller(event):
 
 
 def authorize(event, name, master, user_perm, *, owner_instance='', consume=True):
+    if name in ('set_alarm','list_alarms','cancel_alarm'):
+        return '（权限拒绝：闹钟暂不可用，可靠投递及 F09 政策待完成；未创建新任务，既有数据保留且暂停投递）'
     who = caller(event)
     if not who or name not in KNOWN or name in DISABLED:
         return DENIED

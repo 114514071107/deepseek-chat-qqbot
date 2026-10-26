@@ -252,6 +252,8 @@ class StateController:
         if operation in ('switch','points/conf'):
             name='dsh_soul_conf.json'; table=self.load(name,{})
             if operation=='switch':
+                if body.get('key') in ('harvest','kimi'):
+                    raise ValueError('当前不可用：harvest 缺可靠平台表情标识；kimi 被执行权限禁止，开关不能恢复')
                 if body.get('key') not in ('enabled','desire','proactive','sprinkle','revive','harvest','safety','reminders','kimi'): raise ValueError('unknown switch')
                 if type(body.get('value')) is not bool: raise ValueError('boolean required')
                 table[body['key']]=body['value']
@@ -266,6 +268,8 @@ class StateController:
         else:
             if not isinstance(key,str) or not key: raise ValueError('missing record key')
             if operation=='user':
+                if body.get('key') in ('harvest','alarm'):
+                    raise ValueError('当前不可用：自动收图缺平台标识；闹钟政策暂缓，旧数据保留')
                 if body.get('key') not in ('reply','voice','proactive','desire','sprinkle','revive','harvest','reminders','alarm','files') or type(body.get('value')) is not bool: raise ValueError('invalid user switch')
                 name='friends_all.json'; table=self.load(name,{})
                 table.setdefault(key,{})[body['key']]=body['value']; result={'friends':table}

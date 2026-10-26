@@ -32,6 +32,7 @@ class ResourceRegression(unittest.IsolatedAsyncioTestCase):
             e=ScopeEvent('a',group);e.message_obj.message=[Image('https://fixture.invalid/'+group+'.png')];return e
         return obj,ns,pack,event
 
+    @unittest.skip('R01 新规则停止未知图片自动采集；保留旧额度断言，待有可靠平台类型协议后再恢复该路径')
     async def test_two_groups_share_one_harvest_job_and_one_person_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);obj,ns,pack,event=self.fixture(root)

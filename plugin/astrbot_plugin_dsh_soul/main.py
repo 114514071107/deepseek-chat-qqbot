@@ -33,6 +33,7 @@ from batch_input import merge_request, normalize_image, read_local_image, MAX_IT
 from resource_budget import Resources, BudgetProvider, BudgetExceeded, payload_size
 from model_integration import install_model_adapters
 from context_window import build_window, fingerprint, evidence_rows
+from gallery_policy import shared_file, auto_collectible
 
 
 def _qq_plain(text):
@@ -100,6 +101,7 @@ PLATFORM_LINE = ("【你此刻在哪】你现在在QQ上跟主人私聊（官方
 
 TOOL_GUIDE_LINES = [
     "【工具】仅使用本次请求获准的工具，并遵守调用次数和场景限制：",
+    "【能力边界】闹钟政策暂缓，不能新建或承诺到点提醒，旧任务保留但暂停投递；QQ 来图缺可靠表情类型，自动采集不可用。宿主命令、外包和他人私聊查询禁止；普通用户文件工具禁止。识图和当前来源媒体留存仍可用。",
     "- web_search(query)：查最新或不了解的事；fetch_url(url)：深入读某个网页",
     "- get_current_time()：查当前时间；recall(query)：查证聊天记录/记忆/梗图鉴——对方提到『之前/聊过/说过』的事、或你拿不准的事，必须先 recall 查证再回答",
     "- learn_meme(term, meaning)：遇到不认识的梗/流行语，先用 web_search 查清含义，再记进梗图鉴；",
@@ -767,22 +769,13 @@ def _read_memes(uid):
         return []
 
 
+def _gallery_shared(row):
+    return shared_file(PACKS, row.get("pack"), row.get("rel"))
+
+
 def _all_sticker_rows():
-    rows = []
-    if not os.path.isdir(PACKS):
-        return rows
-    for pack in os.listdir(PACKS):
-        dbf = os.path.join(PACKS, pack, "index.db")
-        if not os.path.isfile(dbf):
-            continue
-        try:
-            conn = sqlite3.connect(dbf)
-            for r in conn.execute("SELECT path, tag, caption, COALESCE(keywords,'') FROM memes"):
-                rows.append({"pack": pack, "rel": r[0], "tag": r[1], "caption": r[2] or "", "keywords": r[3] or ""})
-            conn.close()
-        except Exception:
-            continue
-    return rows
+    from gallery_policy import shared_rows
+    return shared_rows(PACKS)
 
 
 def _pick_sticker(query):
@@ -829,7 +822,7 @@ def _ensure_collect_pack():
     dbf = os.path.join(pack, "index.db")
     if not os.path.isfile(dbf):
         try:
-            conn = sqlite3.connect(dbf)
+            conn = sqlite3.connect(__import__('pathlib').Path(dbf).resolve().as_uri() + "?mode=ro", uri=True)
             conn.execute(_MEMES_DDL)
             conn.commit()
             conn.close()
@@ -839,28 +832,8 @@ def _ensure_collect_pack():
 
 
 def _gallery_db_rows(tag="", limit=10):
-    """跨 pack 查图库（无 index.db 的目录如 _trash 自动跳过），mtime 新→旧"""
-    rows = []
-    if not os.path.isdir(PACKS):
-        return rows
-    for pack in sorted(os.listdir(PACKS)):
-        dbf = os.path.join(PACKS, pack, "index.db")
-        if not os.path.isfile(dbf):
-            continue
-        try:
-            conn = sqlite3.connect(dbf)
-            if tag:
-                cur = conn.execute("SELECT path, tag, caption, mtime FROM memes WHERE tag = ? ORDER BY mtime DESC LIMIT ?",
-                                   (tag, limit))
-            else:
-                cur = conn.execute("SELECT path, tag, caption, mtime FROM memes ORDER BY mtime DESC LIMIT ?", (limit,))
-            for r in cur.fetchall():
-                rows.append({"pack": pack, "rel": r[0], "tag": r[1] or "", "caption": r[2] or "", "mtime": r[3] or 0})
-            conn.close()
-        except Exception:
-            continue
-    rows.sort(key=lambda r: -(r["mtime"] or 0))
-    return rows[:limit]
+    rows = [r for r in _all_sticker_rows() if not tag or r["tag"] == tag]
+    return sorted(rows, key=lambda r: -r["mtime"])[:limit]
 
 
 def _gallery_resolve(path):
@@ -2750,15 +2723,8 @@ class DshSoul(Star):
     @tool_guard("set_alarm")
     @managed
     async def set_alarm(self, event: AstrMessageEvent, kind: str, time: str, note: str, date: str = "", weekdays: str = ""):
-        """给当前聊天的人定闹钟，到点你会被叫醒、再用你自己的话提醒他/她。kind 为 once（某天一次，要给 date 如 2026-09-02）/ daily（每天）/ weekly（每周几，要给 weekdays 如 '1,3,5' 表示周一三五，周一=1）；time 为 HH:MM（24 小时制，如 08:00、15:30）；note 为提醒事项原文（如'上高数课''开会'）。'明天下午三点提醒我开会'就是 once；'每周一三五早八点叫我'就是 weekly。记课表时对每节课各定一个 weekly。"""
-        uid = event.get_sender_id() or "anon"
-        if uid != MASTER_OPENID and not _user_perm(uid, "alarm"):
-            return "（管理员没给你开闹钟功能）"
-        wds = [w for w in re.split(r"[^0-9]+", weekdays or "") if w]
-        a, err = _alarm_add(kind, time, note, date, wds, uid=uid)
-        if err:
-            return "（没定上：" + err + "）"
-        return "好的，已定为" + _alarm_desc(a) + " 提醒你：" + a["note"] + "（编号 " + str(a["id"]) + "）"
+        """闹钟暂不可用；不创建任务、不承诺到点提醒，旧数据保留。"""
+        return "（闹钟暂不可用：未创建任务，不能承诺到点提醒；既有数据保留且暂停投递，待 F09 完成）"
 
     @filter.llm_tool(name="list_alarms")
     @tool_guard("list_alarms")
@@ -2986,10 +2952,11 @@ class DshSoul(Star):
 
     @managed
     async def _send_sticker_row(self, umo, row):
-        abs_path = os.path.join(PACKS, row["pack"], row["rel"].replace("/", os.sep))
-        if not os.path.isfile(abs_path):
+        content = shared_file(PACKS, row.get("pack"), row.get("rel"), content=True)
+        if content is None:
             return failure("failed", "prepare", "media")
-        return await self._send(umo, MessageChain(chain=[Image.fromFileSystem(abs_path)]))
+        # Pass the verified byte snapshot, never reopen a mutable original later.
+        return await self._send(umo, MessageChain(chain=[Image.fromBytes(content)]))
 
     @managed
     async def _send_sticker(self, umo, query):
@@ -3603,6 +3570,8 @@ class DshSoul(Star):
             for seg in (event.message_obj.message or []):
                 if not isinstance(seg, Image):
                     continue
+                if not auto_collectible(event, seg):
+                    continue
                 url = seg.url or getattr(seg, "file", None)
                 if not url:
                     continue
@@ -3620,62 +3589,8 @@ class DshSoul(Star):
 
     @managed
     async def _harvest_one(self, uid, url, ledger=None):
-        import hashlib
-        import urllib.request
-        try:
-            ledger = ledger or self._harvest_path(uid)
-            st = _load(ledger, {"day": "", "count": 0})
-            today = time.strftime("%Y-%m-%d")
-            if st.get("day") != today:
-                st = {"day": today, "count": 0}
-            if (st.get("count") or 0) >= 30:
-                return
-            # 新图一律进自收集图库 collect-001（不再进旧 harvested pack）
-            pack = _ensure_collect_pack()
-            dbf = os.path.join(pack, "index.db")
-            if url.startswith("http://") or url.startswith("https://"):
-                buf = await self._thread(fetch_public_bytes, url, max_bytes=15 * 1024 * 1024, timeout=15)
-            else:  # 本地临时文件（框架已落盘的来图）：直接读字节
-                buf = await self._thread(lambda: open(url, "rb").read())
-            if len(buf) < 1024 or len(buf) > 4194304:  # §68 下限 8K→1K：QQ 会把小表情压到几 KB
-                self._err("harvest-dbg", "size-skip %dB url=%s" % (len(buf), url[:80]))
-                return
-            h = hashlib.sha1(buf).hexdigest()
-            conn = sqlite3.connect(dbf)
-            if conn.execute("SELECT 1 FROM memes WHERE file_hash = ?", (h,)).fetchone():
-                conn.close()
-                self._err("harvest-dbg", "dup-skip " + h[:12])
-                return
-            conn.close()
-            em = re.search(r"\.(png|jpe?g|gif|webp)", url.split("?")[0], re.I)
-            ext = (em.group(1).lower().replace("jpeg", "jpg") if em else "jpg")
-            name = "hq_" + h[:12] + "." + ext
-            # 先落暂存区，识图打标后归位到 memes/<主情绪桶>/（本函数已是后台 task，打标不阻塞聊天）
-            staging = os.path.join(pack, "memes", "_staging")
-            os.makedirs(staging, exist_ok=True)
-            tmp_abs = os.path.join(staging, name)
-            with open(tmp_abs, "wb") as f:
-                f.write(buf)
-            bucket, free_tags = await self._auto_tag_sticker(tmp_abs)
-            os.makedirs(os.path.join(pack, "memes", bucket), exist_ok=True)
-            rel = "memes/" + bucket + "/" + name
-            os.rename(tmp_abs, os.path.join(pack, rel.replace("/", os.sep)))
-            # 每标签插一行：主桶一行 + 自由标签各行（无 PK 表，允许同 path 多行）
-            caption = "、".join(free_tags)
-            kw = ("表情包 自收集 " + " ".join(free_tags)).strip()
-            now = time.time()
-            conn = sqlite3.connect(dbf)
-            for t in [bucket] + [t for t in free_tags if t != bucket]:
-                conn.execute("INSERT INTO memes (path, tag, file_name, file_hash, caption, keywords, mtime, captioned_at)"
-                             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (rel, t, name, h, caption, kw, now, now))
-            conn.commit()
-            conn.close()
-            st["count"] = (st.get("count") or 0) + 1
-            _save(ledger, st)
-            self._err("gallery", name + " → " + bucket + ("," + ",".join(free_tags) if free_tags else "")
-                      + " (from " + uid + " " + str(len(buf)) + "B)")
-        except Exception as e:
-            self._err("harvest-one", e)
+        """Current QQ official images are unknown type; reject before any IO."""
+        return
 
     @managed
     async def _auto_tag_sticker(self, img_abs):
@@ -3982,8 +3897,8 @@ class DshSoul(Star):
         pcnt = (pst.get("count") or 0) if pst.get("day") == time.strftime("%Y-%m-%d") else 0
         return ("现在 " + tstr + "。我这儿存着跟你 " + str(hcnt) + " 条聊天记录，脑子里攒着 "
                 + str(thcnt) + " 个念头" + sil_txt + "，今天主动找了你 " + str(pcnt) + " 次。" + NL
-                + "问这个干嘛，查岗啊？" + NL
-                + "本版对应源码（AGPL-3.0，免费获取）：" + NL
+                + "当前说明：对话与必要上下文/图片可能发往配置的外部模型；主人可在受保护本机后台查看留存记录。闹钟暂不可用，旧任务暂停；自动收图缺可靠类型标识，未知图片不共享。" + NL
+                + "对应源码（AGPL-3.0）：请向主人免费索取当前运行版源码包；公开 dev 可能落后，远程获取交付尚待核实：" + NL
                 + "https://github.com/114514071107/deepseek-chat-qqbot/tree/dev")
 
     # ---------- 定时提醒（挂 5 分钟 desire 循环检查；每槽每天一次，只发主人，休眠期不发） ----------
@@ -4045,33 +3960,8 @@ class DshSoul(Star):
     # ---------- 闹钟触发（45s 循环；先落 last_fired 再发送，once 触发后停用保留记录） ----------
     @managed
     async def _check_alarms(self):
-        try:
-            alarms = _alarms_load()
-            lt = time.localtime()
-            now_str = time.strftime("%Y-%m-%d %H:%M", lt)
-            fired = 0
-            for a in alarms:
-                if fired >= 3:
-                    break  # 频率保护：同一分钟最多触发 3 个，其余不落 last_fired、顺延下一分钟
-                if not _alarm_due(a, lt, now_str):
-                    continue
-                # §58：按闹钟归属发给对应的人（老数据无 uid → 主人的）；对方从没聊过（无 umo）就跳过不发
-                auid = a.get("uid") or MASTER_OPENID
-                aumo = self.umo.get(auid)
-                if not aumo:
-                    continue
-                # 先落 last_fired 再发送：发送后任何异常或进程被杀都不会重发（§16 午饭双发教训）
-                a["last_fired"] = now_str
-                if a.get("kind") == "once":
-                    a["enabled"] = False  # once 触发后停用保留记录
-                _alarms_save(alarms)
-                fired += 1
-                try:
-                    await self._fire_alarm(aumo, auid, a.get("note") or "（无内容）")
-                except Exception as e:
-                    self._err("alarm-fire", e)  # 单个失败不阻塞其他闹钟
-        except Exception as e:
-            self._err("alarms", e)
+        """F09 deferred: preserve old records without delivery or rewriting."""
+        return
 
     @managed
     async def _fire_alarm(self, umo, uid, note):
