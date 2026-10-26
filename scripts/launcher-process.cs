@@ -3,8 +3,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.ComponentModel;
 
 public static class DshLauncherProcess {
     public static void ReplaceFile(string source,string destination) {
@@ -13,6 +13,16 @@ public static class DshLauncherProcess {
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern IntPtr CreateJobObject(IntPtr attrs, string name);
     [DllImport("kernel32.dll")] static extern bool SetInformationJobObject(IntPtr job, int type, IntPtr info, uint size);
     [DllImport("kernel32.dll")] static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+    [DllImport("kernel32.dll",SetLastError=true)] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll",SetLastError=true)] static extern bool SetHandleInformation(IntPtr handle,uint mask,uint flags);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CreateFileW(string name,uint access,uint share,IntPtr attributes,uint creation,uint flags,IntPtr template);
+    [DllImport("kernel32.dll",SetLastError=true)] static extern bool TerminateProcess(IntPtr process,uint exitCode);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcessW(string application,System.Text.StringBuilder command,IntPtr processAttributes,IntPtr threadAttributes,bool inherit,uint flags,IntPtr environment,string cwd,ref StartupInfo startup,out ProcessInfo process);
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct StartupInfo {
+        public uint Size;public string Reserved,Desktop,Title;public uint X,Y,XSize,YSize,XChars,YChars,Fill,Flags;
+        public ushort Show,ReservedSize;public IntPtr ReservedData,Input,Output,Error;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessInfo {public IntPtr Process,Thread;public uint Pid,Tid;}
     [DllImport("iphlpapi.dll")] static extern uint GetExtendedTcpTable(IntPtr table, ref int size, bool sort, int family, int type, uint reserved);
     // Keep the handle alive until worker process exit. Kernel closes it on
     // abnormal exit too, ending only that worker's children.
@@ -61,26 +71,42 @@ public static class DshLauncherProcess {
         var result=new int[found.Count]; found.CopyTo(result); return result;
     }
     public sealed class Child : IDisposable {
-        public Process Process; FileStream output,error; Task outCopy,errCopy;
+        public Process Process; FileStream output,error;IntPtr input;
         public Child(string exe,string arguments,string cwd,string stdout,string stderr) {
-            var start=new ProcessStartInfo(exe,arguments) { WorkingDirectory=cwd, UseShellExecute=false,
-                CreateNoWindow=true, RedirectStandardOutput=true, RedirectStandardError=true };
-            output=new FileStream(stdout,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite);
-            error=new FileStream(stderr,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite);
-            Process=System.Diagnostics.Process.Start(start);
-            outCopy=Copy(Process.StandardOutput.BaseStream,output);
-            errCopy=Copy(Process.StandardError.BaseStream,error);
-        }
-        static async Task Copy(Stream source, FileStream target) {
-            byte[] buffer=new byte[4096]; int count;
-            while((count=await source.ReadAsync(buffer,0,buffer.Length))>0) {
-                await target.WriteAsync(buffer,0,count); await target.FlushAsync();
+            ProcessInfo child=new ProcessInfo();bool started=false;
+            try {
+                output=new FileStream(stdout,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite);
+                error=new FileStream(stderr,FileMode.CreateNew,FileAccess.Write,FileShare.ReadWrite);
+                input=CreateFileW("NUL",0x80000000,3,IntPtr.Zero,3,0,IntPtr.Zero);
+                if(input==new IntPtr(-1))throw new Win32Exception(Marshal.GetLastWin32Error());
+                foreach(var handle in new IntPtr[]{output.SafeFileHandle.DangerousGetHandle(),error.SafeFileHandle.DangerousGetHandle(),input})
+                    if(!SetHandleInformation(handle,1,1))throw new Win32Exception(Marshal.GetLastWin32Error());
+                var start=new StartupInfo {Size=(uint)Marshal.SizeOf(typeof(StartupInfo)),Flags=0x100,
+                    Input=input,Output=output.SafeFileHandle.DangerousGetHandle(),Error=error.SafeFileHandle.DangerousGetHandle()};
+                // A Store pwsh worker's Process.Start child did not inherit its
+                // Job. Create suspended and explicitly assign BEFORE any user
+                // instruction can run or create an unowned descendant.
+                if(!CreateProcessW(exe,new System.Text.StringBuilder("\""+exe+"\" "+arguments),IntPtr.Zero,IntPtr.Zero,true,0x08000004,IntPtr.Zero,cwd,ref start,out child))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                started=true;
+                if(ownedJob==IntPtr.Zero || !AssignProcessToJobObject(ownedJob,child.Process))throw new Win32Exception(Marshal.GetLastWin32Error());
+                Process=System.Diagnostics.Process.GetProcessById((int)child.Pid);
+                var retainedHandle=Process.Handle;
+                // ResumeThread returns DWORD(-1) on failure, not BOOL.
+                if(ResumeThreadCount(child.Thread)==uint.MaxValue)throw new Win32Exception(Marshal.GetLastWin32Error());
+            } catch {
+                if(started)TerminateProcess(child.Process,1);
+                Dispose();throw;
+            } finally {
+                if(child.Thread!=IntPtr.Zero)CloseHandle(child.Thread);
+                if(child.Process!=IntPtr.Zero)CloseHandle(child.Process);
             }
         }
+        [DllImport("kernel32.dll",EntryPoint="ResumeThread",SetLastError=true)] static extern uint ResumeThreadCount(IntPtr thread);
         public int Wait() {
-            Process.WaitForExit(); Task.WaitAll(outCopy,errCopy);
+            Process.WaitForExit();
             output.Flush(); error.Flush(); return Process.ExitCode;
         }
-        public void Dispose() { output.Dispose(); error.Dispose(); Process.Dispose(); }
+        public void Dispose() { if(input!=IntPtr.Zero && input!=new IntPtr(-1)){CloseHandle(input);input=IntPtr.Zero;}if(output!=null)output.Dispose();if(error!=null)error.Dispose();if(Process!=null)Process.Dispose(); }
     }
 }

@@ -5,15 +5,17 @@
     [ValidateRange(1,65535)][int]$BotPort = 6185,
     [ValidateRange(1,65535)][int]$ConsolePort = 7850,
     [switch]$InternalWorker,
+    [switch]$InternalController,
     [ValidateSet('Bot','Console')][string]$Component = 'Bot',
     [string]$WorkerId,
     [ValidateSet('Start','Stop','Restart','Status')][string]$Action = 'Start',
-    [switch]$VerifyReady,
+    [switch]$VerifyReady = $true,
     [switch]$DetachOperation,
     [string]$OperationId
 )
 # Same core for Windows PowerShell 5.1 and PowerShell 7. No elevation/policy changes.
 $ErrorActionPreference = 'Stop'
+$env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules')+';'+[IO.Path]::Combine($env:ProgramFiles,'WindowsPowerShell','Modules')
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8
 $OutputEncoding = $utf8
@@ -40,6 +42,31 @@ function Read-Json($Path) {
         catch { throw 'Protected JSON is unreadable or invalid; fix it locally (values withheld)' }
     }
     return $null
+}
+function Test-Controller($State) {
+    if(!$State -or $State.root -ne $root -or $State.nonce -notmatch '^[0-9a-f]{32}$'){return $false}
+    $identity=Get-Identity $State.pid
+    if(!$identity -or $identity.ticks -ne $State.ticks -or $identity.exe -ne $State.exe){return $false}
+    $process=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$State.pid)
+    return ($process.CommandLine -like '* -InternalController *' -and $process.CommandLine.Contains($State.nonce) -and $process.CommandLine.Contains('-RuntimeRoot "'+$root+'"'))
+}
+function Ensure-Controller {
+    $path=Join-Path $control 'Controller.json'
+    if(Test-Controller (Read-Json $path)){return}
+    # Establish from the user entry before component Jobs exist. A Console
+    # request cannot create its replacement controller inside its own Job.
+    if($env:DSH_RUNTIME_ROOT -or $OperationId){throw 'Independent controller unavailable; use the instance entry to establish it; no action retried'}
+    $nonce=[Guid]::NewGuid().ToString('N')
+    $arguments='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -InternalController -RuntimeRoot "'+$root+'" -WorkerId '+$nonce
+    $process=Start-Process -FilePath $shellExe -ArgumentList $arguments -WorkingDirectory $env:SystemRoot -WindowStyle Hidden -PassThru
+    $deadline=[DateTime]::UtcNow.AddSeconds(8)
+    do{
+        $state=Read-Json $path
+        if($state -and $state.nonce -eq $nonce -and (Test-Controller $state)){return}
+        if($process.HasExited){throw 'Independent controller exited before entry acknowledgment'}
+        Start-Sleep -Milliseconds 100
+    }while([DateTime]::UtcNow -lt $deadline)
+    throw 'Independent controller entry acknowledgment timed out; no business action started'
 }
 function Get-Identity($ProcessId) {
     try {
@@ -68,35 +95,86 @@ function Get-Family($ProcessId) {
     }
     return $result
 }
+function Open-OwnedProcess($Identity) {
+    try { $process=Get-Process -Id $Identity.pid -ErrorAction Stop }
+    catch {
+        if ($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId*') { return $null }
+        throw
+    }
+    try {
+        $null=$process.Handle
+        if ($process.StartTime.ToUniversalTime().Ticks.ToString() -ne $Identity.ticks -or $process.Path -ne $Identity.exe) {
+            throw 'Process identity changed before stop; refusing operation'
+        }
+        return $process
+    } catch {
+        if ($process.HasExited) { $process.Dispose(); return $null }
+        $process.Dispose(); throw
+    }
+}
+function Capture-OwnedFamily($State) {
+    $held=[Collections.ArrayList]::new()
+    function Capture-Children($Parent) {
+        foreach($observed in @(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+$Parent.Id))) {
+            if($observed.CreationDate.ToUniversalTime().Ticks -lt $Parent.StartTime.ToUniversalTime().Ticks){continue}
+            try{$child=Get-Process -Id $observed.ProcessId -ErrorAction Stop}
+            catch{if($_.FullyQualifiedErrorId -like 'NoProcessFoundForGivenId*'){continue};throw}
+            try{
+                $null=$child.Handle
+                if($child.HasExited){$child.Dispose();continue}
+                $current=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$observed.ProcessId)
+                # CIM exposes microsecond creation precision. Bind that snapshot
+                # and parent relationship to the retained handle immediately,
+                # before a bare PID could be reinterpreted as a new process.
+                $handleTicks=$child.StartTime.ToUniversalTime().Ticks
+                $observedTicks=$observed.CreationDate.ToUniversalTime().Ticks
+                if(!$current -or $current.ParentProcessId -ne $Parent.Id -or $current.CreationDate -ne $observed.CreationDate -or
+                    [decimal]::Floor([decimal]$handleTicks/10) -ne [decimal]::Floor([decimal]$observedTicks/10) -or
+                    !$observed.ExecutablePath -or $child.Path -ne $observed.ExecutablePath){throw 'Child identity/provenance changed during capture; refusing stop'}
+                $null=$held.Add($child)
+            }catch{
+                if($child.HasExited){$child.Dispose();continue}
+                $child.Dispose();throw
+            }
+            Capture-Children $child
+        }
+    }
+    try{
+        $parent=Open-OwnedProcess $State
+        if($parent){$null=$held.Add($parent);Capture-Children $parent}
+        if($parent -and !$parent.HasExited -and !(Test-Worker $State)){throw 'Worker identity changed during capture'}
+        return @($held)
+    }catch{foreach($handle in $held){$handle.Dispose()};throw}
+}
 function Stop-Owned($State) {
     if (!(Test-Worker $State)) { throw 'Worker identity is not verified; refusing stop' }
-    $identities=@(Get-Family $State.pid | ForEach-Object { Get-Identity $_ })
     # Keep the verified process handle open: PID reuse cannot redirect Kill().
-    $owned=Get-Process -Id $State.pid -ErrorAction Stop
-    $null=$owned.Handle
-    if ($owned.StartTime.ToUniversalTime().Ticks.ToString() -ne $State.ticks -or !(Test-Worker $State)) { throw 'Worker identity changed before stop' }
-    $owned.Kill()
-    if ($owned.WaitForExit(1000)) {
+    $handles=@()
+    try {
+    $handles=@(Capture-OwnedFamily $State)
+    $owned=@($handles | Where-Object { $_.Id -eq $State.pid })[0]
+    if ($owned -and !$owned.HasExited -and !(Test-Worker $State)) { throw 'Worker identity changed before stop' }
+    if ($owned -and !$owned.HasExited) {
+        try { $owned.Kill() } catch { if (!$owned.HasExited) { throw } }
+    }
+    if (!$owned -or $owned.WaitForExit(1000)) {
         # Some legacy workers did not retain a Job that actually contained Node.
         # These identities were captured while the worker was still verified.
-        foreach($identity in $identities | Where-Object { $_.pid -ne $State.pid }) {
-            $current=Get-Identity $identity.pid
-            if ($current -and $current.ticks -eq $identity.ticks -and $current.exe -eq $identity.exe) {
-                $child=Get-Process -Id $identity.pid -ErrorAction Stop
-                $null=$child.Handle
-                if ($child.StartTime.ToUniversalTime().Ticks.ToString() -ne $identity.ticks) { throw 'Child identity changed before stop' }
-                $child.Kill()
+        foreach($child in $handles | Where-Object { $_.Id -ne $State.pid }) {
+            if (!$child.HasExited) {
+                try { $child.Kill() } catch { if (!$child.HasExited) { throw } }
             }
         }
     }
     $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
-        $alive=@($identities | Where-Object { $current=Get-Identity $_.pid; $current -and $current.ticks -eq $_.ticks })
+        $alive=@($handles | Where-Object { !$_.HasExited })
         $listeners=@([DshLauncherProcess]::ListeningPids([int]$State.port))
         if (!$alive.Count -and !$listeners.Count) { return }
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Stop timeout: owned process family or port has not exited; no restart attempted'
+    } finally { foreach($handle in $handles) { $handle.Dispose() } }
 }
 
 function Stop-LegacyConsole($State,$StatePath) {
@@ -105,7 +183,7 @@ function Stop-LegacyConsole($State,$StatePath) {
     $observation=Read-Json (Join-Path $control ($State.nonce+'.json'))
     if (!$observation -or $observation.component -ne 'Console' -or [int]$observation.pid -ne [int]$State.pid) { throw 'Legacy worker observation is missing or inconsistent' }
     $cutoff=(Get-Item -LiteralPath $StatePath).LastWriteTimeUtc.Ticks+20000000
-    $node=(Get-Command node.exe -ErrorAction Stop).Source
+    $node=[IO.Path]::GetFullPath((Get-Command node.exe -ErrorAction Stop).Source)
     $module=Join-Path $root 'dsh-console\server.js'
     $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $verified=@()
@@ -113,7 +191,10 @@ function Stop-LegacyConsole($State,$StatePath) {
         $identity=Get-Identity $child.ProcessId
         if (!$identity -or $identity.exe -ne $node -or [long]$identity.ticks -lt [long]$State.ticks -or [long]$identity.ticks -gt $cutoff -or
             $child.CommandLine.IndexOf(('"'+$module+'"'),[StringComparison]::OrdinalIgnoreCase) -lt 0 -or
-            $child.CommandLine -notmatch ('--port\s+'+[int]$State.port+'(?:\s|$)')) { throw 'Legacy child identity/command/start time is not verified' }
+            $child.CommandLine -notmatch ('--port\s+'+[int]$State.port+'(?:\s|$)')) {
+            $details='identity='+[bool]$identity+' exe='+[bool]($identity.exe -eq $node)+' after_worker='+[bool]([long]$identity.ticks -ge [long]$State.ticks)+' before_ready='+[bool]([long]$identity.ticks -le $cutoff)+' module='+[bool]($child.CommandLine.IndexOf(('"'+$module+'"'),[StringComparison]::OrdinalIgnoreCase) -ge 0)+' port='+[bool]($child.CommandLine -match ('--port\s+'+[int]$State.port+'(?:\s|$)'))
+            throw ('Legacy child identity/command/start time is not verified: '+$details)
+        }
         $account=Invoke-CimMethod -InputObject $child -MethodName GetOwnerSid
         if ($account.ReturnValue -ne 0 -or $account.Sid -ne $owner) { throw 'Legacy child owner is not verified' }
         $verified+=$identity
@@ -135,15 +216,15 @@ function Confirm-Ready($Name,$State) {
     if (!(Test-Worker $State)) { return $false }
     $family=@(Get-Family $State.pid); $listeners=@([DshLauncherProcess]::ListeningPids([int]$State.port))
     if (!$listeners.Count -or @($listeners | Where-Object { $family -notcontains $_ }).Count) { return $false }
-    if (!$VerifyReady) { return $true }
     if ($Name -eq 'Bot') {
         $live=Read-Json (Join-Path $root 'dsh_data\admin_v2\live.json')
         $build=Join-Path $root 'data\plugins\astrbot_plugin_dsh_soul\build_info.py'
         if (!(Test-Path -LiteralPath $build)) { return $false }
         $expected=[regex]::Match([IO.File]::ReadAllText($build),'BUILD_VERSION = "([^"]+)"').Groups[1].Value
-        if ($live.qq_connection -and [int]$live.qq_connection.configured -gt 0 -and $live.qq_connection.status -ne 'ready') { return $false }
+        if (!$live.qq_connection -or [int]$live.qq_connection.configured -le 0 -or $live.qq_connection.status -ne 'ready' -or [int]$live.qq_connection.ready -ne [int]$live.qq_connection.configured) { return $false }
+        $age=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000-[double]$live.at
         return ($live -and !$live.stopped -and $family -contains [int]$live.pid -and $expected -and $live.version -eq $expected -and
-            ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000-[double]$live.at) -lt 5 -and [double]$live.at -gt 0)
+            $age -ge -1 -and $age -lt 5 -and [double]$live.at -gt 0)
     }
     try {
         $credential=Import-Clixml -LiteralPath (Join-Path $root 'deployment-config\console-credential.clixml')
@@ -157,8 +238,11 @@ function Confirm-Ready($Name,$State) {
         catch { return ([int]$_.Exception.Response.StatusCode -eq 401) }
     } catch { return $false }
 }
-function Publish-Operation($Status,$Message,$Running=$null) {
-    $value=@{ok=($Status -eq 'succeeded');status=$Status;component=$Component;action=$Action;running=$Running;time=[DateTime]::UtcNow.ToString('o');error=$Message}
+function Publish-Operation($Status,$Message,$Running=$null,$Name='',$Readiness='') {
+    if(!$Name){$Name=if($activeComponent){$activeComponent}else{$Component}}
+    $value=@{ok=($Status -eq 'succeeded');status=$Status;component=$Name;action=$Action;running=$Running;time=[DateTime]::UtcNow.ToString('o');error=$Message}
+    if($Readiness){$value.readiness=$Readiness}
+    if($null -ne $componentResults -and $Status -notin @('pending','running')){$null=$componentResults.Add($value)}
     if ($OperationId) { $value.id=$OperationId; Save-Json (Join-Path $control ('operations\'+$OperationId+'.json')) $value }
     Write-Output ($value | ConvertTo-Json -Compress -Depth 6)
 }
@@ -207,20 +291,77 @@ try {
     if (!(Test-Path -LiteralPath $root -PathType Container)) { throw 'RuntimeRoot does not exist' }
     New-Item -ItemType Directory -Path $control,$logRoot -Force | Out-Null
     Add-Type -Path (Join-Path $PSScriptRoot 'launcher-process.cs')
+    if($InternalController){
+        if($WorkerId -notmatch '^[0-9a-f]{32}$'){throw 'Invalid controller identity'}
+        $controllerLock=$null
+        try{
+            try{$controllerLock=[IO.File]::Open((Join-Path $control 'controller.lock'),'OpenOrCreate','ReadWrite','None')}catch [IO.IOException]{exit 0}
+            $identity=Get-Identity $PID
+            Save-Json (Join-Path $control 'Controller.json') @{root=$root;nonce=$WorkerId;pid=$PID;ticks=$identity.ticks;exe=$identity.exe;stage='ready';version='startup-controller-1'}
+            $idleSince=[DateTime]::UtcNow
+            while(Test-Path -LiteralPath $control){
+                $requestDir=Join-Path $control 'operations'
+                $requests=if(Test-Path -LiteralPath $requestDir){@(Get-ChildItem -LiteralPath $requestDir -Filter '*-request.json' -File)}else{@()}
+                foreach($file in $requests){
+                    $request=Read-Json $file.FullName
+                    if(!$request -or $request.id -notmatch '^[0-9a-f]{32}$' -or $request.component -notin @('Bot','Console') -or $request.action -notin @('Start','Stop','Restart') -or $request.root -ne $root){throw 'Invalid independent controller request'}
+                    $claimed=$file.FullName+'.claimed'
+                    [IO.File]::Move($file.FullName,$claimed)
+                    $operationPath=Join-Path $requestDir ($request.id+'.json')
+                    if(!$request.deadline -or [double]$request.deadline -lt [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000){
+                        Save-Json $operationPath @{id=$request.id;component=$request.component;action=$request.action;status='failed';ok=$false;time=[DateTime]::UtcNow.ToString('o');stage='expired_before_action';action_started=$false;error='Request expired before controller acknowledgment; no action executed'}
+                        continue
+                    }
+                    Save-Json $operationPath @{id=$request.id;component=$request.component;action=$request.action;status='running';ok=$false;time=[DateTime]::UtcNow.ToString('o');stage='controller_acknowledged'}
+                    $bootstrap=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+                    $choiceText=& $bootstrap -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'launcher-shell.ps1') -SelectOnly
+                    $choiceCode=$LASTEXITCODE
+                    $choice=$null
+                    try{$choice=($choiceText|Select-Object -Last 1)|ConvertFrom-Json}catch{}
+                    if($choiceCode -ne 0 -or !$choice.ok){
+                        Save-Json $operationPath @{id=$request.id;component=$request.component;action=$request.action;status='failed';ok=$false;time=[DateTime]::UtcNow.ToString('o');stage='interpreter_preflight';action_started=$false;error='Controller interpreter preflight failed; no action executed'}
+                        continue
+                    }
+                    Save-Json (Join-Path $requestDir ($request.id+'-selection.json')) $choice
+                    $arguments='-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -RuntimeRoot "'+$root+'" -Component '+$request.component+' -Action '+$request.action+' -OperationId '+$request.id+' -BotPort '+[int]$request.bot_port+' -ConsolePort '+[int]$request.console_port+' -TimeoutSeconds '+[int]$request.timeout+' -VerifyReady'
+                    try{
+                        $operation=Start-Process -FilePath $choice.exe -ArgumentList $arguments -WorkingDirectory $env:SystemRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $requestDir ($request.id+'-controller.log')) -RedirectStandardError (Join-Path $requestDir ($request.id+'-controller-error.log'))
+                    }catch{
+                        Save-Json $operationPath @{id=$request.id;component=$request.component;action=$request.action;status='failed';ok=$false;time=[DateTime]::UtcNow.ToString('o');stage='action_process_creation';action_started=$false;error=('Action process creation failed: '+$_.Exception.GetType().Name)}
+                        continue
+                    }
+                    $finished=$operation.WaitForExit(([int]$request.timeout*3+15)*1000)
+                    $result=Read-Json $operationPath
+                    if(!$finished -or $result.status -in @('pending','running')){
+                        Save-Json $operationPath @{id=$request.id;component=$request.component;action=$request.action;status=if($finished){'failed'}else{'unknown'};ok=$false;time=[DateTime]::UtcNow.ToString('o');stage='controller_result';error=if($finished){'Action process exited without a final result'}else{'Action result deadline exceeded; not retried'}}
+                    }
+                    if(!$finished){throw 'Action process still unresolved; controller will not start another action'}
+                    $operation.Dispose()
+                }
+                $hasWorker=(Test-Worker (Read-Json (Join-Path $control 'Bot.json'))) -or (Test-Worker (Read-Json (Join-Path $control 'Console.json')))
+                if($hasWorker -or $requests.Count){$idleSince=[DateTime]::UtcNow}
+                elseif(([DateTime]::UtcNow-$idleSince).TotalSeconds -gt 12){break}
+                Start-Sleep -Milliseconds 200
+            }
+        }finally{if($controllerLock){$controllerLock.Dispose()}}
+        exit 0
+    }
     if ($OperationId -and !$DetachOperation) { Publish-Operation 'running' 'Controller started; checking instance lock' }
     if ($OperationId -and $OperationId -notmatch '^[0-9a-f]{32}$') { throw 'Invalid operation identity' }
     if ($DetachOperation) {
         if (!$OperationId) { throw 'Operation identity required' }
-        # WMI creates an external controller outside the Console worker Job.
-        # It invokes this same instance contract, never a second kill/start path.
-        $command='"'+$shellExe+'" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$PSCommandPath+'" -RuntimeRoot "'+$root+'" -Component '+$Component+' -Action '+$Action+' -OperationId '+$OperationId+' -TimeoutSeconds '+$TimeoutSeconds+' -ConsolePort '+$ConsolePort+' -BotPort '+$BotPort
-        if ($VerifyReady) { $command+=' -VerifyReady' }
-        $controllerLog=Join-Path $control ('operations\'+$OperationId+'-controller.log')
-        # Preserve diagnostics even if the external shell fails before the script.
-        $command='"'+$env:SystemRoot+'\System32\cmd.exe" /d /s /c "'+$command+' > "'+$controllerLog+'" 2>&1"'
-        $startup=New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ShowWindow=[uint16]0}
-        $created=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine=$command;CurrentDirectory=$root;ProcessStartupInformation=$startup}
-        if ($created.ReturnValue -ne 0) { throw 'External lifecycle controller could not start' }
+        if(!(Test-Controller (Read-Json (Join-Path $control 'Controller.json')))){throw 'Independent controller unavailable; no operation started'}
+        Save-Json (Join-Path $control ('operations\'+$OperationId+'-request.json')) @{id=$OperationId;root=$root;component=$Component;action=$Action;bot_port=$BotPort;console_port=$ConsolePort;timeout=$TimeoutSeconds;deadline=([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000+4)}
+        $deadline=[DateTime]::UtcNow.AddSeconds(4)
+        do{
+            $record=Read-Json (Join-Path $control ('operations\'+$OperationId+'.json'))
+            if($record.status -ne 'pending'){break}
+            Start-Sleep -Milliseconds 100
+        }while([DateTime]::UtcNow -lt $deadline)
+        if(!$record -or $record.status -eq 'pending'){
+            $unconfirmed=[Exception]::new('Controller did not acknowledge; result unknown, do not retry')
+            $unconfirmed.Data['ResultUnknown']=$true;throw $unconfirmed
+        }
         Write-Output (@{ok=$false;accepted=$true;status='pending';id=$OperationId} | ConvertTo-Json -Compress)
         exit 0
     }
@@ -241,6 +382,8 @@ try {
             exit $code
         } catch {
             $observed.phase='worker-failed'; $observed.exit_code=1; $observed.time=[DateTime]::UtcNow.ToString('o')
+            $observed.error_type=$_.Exception.GetType().Name
+            $observed.error_message=$_.Exception.Message
             Save-Json $observation $observed
             exit 1
         }
@@ -256,10 +399,15 @@ try {
         }
     }
     try {
+        if($Action -in @('Start','Restart') -and !$OperationId){Ensure-Controller}
         $components = @('Bot'); if ($WithConsole) { $components += 'Console' }
         if ($PSBoundParameters.ContainsKey('Component')) { $components=@($Component) }
+        $componentResults=[Collections.ArrayList]::new();$overallExitCode=0
         if ($OperationId) { Publish-Operation 'running' '' }
         foreach ($name in $components) {
+            $activeComponent=$name
+            try {
+            $createdThisAction = $false
             $port = if ($name -eq 'Bot') { $BotPort } else { $ConsolePort }
             if ($Action -in @('Start','Restart')) { Assert-Component $name }
             $statePath = Join-Path $control ($name + '.json')
@@ -271,9 +419,10 @@ try {
             $listeners = @([DshLauncherProcess]::ListeningPids($port))
             if ($Action -eq 'Status') {
                 $ready=$existing -and (Confirm-Ready $name $state)
-                if ($ready) { Publish-Operation 'succeeded' '' $true }
-                elseif (!$existing -and !$listeners.Count) { Publish-Operation 'succeeded' '' $false }
-                else { Publish-Operation 'unknown' 'Owned instance is not ready or listener ownership is unverified' }
+                if ($ready) { Publish-Operation 'succeeded' '' $true $name 'ready' }
+                elseif (!$existing -and !$listeners.Count) { Publish-Operation 'succeeded' '' $false $name 'not_running' }
+                elseif ($existing) { Publish-Operation 'not_ready' 'Owned process exists but loaded application/QQ readiness is not confirmed' $false $name 'not_ready';$overallExitCode=1 }
+                else { Publish-Operation 'unknown' 'Listener ownership is unverified' $null $name 'unknown';$overallExitCode=1 }
                 continue
             }
             if ($Action -in @('Stop','Restart')) {
@@ -282,7 +431,7 @@ try {
                     if ($name -eq 'Console' -and $state) { Stop-LegacyConsole $state $statePath }
                     else { throw 'Port is occupied without verified ownership; refusing stop' }
                 }
-                if ($Action -eq 'Stop') { continue }
+                if ($Action -eq 'Stop') { Publish-Operation 'succeeded' '' $false $name 'not_running';continue }
                 $existing=$false; $listeners=@()
             }
             if ($listeners.Count) {
@@ -291,6 +440,7 @@ try {
                     if (@($listeners | Where-Object { $family -notcontains $_ }).Count -eq 0) {
                         if (Confirm-Ready $name $state) {
                             Write-Output ($name + ' reuse: verified ready; QQ client delivery not checked')
+                            Publish-Operation 'succeeded' '' $true $name 'ready'
                             continue
                         }
                     } else {
@@ -304,6 +454,7 @@ try {
                 $nonce = [Guid]::NewGuid().ToString('N')
                 $arguments = ' -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -InternalWorker -RuntimeRoot "' + $root + '" -Component ' + $name + ' -WorkerId ' + $nonce + ' -ConsolePort ' + $ConsolePort
                 $created = Start-Process -FilePath $shellExe -ArgumentList $arguments -WorkingDirectory $root -WindowStyle Hidden -PassThru
+                $createdThisAction = $true
                 $identityDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
                 do {
                     $identity = Get-Identity $created.Id
@@ -343,20 +494,45 @@ try {
                     }
                     Start-Sleep -Milliseconds 150
                 }
-                if (!$ready) { throw ($name + ' startup timeout; owned worker will be stopped; inspect logs') }
+                if (!$ready) {
+                    $effect = if ($createdThisAction) { 'new owned worker will be stopped' } else { 'existing instance preserved; readiness is unconfirmed' }
+                    throw ($name + ' startup timeout; ' + $effect + '; inspect logs')
+                }
                 $state.status='ready'; Save-Json $statePath $state
-                Write-Output ($name + ' ready: owned listener; QQ connection not checked')
+                Write-Output ($name + ' ready: identity, loaded version, heartbeat and transport evidence verified; QQ client delivery not checked')
+                Publish-Operation 'succeeded' '' $true $name 'ready'
             } catch {
                 $startupFailure=$_
-                if (Test-Worker $state) {
+                if ($createdThisAction -and (Test-Worker $state)) {
                     try { Stop-Owned $state } catch { Write-Output ('Owned startup cleanup failed: '+$_.Exception.Message) }
                 }
                 throw $startupFailure
             }
+            } catch {
+                $componentFailure=$_
+                if($createdThisAction -and $state -and (Test-Worker $state)){
+                    try{Stop-Owned $state}catch{Write-Output ('Owned creation cleanup failed: '+$_.Exception.Message)}
+                }
+                $code=1
+                if($componentFailure.Exception.Data.Contains('DshExitCode') -and [int]$componentFailure.Exception.Data['DshExitCode'] -ne 0){$code=[int]$componentFailure.Exception.Data['DshExitCode']}
+                if(!$overallExitCode){$overallExitCode=$code}
+                Write-Output ('Launcher failed for '+$name+': '+$componentFailure.Exception.Message)
+                Publish-Operation 'failed' $componentFailure.Exception.Message $null $name 'unknown'
+            }
+        }
+        if(!$OperationId -and $Action -ne 'Status' -and !(Test-Worker (Read-Json (Join-Path $control 'Bot.json'))) -and !(Test-Worker (Read-Json (Join-Path $control 'Console.json')))){
+            $controller=Read-Json (Join-Path $control 'Controller.json')
+            if(Test-Controller $controller){$process=Open-OwnedProcess $controller;if($process){try{if(!$process.HasExited){$process.Kill();$null=$process.WaitForExit(3000)}}finally{$process.Dispose()}}}
         }
     } finally { if ($lock) { $lock.Dispose() } }
-    if ($Action -ne 'Status') { Publish-Operation 'succeeded' '' ($Action -ne 'Stop') }
-    exit 0
+    if($components.Count -gt 1){
+        $ok=@($componentResults|Where-Object{$_.ok}).Count
+        $status=if($ok -eq $components.Count){'succeeded'}elseif($ok -gt 0){'partial'}elseif(@($componentResults|Where-Object{$_.status -eq 'failed'}).Count){'failed'}else{'unknown'}
+        $summary=@{ok=($status -eq 'succeeded');status=$status;component='All';action=$Action;results=@($componentResults);time=[DateTime]::UtcNow.ToString('o')}
+        if($OperationId){$summary.id=$OperationId;Save-Json (Join-Path $control ('operations\'+$OperationId+'.json')) $summary}
+        Write-Output ($summary|ConvertTo-Json -Compress -Depth 8)
+    }
+    exit $overallExitCode
 } catch {
     Write-Output ('Launcher failed: ' + $_.Exception.Message)
     Write-Output ('Check protected runtime settings/dependencies and logs: ' + $logRoot)
@@ -364,6 +540,9 @@ try {
     if ($_.Exception.Data.Contains('DshExitCode') -and [int]$_.Exception.Data['DshExitCode'] -ne 0) {
         $failureCode = [int]$_.Exception.Data['DshExitCode']
     }
-    if (!$InternalWorker -and (!$OperationId -or $OperationId -match '^[0-9a-f]{32}$')) { Publish-Operation 'failed' $_.Exception.Message }
+    if (!$InternalWorker -and (!$OperationId -or $OperationId -match '^[0-9a-f]{32}$')) {
+        $failureStatus=if($_.Exception.Data.Contains('ResultUnknown')){'unknown'}else{'failed'}
+        Publish-Operation $failureStatus $_.Exception.Message
+    }
     exit $failureCode
 }

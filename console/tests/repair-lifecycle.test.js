@@ -3,7 +3,7 @@ const {createConsoleServer}=require('../server');
 test('launcher receives the recorded instance Bot port',async()=>{
  const vm=require('node:vm'),file=path.join(__dirname,'../lifecycle.js'),nativeRequire=require('node:module').createRequire(file),root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-port-contract-'));
  fs.mkdirSync(path.join(root,'.launcher'));fs.writeFileSync(path.join(root,'.launcher/Bot.json'),JSON.stringify({root,component:'Bot',port:12345}));let called;
- const sandbox={module:{exports:{}},process,require(name){if(name==='node:child_process')return {execFile(exe,args,opts,cb){if(exe==='where.exe')return cb(null,process.execPath+'\n');called=args;cb(null,'{"status":"succeeded","running":true}') }};return nativeRequire(name)}};
+ const sandbox={module:{exports:{}},process,require(name){if(name==='node:child_process')return {execFile(exe,args,opts,cb){if(args.includes('-SelectOnly'))return cb(null,JSON.stringify({ok:true,exe:process.execPath}));called=args;cb(null,'{"status":"succeeded","running":true}') }};return nativeRequire(name)}};
  vm.runInNewContext(fs.readFileSync(file,'utf8'),sandbox);
  try{await sandbox.module.exports.createLifecycle(root,12346).status();assert.equal(called[called.indexOf('-BotPort')+1],'12345');}
  finally{fs.rmSync(root,{recursive:true,force:true});}
@@ -12,7 +12,7 @@ test('dispatch timeout cannot overwrite a controller result that already started
  const vm=require('node:vm'),moduleFile=path.join(__dirname,'../lifecycle.js'),nativeRequire=require('node:module').createRequire(moduleFile);
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-dispatch-'));
  const sandbox={module:{exports:{}},process,console,require(name){if(name==='node:child_process')return {execFile(exe,args,options,cb){
-  if(exe==='where.exe')return cb(null,process.execPath+'\n');
+  if(args.includes('-SelectOnly'))return cb(null,JSON.stringify({ok:true,exe:process.execPath}));
   const dir=path.join(root,'.launcher/operations'),{id}=JSON.parse(fs.readFileSync(path.join(dir,'active.json')));
   fs.writeFileSync(path.join(dir,id+'.json'),JSON.stringify({id,status:'running',ok:false,time:new Date().toISOString()}));
   cb(Object.assign(Error('synthetic reply timeout'),{killed:true}),'');

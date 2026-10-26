@@ -28,8 +28,9 @@ class ActualConsoleLifecycle(unittest.TestCase):
             with self.subTest(shell=shell),tempfile.TemporaryDirectory(prefix='dsh lifecycle ') as tmp:
                 env=os.environ.copy()
                 if shell=='powershell.exe':env['PSModulePath']=str(Path(os.environ.get('SystemRoot',r'C:\Windows'))/'System32/WindowsPowerShell/v1.0/Modules')
+                if shell=='powershell.exe':env['PATH']=str(Path(shutil.which('node.exe')).parent)+';'+str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0')+';'+str(Path(os.environ['SystemRoot'])/'System32')+';'+os.environ['SystemRoot']
                 root=Path(tmp);cfg=root/'deployment-config';cfg.mkdir()
-                for name in ('start-bot.ps1','start-bot.cmd','launcher-process.cs'):shutil.copyfile(REPO/'scripts'/name,root/name)
+                for name in ('start-bot.ps1','start-bot.cmd','launcher-process.cs','launcher-shell.ps1'):shutil.copyfile(REPO/'scripts'/name,root/name)
                 shutil.copytree(REPO/'console',root/'dsh-console',ignore=shutil.ignore_patterns('tests'))
                 (root/'dsh_data/admin_v2').mkdir(parents=True)
                 (root/'data/plugins/astrbot_plugin_dsh_soul').mkdir(parents=True)
@@ -40,7 +41,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                 for dll in ('python312.dll','python3.dll'):shutil.copyfile(Path(sys.base_prefix)/dll,py/dll)
                 (py/'astrbot._pth').write_text(str(Path(sys.base_prefix)/'Lib')+'\n'+str(Path(sys.base_prefix)/'DLLs')+'\n',encoding='utf-8')
                 bp,cp=port(),port()
-                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version="20261026-review-2",at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
+                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version="20261027-startup-1",qq_connection={"configured":1,"ready":1,"status":"ready"},at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
                 literal=str(cfg/'console-credential.clixml').replace("'","''")
                 cmd="$s=ConvertTo-SecureString '"+TOKEN+"' -AsPlainText -Force; New-Object System.Management.Automation.PSCredential('dsh',$s)|Export-Clixml -LiteralPath '"+literal+"'"
                 prep=subprocess.run([shell,'-NoProfile','-NonInteractive','-Command',cmd],capture_output=True,env=env)
@@ -79,7 +80,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                     second=launch('Bot');self.assertEqual(second.returncode,0,second.stdout+second.stderr)
                     self.assertEqual(original['pid'],json.loads(state.read_text(encoding='utf-8-sig'))['pid'])
                     self.assertTrue(http('/api/status')['bot_running'])
-                    repeat=http('/api/bot',{'action':'start'});self.assertEqual(wait(repeat['id'])['status'],'succeeded')
+                    repeat=http('/api/bot',{'action':'start'});repeated=wait(repeat['id']);self.assertEqual(repeated['status'],'succeeded',repeated)
                     self.assertEqual(original['pid'],json.loads(state.read_text(encoding='utf-8-sig'))['pid'])
                     # Inject stop faults only into this fixture copy, preserving
                     # the real worker, family, lock and final-result code path.
@@ -88,7 +89,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         launcher.write_bytes(source.replace(b'$owned.Kill()',b"throw 'Synthetic AccessDenied'"))
                         denied=launch('Bot','Stop');self.assertNotEqual(denied.returncode,0);self.assertIn('AccessDenied',denied.stdout)
                         with socket.create_connection(('127.0.0.1',bp),timeout=2):pass
-                        launcher.write_bytes(source.replace(b'$owned.Kill()',b'# synthetic partial/no exit'))
+                        launcher.write_bytes(source.replace(b'$owned.Kill()',b'[void]0'))
                         timed=launch('Bot','Stop',seconds=2);self.assertNotEqual(timed.returncode,0);self.assertIn('Stop timeout',timed.stdout)
                         with socket.create_connection(('127.0.0.1',bp),timeout=2):pass
                     finally:launcher.write_bytes(source)
@@ -109,20 +110,20 @@ class ActualConsoleLifecycle(unittest.TestCase):
                     failed=launch('Bot');self.assertNotEqual(failed.returncode,0,failed.stdout)
                     # A real listener + fresh version heartbeat still cannot
                     # claim startup complete while configured QQ is connecting.
-                    (root/'run').write_bytes(good_bot.replace(b'at=time.time()',b'at=time.time(),qq_connection={"configured":1,"status":"connecting"}'))
+                    (root/'run').write_bytes(good_bot.replace(b'"status":"ready"',b'"status":"connecting"'))
                     connecting=launch('Bot',seconds=2);self.assertNotEqual(connecting.returncode,0);self.assertIn('startup timeout',connecting.stdout)
                     (root/'run').write_bytes(good_bot)
                     # Console old port not released: external controller returns
                     # a final failure while old authenticated server survives.
                     launcher=root/'start-bot.ps1';source=launcher.read_bytes()
                     try:
-                        launcher.write_bytes(source.replace(b'$owned.Kill()',b'# synthetic old port retained').replace(b'$TimeoutSeconds = 30',b'$TimeoutSeconds = 2'))
+                        launcher.write_bytes(source.replace(b'$owned.Kill()',b'[void]0').replace(b'$TimeoutSeconds = 30',b'$TimeoutSeconds = 2'))
                         command=[*args,'-Component','Console','-Action','Restart','-OperationId','b'*32,'-VerifyReady']
                         command[command.index('-TimeoutSeconds')+1]='2'
                         timed=subprocess.run(command,capture_output=True,encoding='utf-8',errors='replace',env=env,timeout=15)
                         self.assertNotEqual(timed.returncode,0);self.assertIn('Stop timeout',timed.stdout)
                         self.assertEqual(http('/api/lifecycle?id='+'b'*32)['status'],'failed')
-                        self.assertEqual(http('/api/health')['api_ver'],'20261026-review-2')
+                        self.assertEqual(http('/api/health')['api_ver'],'20261027-startup-1')
                     finally:launcher.write_bytes(source)
                     stopped=launch('Console','Stop');self.assertEqual(stopped.returncode,0,stopped.stdout)
                     # Foreign Console port holder is never stopped.
@@ -142,7 +143,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         self.assertEqual(json.loads((root/'.launcher/operations'/('d'*32+'.json')).read_text(encoding='utf-8-sig'))['status'],'failed')
                     finally:console.write_bytes(console_source)
                     recovered=launch('Console');self.assertEqual(recovered.returncode,0,recovered.stdout+recovered.stderr)
-                    self.assertEqual(http('/api/health')['api_ver'],'20261026-review-2')
+                    self.assertEqual(http('/api/health')['api_ver'],'20261027-startup-1')
                     self.assertEqual(http('/api/lifecycle?id='+'d'*32)['status'],'failed')
                 finally:
                     launch('Bot','Stop',False);launch('Console','Stop',False)

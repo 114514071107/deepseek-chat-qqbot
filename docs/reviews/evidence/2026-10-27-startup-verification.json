@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-27",
+  "build": "20261027-startup-1",
+  "python": {"tests": 280, "seconds": 728.828, "result": "OK", "skipped_existing": 1},
+  "node": {"tests": 64, "result": "passed"},
+  "balance": {"tests": 2, "result": "passed"},
+  "browser": {"cards": 7, "lifecycle": 5, "keyboard": 7, "status": 7, "refresh_races": 3, "result": "passed"},
+  "syntax": {"python_ast": 80, "javascript": 28, "inline_scripts": 3, "errors": []},
+  "review_important_fixed": 6,
+  "synthetic_worker_shells": ["PowerShell 7", "Windows PowerShell 5.1"],
+  "historical_limits": ["Original heartbeat failure trigger was not retained", "WMI OS policy responsible for pre-entry access denial remains unidentified"],
+  "production_acceptance": "recorded separately in release document after execution"
+}

@@ -17,6 +17,7 @@ FEATURES={'_voice_reply':'voice','_sprinkle_later':'sprinkle','_revive_later':'r
           '_harvest_one':'harvest','_desire_for':'desire','_proactive_send':'proactive',
           '_send_reminder':'reminders','_startup_greet':'reply','_run_kimi':'kimi'}
 FEATURES.update({name:'files' for name in ('read_local_file','list_files','write_local_file','send_local_file','search_in_files')})
+FEATURES['_admin_loop']='admin'
 
 
 @dataclass

@@ -10,10 +10,19 @@ function createLifecycle(root,consolePort){
   if(['pending','running'].includes(row.status)&&Date.now()-Date.parse(row.time)>150000)return {...row,ok:false,status:'unknown',error:'等待已超时；请核查记录，勿重复提交'};
   return row;
  }
- let chosen;
- async function shell(){if(chosen)return chosen;const located=await new Promise(resolve=>execFile('where.exe',['pwsh.exe'],{windowsHide:true,timeout:3000},(e,out)=>resolve(e?'':out.split(/\r?\n/).find(p=>fs.existsSync(p))||'')));
-  const preferred=located||path.join(process.env.ProgramFiles||'C:\\Program Files','PowerShell','7','pwsh.exe');chosen=fs.existsSync(preferred)?preferred:path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');return chosen;}
- async function run(args){const exe=await shell(),env={...process.env};if(path.basename(exe).toLowerCase()==='powershell.exe')env.PSModulePath=path.join(env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','Modules')+';'+path.join(env.ProgramFiles||'C:\\Program Files','WindowsPowerShell','Modules');
+ let selecting;
+ async function shell(){
+  // Coalesce simultaneous probes only. Never persist a stale chosen executable.
+  if(!selecting)selecting=new Promise(resolve=>{
+   const bootstrap=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
+   execFile(bootstrap,['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'launcher-shell.ps1'),'-SelectOnly'],{windowsHide:true,timeout:20000,maxBuffer:32768},(err,out)=>{
+    let selected;try{selected=JSON.parse(out.trim().split(/\r?\n/).pop())}catch{}
+    resolve(!err&&selected?.ok&&selected.exe?selected:{ok:false,status:'failed',stage:'interpreter_preflight',action_started:false,error:'没有通过能力预检的解释器；未执行实例动作'});
+   });
+  }).finally(()=>{selecting=null});
+  return selecting;
+ }
+ async function run(args){const selected=await shell();if(!selected.ok)return selected;const exe=selected.exe,env={...process.env};if(path.basename(exe).toLowerCase()==='powershell.exe')env.PSModulePath=path.join(env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','Modules')+';'+path.join(env.ProgramFiles||'C:\\Program Files','WindowsPowerShell','Modules');
  const state=read(path.join(root,'.launcher/Bot.json'));
  const botPort=state?.root===root&&state?.component==='Bot'&&Number.isInteger(state.port)&&state.port>0&&state.port<=65535?state.port:6185;
  return new Promise(resolve=>execFile(exe,['-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(root,'start-bot.ps1'),'-RuntimeRoot',root,'-BotPort',String(botPort),'-ConsolePort',String(consolePort),...args],{windowsHide:true,timeout:15000,maxBuffer:32768,env},(err,out)=>{

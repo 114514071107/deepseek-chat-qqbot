@@ -34,7 +34,10 @@ class LauncherRegression(unittest.TestCase):
                 shutil.copyfile(Path(sys.base_prefix)/'python.exe',root/'venv/Scripts/astrbot.exe')
                 (cfg/'runtime.json').write_text('{"OwnerPlatformId":"fixture-instance","AssistantRoot":"中文 路径"}', encoding='utf-8')
                 fake = root/'run'
+                build=root/'data/plugins/astrbot_plugin_dsh_soul';build.mkdir(parents=True)
+                (build/'build_info.py').write_text('BUILD_VERSION = "synthetic-launcher"',encoding='utf-8')
                 fake_code='import socket,time,sys,os\nassert os.environ["DSH_OWNER_PLATFORM_ID"]=="fixture-instance"\nassert os.environ["DSH_ASSISTANT_ROOT"]=="中文 路径"\ns=socket.socket();s.bind(("127.0.0.1",int(os.environ["DSH_FIXTURE_PORT"])));s.listen();print("合成日志可读",flush=True);time.sleep(90)\n'
+                fake_code=fake_code.replace('time.sleep(90)','import json,pathlib\np=pathlib.Path("dsh_data/admin_v2/live.json");p.parent.mkdir(parents=True,exist_ok=True)\nend=time.time()+90\nwhile time.time()<end:\n p.write_text(json.dumps(dict(at=time.time(),pid=os.getpid(),version="synthetic-launcher",qq_connection=dict(configured=1,ready=1,status="ready"))))\n time.sleep(.1)')
                 fake.write_text(fake_code, encoding='utf-8')
                 service_port = port()
                 args = ['-RuntimeRoot', str(root), '-BotPort', str(service_port), '-TimeoutSeconds', '15']
@@ -64,6 +67,9 @@ class LauncherRegression(unittest.TestCase):
                     literal=str(state).replace("'","''")
                     script="$s=Get-Content -LiteralPath '"+literal+"' -Raw -Encoding UTF8|ConvertFrom-Json; $p=Get-Process -Id $s.pid -ErrorAction SilentlyContinue; if($p -and $p.StartTime.ToUniversalTime().Ticks.ToString() -eq $s.ticks) { $w=Get-CimInstance Win32_Process -Filter ('ProcessId='+$s.pid); if($w.CommandLine.Contains($s.nonce)) { $p.Kill(); $p.WaitForExit(5000)|Out-Null } }"
                     subprocess.run([shell,'-NoProfile','-NonInteractive','-Command',script],capture_output=True,timeout=10)
+                    # Also stop the verified independent dispatcher once this
+                    # synthetic instance no longer has service workers.
+                    run(('-Action','Stop'))
                 try:
                     first = run(); self.assertEqual(first.returncode, 0, first.stdout+first.stderr)
                     state = json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8-sig'))
@@ -83,6 +89,8 @@ class LauncherRegression(unittest.TestCase):
                         count=ctypes.c_uint32.from_buffer(buffer,4).value
                         inherited=[ctypes.c_size_t.from_buffer(buffer,8+i*ctypes.sizeof(ctypes.c_size_t)).value for i in range(count)]
                         self.assertNotIn(state['pid'],inherited,'worker still belongs to the terminal host Job Object')
+                        controller=json.loads((root/'.launcher/Controller.json').read_text(encoding='utf-8-sig'))
+                        self.assertNotIn(controller['pid'],inherited,'independent controller still belongs to the terminal host Job Object')
                     second = run(); self.assertEqual(second.returncode, 0, second.stdout+second.stderr)
                     self.assertIn('reuse', second.stdout)
                     self.assertEqual(json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8-sig'))['pid'], state['pid'])
@@ -127,10 +135,10 @@ class LauncherRegression(unittest.TestCase):
                     console_port=port()
                     (root/'dsh-console').mkdir()
                     (root/'dsh-console/server.js').write_text(
-                        "const net=require('node:net'),assert=require('node:assert');"
+                        'const API_VER = "synthetic-launcher";const http=require("node:http"),assert=require("node:assert");'
                         "assert.equal(process.env.DSH_RUNTIME_ROOT,process.cwd());"
                         "assert.equal(process.env.HOST,'127.0.0.1');assert.ok(process.env.DSH_CONSOLE_TOKEN.length>=32);"
-                        "net.createServer().listen(Number(process.env.PORT),'127.0.0.1');setTimeout(()=>process.exit(0),90000);",encoding='utf-8')
+                        "http.createServer((req,res)=>{if(!req.headers.authorization){res.writeHead(401);res.end();return;}res.setHeader('content-type','application/json');res.end(JSON.stringify({api_ver:API_VER,frontend_ver:API_VER,pid:process.pid}));}).listen(Number(process.env.PORT),'127.0.0.1');setTimeout(()=>process.exit(0),90000);",encoding='utf-8')
                     credential_path=str(cfg/'console-credential.clixml').replace("'","''")
                     credential_script="$ErrorActionPreference='Stop';$secret=New-Object System.Security.SecureString;foreach($letter in 'synthetic-launcher-token-0123456789abcdef'.ToCharArray()){$secret.AppendChar($letter)};$secret.MakeReadOnly();$credential=New-Object PSCredential('dsh',$secret); $credential | Export-Clixml -LiteralPath '"+credential_path+"'"
                     encoded=base64.b64encode(credential_script.encode('utf-16-le')).decode('ascii')
@@ -199,6 +207,7 @@ class LauncherExitCodeRegression(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='dsh cmd args 空格 ') as tmp:
             root=Path(tmp);entry=root/'tools with spaces';entry.mkdir()
             shutil.copyfile(ENTRY,entry/'start-bot.cmd')
+            shutil.copyfile(ROOT/'scripts/launcher-shell.ps1',entry/'launcher-shell.ps1')
             (entry/'start-bot.ps1').write_text("param([string]$RuntimeRoot,[string]$Marker,[int]$BotPort)\n[IO.File]::AppendAllText((Join-Path $RuntimeRoot 'calls.txt'),($PSVersionTable.PSVersion.Major.ToString()+'|'+$Marker+'|'+$BotPort+[Environment]::NewLine))\nexit 37\n",encoding='utf-8-sig')
             base=os.environ.copy();base['DSH_LAUNCHER_NO_PAUSE']='1'
             base['PATH']=str(Path(os.environ['SystemRoot'])/'System32')
@@ -220,7 +229,7 @@ class LauncherExitCodeRegression(unittest.TestCase):
                 (root/'deployment-config/runtime.json').write_text('{"OwnerPlatformId":"fixture"}',encoding='utf-8')
                 (root/'run').write_text('import sys;sys.exit(23)',encoding='utf-8')
                 # Fault-inject unavailable process.Path in a temporary copy only.
-                copied=root/'start-bot.ps1';copied.write_text(CORE.read_text(encoding='utf-8-sig').replace('function Get-Identity($ProcessId) {','function Get-Identity($ProcessId) {\n    return $null'),encoding='utf-8-sig')
+                copied=root/'start-bot.ps1';copied.write_text(CORE.read_text(encoding='utf-8-sig').replace('function Get-Identity($ProcessId) {','function Get-Identity($ProcessId) {\n    $probe=Get-CimInstance Win32_Process -Filter ("ProcessId="+[int]$ProcessId); if($probe.CommandLine -like "* -InternalWorker *"){return $null}'),encoding='utf-8-sig')
                 shutil.copyfile(ROOT/'scripts/launcher-process.cs',root/'launcher-process.cs')
                 env=os.environ.copy();env.update(PYTHONHOME=sys.base_prefix,PATH=sys.base_prefix+';'+str(Path(os.environ['SystemRoot'])/'System32'))
                 child=subprocess.run([shell,'-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(copied),'-RuntimeRoot',str(root),'-BotPort',str(port()),'-TimeoutSeconds','8'],cwd=os.environ['SystemRoot'],env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=20)

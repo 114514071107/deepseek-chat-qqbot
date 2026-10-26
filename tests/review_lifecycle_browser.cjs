@@ -11,6 +11,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
   await page.route('**/api/lifecycle?*',async route=>route.fulfill({json:pending?{id:'c'.repeat(32),status:'running',ok:false}:{id:'c'.repeat(32),status:'failed',ok:false,error:'Synthetic AccessDenied'}}));
   await page.route('**/api/status',async route=>{const response=await route.fetch();const json=await response.json();if(changed){json.bot_running=true;timers++;}else{json.bot_running=false;json.bot_state={status:'unknown',running:null};}await route.fulfill({json})});
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#bot-start').waitFor();assert.equal(await page.locator('.stat .vl').first().innerText(),'状态未知');await page.locator('#bot-start').click();await page.locator('#view h3').first().click();
+  await page.waitForFunction(()=>{const e=document.querySelector('#bot-saved');return e&&e.textContent.includes('进行中')&&Number(getComputedStyle(e).opacity)>0;});
   assert.ok(await page.locator('#bot-saved').evaluate(e=>Number(getComputedStyle(e).opacity)>0),'operation state must be visible');
   changed=true;await page.waitForTimeout(5600);assert.ok(timers>0,'actual automatic status refresh required');
   assert.ok(await page.locator('#bot-restart').isDisabled(),'new DOM must preserve in-flight state');assert.equal(writes,1);

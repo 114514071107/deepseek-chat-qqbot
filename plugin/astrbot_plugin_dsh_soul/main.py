@@ -3849,7 +3849,9 @@ class DshSoul(Star):
             owner = self._owner_target()
             if owner:
                 self._spawn(self._startup_greet(owner.key, owner.target), key=owner.key, feature="reply")
-            self._spawn(self._admin_loop())
+            # Management belongs to the plugin instance, never the request
+            # whose callback happened to initialize background work.
+            self._spawn(self._admin_loop(), key='', feature='admin')
 
     @managed
     async def _alarm_loop(self):

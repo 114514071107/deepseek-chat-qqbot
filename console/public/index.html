@@ -130,7 +130,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261026-review-2"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261027-startup-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -310,11 +310,11 @@ async function vStatus({refresh=false,manual=false}={}) {
       '<p class="dim">页面版本 ' + esc(FE_VER) + " ≠ 后端版本 " + esc(s.api_ver) + "</p></div>";
     return;
   }
+  const botLabel=s.bot_running?'在线':s.bot_state?.readiness==='not_running'||s.bot_state?.status==='succeeded'?'未运行':s.bot_state?.status==='not_ready'?'未就绪':'状态未知';
   $("#hdr-status").innerHTML = s.bot_running
     ? '<span class="tag ok">机器人在线</span>'
-    : '<span class="tag bad">机器人未就绪或状态未知</span>';
+    : '<span class="tag bad">机器人'+esc(botLabel)+'</span>';
   const enabled = (s.conf || {}).enabled !== false;
-  const botLabel=s.bot_state?.status==='succeeded'?(s.bot_running?'在线':'未运行'):'状态未知';
   $("#view").innerHTML =
     '<div class="stat-row">' +
       '<div class="stat"><div class="lb">运行状态</div><div class="vl ' + (s.bot_running ? "ok" : "bad") + '">' + esc(botLabel) + '</div><div class="sb">本实例进程、版本与心跳核验</div>' +
@@ -357,8 +357,8 @@ async function vStatus({refresh=false,manual=false}={}) {
         '<div class="grid" style="flex:1">' + (rows || '<span class="dim">今天还没有模型调用记录</span>') + "</div></div>" +
         '<div class="dim" style="font-size:12px">main 行为 API 返回 token；其他行为字符估算，不能据此保证实际费用或延迟。当前缺少完整费用测量。</div></div>';
     })() +
-    '<div class="card"><h3>黑名单 / 休眠</h3>' + blockedSilenceHtml(r) + "</div>";
-  $("#view").insertAdjacentHTML("beforeend",'<div class="card"><h3>能力与隐私</h3><p>聊天、必要上下文、识图图片及相关请求可能发送到配置的外部模型；记录保存在本机，主人可在受保护后台查看朋友私聊与媒体。可用：当前来源聊天、识图（需提供商支持）、获准共享表情。平台缺失：可靠来图表情标识及真实 QQ 号/全场景昵称。政策暂缓：闹钟，旧任务保留但暂停投递。权限禁止：宿主命令、外包、普通用户文件工具及 QQ 查询他人私聊。禁用功能不能由旧开关恢复。</p></div>');
+    '<div class="card"><h3>黑名单 / 休眠</h3>' + blockedSilenceHtml(r) + "</div>" +
+    '<div class="card"><h3>能力与隐私</h3><p>聊天、必要上下文、识图图片及相关请求可能发送到配置的外部模型；记录保存在本机，主人可在受保护后台查看朋友私聊与媒体。可用：当前来源聊天、识图（需提供商支持）、获准共享表情。平台缺失：可靠来图表情标识及真实 QQ 号/全场景昵称。政策暂缓：闹钟，旧任务保留但暂停投递。权限禁止：宿主命令、外包、普通用户文件工具及 QQ 查询他人私聊。禁用功能不能由旧开关恢复。</p></div>';
   bindMasterToggle();
   bindFeatToggles();
   bindBlockedSilence(vStatus);

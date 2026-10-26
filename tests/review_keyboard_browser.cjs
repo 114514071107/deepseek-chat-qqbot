@@ -8,6 +8,7 @@ const {chromium}=require('playwright'),{createConsoleServer}=require('../console
  try {
   browser=await chromium.launch({channel:'msedge',headless:true});const context=await browser.newContext({httpCredentials:{username:'dsh',password:token}}),page=await context.newPage();
   const writes=[];page.on('dialog',d=>d.dismiss());
+  page.on('pageerror',error=>console.error('keyboard browser script error:',String(error)));
   await page.route('**/api/switch',async route=>{writes.push(route.request().postDataJSON());await route.fulfill({json:{ok:true}})});
   await page.route('**/api/user',async route=>{writes.push(route.request().postDataJSON());await route.fulfill({json:{ok:true}})});
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#pt-daily').waitFor();await page.locator('#auto-ref').uncheck();

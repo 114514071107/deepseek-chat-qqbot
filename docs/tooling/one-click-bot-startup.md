@@ -24,7 +24,7 @@ powershell.exe -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\st
 
 以上 PS1 方式保留维护者只启动 Bot 的能力；cmd 用进程内默认值启用 Console，不重复拼接参数，显式 `-ConsolePort` 和 `-WithConsole` 可正常传递。默认 7850，改端口不修改生产配置或认证。2026-10-26 本轮实际部署/启动与验证见[五项 P2 补修记录](../reviews/2026-10-26-console-lifecycle-p2-fix.md)，更早“尚未更新生产”的表述保留为当时历史。
 
-`start-bot.cmd` 先查 PATH 中的 pwsh，再查标准安装位置 `%ProgramFiles%\PowerShell\7\pwsh.exe`，没有则调用系统 Windows PowerShell 5.1。没有硬编码 Codex 私有缓存路径。Explorer 与 Codex 的 PATH 可以不同；测试分别提供最小系统 PATH 和显式 pwsh PATH，实际走过 5.1 回退和 7 优先路径。
+`start-bot.cmd` 使用同目录`launcher-shell.ps1`先检查PATH中的pwsh和标准安装位置，再检查系统Windows PowerShell5.1；每个候选须通过基础模块、必要命令及Add-Type能力预检。文件存在不代表可用，只有动作开始前能换候选。Console和独立控制器使用同一预检，不缓存永久chosen；业务退出码和未知结果不触发换壳重试。不硬编码Codex私有缓存路径，不修改系统PATH/模块或安装依赖。Explorer与工具PATH可以不同。
 
 普通当前登录账号即可运行，不要求管理员。入口只对新解释器进程传 `-ExecutionPolicy Bypass`，不修改机器/用户策略；组织组策略仍然优先。如果组织禁止执行脚本或进程作业对象限制，返回失败，需维护者在合适的本机环境排查，不会提权或安装服务。`DSH_LAUNCHER_NO_PAUSE=1` 可让自动化失败时不等待按键；交互双击失败会保留提示。
 
@@ -56,9 +56,15 @@ powershell.exe -NoProfile -File 'D:\DSH Workspace\deepseek-chat-qqbot\scripts\st
 
 失效 PID 不会阻止新启动；PID 被复用、端口被外部程序占用，或原来的未纳管 Bot 正在运行时，会返回冲突，不按进程名结束 Python/Node，也不把端口存在当作本实例成功。
 
-输出区分 created（worker 已创建）和 ready（已核验所属监听）。ready 是本机监听就绪，**不证明插件加载、QQ 连接或真实消息已通过**。Bot/Console 分别报告；Console 失败时，已经 ready 的 Bot 保留，整体返回非零。
+当前`20261027-startup-1`默认强核验：created表示worker已创建；ready要求身份/监听归属、实际插件版本、新鲜有效心跳和当前QQ READY或认证RESUMED证据，Console另核认证及前后端版本。缺元数据、错版本、陈旧或异常未来时间均不放行；实际QQ客户端到达仍另行验收，启动脚本不自动发QQ测试。已有实例重复Start未就绪时保留原实例；仅本轮新建失败实例按身份清理，显式Stop/Restart维持其语义。后台分别显示在线、未运行、未就绪或未知。
 
-worker 由 Windows 隐藏后台启动，应用由 worker 监管。每个 worker 建立独立 Job Object，worker 异常退出或启动超时清理时，只结束自身拥有的子进程。关闭启动入口不结束 worker；没有无限重启、Windows 服务、计划任务或开机自启。本轮测试也检查 worker 不在测试终端的父 Job 进程列表中，不能只凭 detached 参数推断独立性。注销、系统关机和组织策略仍可终止进程，不能承诺跨登录会话存活。
+单组件调用返回该组件结果；双组件逐项返回并在末行汇总`component=All/results`。全部成功才`ok=true`；部分成功为partial，Console成功不能覆盖Bot失败/未知。Console失败时已就绪Bot保留，整体非零；应用未就绪即退出0也属于启动失败，保留非零业务退出码。
+
+worker由Windows隐藏后台启动；应用通过原生挂起创建、明确加入该worker的Job后再执行，避免Store PowerShell经Process.Start没有继承Job的已复现路径。停止在枚举时绑定创建时间/父子关系并固定句柄，已退出子进程幂等处理；权限拒绝/归属变化仍失败。关闭启动入口不结束worker；没有无限重启、Windows服务、计划任务或开机自启。实际临时测试核worker/独立控制器不属于终端父Job，并验证worker异常退出后应用及监听终止。注销、关机和组织策略仍可终止进程。
+
+入口在组件Job建立前创建同一PS1的独立控制器，受实例身份和控制器锁约束；认证Console请求只向其提交有期限的操作，确认与最终结果分开。未确认保留unknown阻止盲目重试，过期且尚未开始的请求不执行；动作前重新能力预检，已开始动作不换解释器重试。控制器缺失时明确失败，由维护者经实例入口重建；没有后台无限恢复。该路径不依赖本机曾在脚本执行前拒绝5.1的WMI Create，亦不修改权限。
+
+管理租约任务属于插件实例，聊天撤销不终止通道；短暂Windows文件共享冲突最多4次有界重试，不重放已应用命令。旧租约发现新owner退出，真正关闭仍写stopped；退出原因在`admin_v2/exit-<instance>.json`，永久IO错误不伪写ready。QQ观察生命周期绑定当前client，顺序插件重载不丢同一连接已确认RESUMED；关闭/失效/认证失败仍撤销，未知SDK契约为unknown。
 
 ## 日志与退出观察
 
@@ -79,6 +85,8 @@ worker 由 Windows 隐藏后台启动，应用由 worker 监管。每个 worker 
 | scripts/start-bot.cmd | start-bot.cmd |
 | scripts/start-bot.ps1 | start-bot.ps1 |
 | scripts/launcher-process.cs | launcher-process.cs，与 PS1 同目录 |
+| scripts/launcher-shell.ps1 | launcher-shell.ps1，与cmd/PS1同目录 |
+| plugin/astrbot_plugin_dsh_soul/qq_readiness.py | 与插件其余模块配套发布 |
 | 生产原 run-astrbot.cmd、start-astrbot-launcher.cmd | 获准后备份移出运行根目录；不再安装兼容入口 |
 
 Console 的 DSH_RUNTIME_ROOT 支持需与此次 server.js 配套发布；插件修复也须配套整套模块，按[补修记录](../reviews/2026-10-24-real-qq-repair.md)及既有发布流程保留部署常量。不要复制配置模板覆盖真实 runtime.json/凭据，也不要把受保护启动脚本及配置复制回 Git。
