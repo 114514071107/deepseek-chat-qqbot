@@ -141,6 +141,7 @@ function Confirm-Ready($Name,$State) {
         $build=Join-Path $root 'data\plugins\astrbot_plugin_dsh_soul\build_info.py'
         if (!(Test-Path -LiteralPath $build)) { return $false }
         $expected=[regex]::Match([IO.File]::ReadAllText($build),'BUILD_VERSION = "([^"]+)"').Groups[1].Value
+        if ($live.qq_connection -and [int]$live.qq_connection.configured -gt 0 -and $live.qq_connection.status -ne 'ready') { return $false }
         return ($live -and !$live.stopped -and $family -contains [int]$live.pid -and $expected -and $live.version -eq $expected -and
             ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000-[double]$live.at) -lt 5 -and [double]$live.at -gt 0)
     }

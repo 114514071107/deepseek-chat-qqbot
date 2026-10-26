@@ -9,12 +9,38 @@ from state_store import read_json, write_json
 from task_runtime import work_context
 
 
+def qq_connection_status(context):
+    """Read-only AstrBot 4.29.1 / installed botpy observation, no network calls.
+
+    ManagedBotWebSocket.user and session_id are assigned by _ready_handler;
+    neither an open TCP socket nor Client._ready (unused here) proves READY.
+    A resumed socket without this proof is not ready. Never return SDK data.
+    """
+    configured=ready=0
+    try:
+        for platform in context.platform_manager.platform_insts:
+            if platform.meta().name!='qq_official':continue
+            configured+=1;client=platform.client
+            sockets=list(client._active_websockets)
+            if not client.is_closed() and sockets and all(
+                getattr(socket,'_conn',None) is not None and socket._conn.closed is False
+                and isinstance(getattr(socket,'_session',None),dict) and bool(socket._session.get('session_id'))
+                and isinstance(getattr(socket,'user',None),dict) and bool(socket.user.get('id'))
+                for socket in sockets):ready+=1
+        return {'status':'ready' if configured and ready==configured else 'connecting' if configured else 'unknown',
+                'configured':configured,'ready':ready}
+    except (AttributeError,TypeError,RuntimeError):
+        return {'status':'unknown','configured':configured,'ready':ready}
+
+
 async def serve_inbox(root,runtime,apply):
     root=Path(root)/'admin_v2'; requests=root/'requests'; responses=root/'responses'; processing=root/'processing'
     requests.mkdir(parents=True,exist_ok=True); responses.mkdir(parents=True,exist_ok=True); processing.mkdir(parents=True,exist_ok=True)
     try:
         while runtime.alive:
-            write_json(root/'live.json',{'instance':runtime.id,'at':time.time(),'pid':os.getpid(),'version':BUILD_VERSION})
+            context=getattr(getattr(apply,'__self__',None),'context',None)
+            write_json(root/'live.json',{'instance':runtime.id,'at':time.time(),'pid':os.getpid(),'version':BUILD_VERSION,
+                                       'qq_connection':qq_connection_status(context)})
             for path in sorted(requests.glob('*.json'))[:32]:
                 if not re.fullmatch(r'[a-f0-9]{32}\.json',path.name): continue
                 # At most once: interruption or acknowledgment failure must not

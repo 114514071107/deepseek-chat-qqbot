@@ -52,5 +52,23 @@
     "both_shells_api_fault_recovery_seconds": 115.153,
     "legacy_orphan_verified_seconds": 8.685,
     "production_code_copied_before_fix": false
+  },
+  "qq_ready_followup": {
+    "version": "20261026-review-2",
+    "python_full": {
+      "total": 258,
+      "passed": 257,
+      "skipped": 1,
+      "seconds": 347.638
+    },
+    "node_passed": 63,
+    "node_seconds": 1.371,
+    "installed_sdk_and_readiness_tests": 3,
+    "state_tests": 10,
+    "both_shells_lifecycle_seconds": 127.072,
+    "python_ast": 72,
+    "js_cjs": 26,
+    "script_blocks": 3,
+    "unknown_status_browser_red_then_green": true
   }
 }

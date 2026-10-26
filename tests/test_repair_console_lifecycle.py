@@ -40,7 +40,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                 for dll in ('python312.dll','python3.dll'):shutil.copyfile(Path(sys.base_prefix)/dll,py/dll)
                 (py/'astrbot._pth').write_text(str(Path(sys.base_prefix)/'Lib')+'\n'+str(Path(sys.base_prefix)/'DLLs')+'\n',encoding='utf-8')
                 bp,cp=port(),port()
-                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version="20261026-review-1",at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
+                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version="20261026-review-2",at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
                 literal=str(cfg/'console-credential.clixml').replace("'","''")
                 cmd="$s=ConvertTo-SecureString '"+TOKEN+"' -AsPlainText -Force; New-Object System.Management.Automation.PSCredential('dsh',$s)|Export-Clixml -LiteralPath '"+literal+"'"
                 prep=subprocess.run([shell,'-NoProfile','-NonInteractive','-Command',cmd],capture_output=True,env=env)
@@ -104,8 +104,14 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         blocked=launch('Bot','Restart');self.assertNotEqual(blocked.returncode,0)
                         self.assertEqual(other.getsockname()[1],bp)
                     # New process exits before readiness: final failure, not success.
+                    good_bot=(root/'run').read_bytes()
                     (root/'run').write_text('raise SystemExit(23)\n',encoding='utf-8')
                     failed=launch('Bot');self.assertNotEqual(failed.returncode,0,failed.stdout)
+                    # A real listener + fresh version heartbeat still cannot
+                    # claim startup complete while configured QQ is connecting.
+                    (root/'run').write_bytes(good_bot.replace(b'at=time.time()',b'at=time.time(),qq_connection={"configured":1,"status":"connecting"}'))
+                    connecting=launch('Bot',seconds=2);self.assertNotEqual(connecting.returncode,0);self.assertIn('startup timeout',connecting.stdout)
+                    (root/'run').write_bytes(good_bot)
                     # Console old port not released: external controller returns
                     # a final failure while old authenticated server survives.
                     launcher=root/'start-bot.ps1';source=launcher.read_bytes()
@@ -116,7 +122,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         timed=subprocess.run(command,capture_output=True,encoding='utf-8',errors='replace',env=env,timeout=15)
                         self.assertNotEqual(timed.returncode,0);self.assertIn('Stop timeout',timed.stdout)
                         self.assertEqual(http('/api/lifecycle?id='+'b'*32)['status'],'failed')
-                        self.assertEqual(http('/api/health')['api_ver'],'20261026-review-1')
+                        self.assertEqual(http('/api/health')['api_ver'],'20261026-review-2')
                     finally:launcher.write_bytes(source)
                     stopped=launch('Console','Stop');self.assertEqual(stopped.returncode,0,stopped.stdout)
                     # Foreign Console port holder is never stopped.
@@ -136,7 +142,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         self.assertEqual(json.loads((root/'.launcher/operations'/('d'*32+'.json')).read_text(encoding='utf-8-sig'))['status'],'failed')
                     finally:console.write_bytes(console_source)
                     recovered=launch('Console');self.assertEqual(recovered.returncode,0,recovered.stdout+recovered.stderr)
-                    self.assertEqual(http('/api/health')['api_ver'],'20261026-review-1')
+                    self.assertEqual(http('/api/health')['api_ver'],'20261026-review-2')
                     self.assertEqual(http('/api/lifecycle?id='+'d'*32)['status'],'failed')
                 finally:
                     launch('Bot','Stop',False);launch('Console','Stop',False)

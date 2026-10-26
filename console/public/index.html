@@ -130,7 +130,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261026-review-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261026-review-2"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -314,9 +314,10 @@ async function vStatus({refresh=false,manual=false}={}) {
     ? '<span class="tag ok">机器人在线</span>'
     : '<span class="tag bad">机器人未就绪或状态未知</span>';
   const enabled = (s.conf || {}).enabled !== false;
+  const botLabel=s.bot_state?.status==='succeeded'?(s.bot_running?'在线':'未运行'):'状态未知';
   $("#view").innerHTML =
     '<div class="stat-row">' +
-      '<div class="stat"><div class="lb">运行状态</div><div class="vl ' + (s.bot_running ? "ok" : "bad") + '">' + (s.bot_running ? "在线" : "未运行") + '</div><div class="sb">本实例进程、版本与心跳核验</div>' +
+      '<div class="stat"><div class="lb">运行状态</div><div class="vl ' + (s.bot_running ? "ok" : "bad") + '">' + esc(botLabel) + '</div><div class="sb">本实例进程、版本与心跳核验</div>' +
       '<div style="margin-top:8px">' +
         (s.bot_running
           ? '<button class="act" id="bot-restart">重启</button> <button class="act danger" id="bot-stop">停止</button>'
