@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-27",
+  "functional_commit": "001b64d98d240e9356fa9a2f250ae14b98c848ac",
+  "version": "20261027-startup-1",
+  "files": 36,
+  "changed_files": 13,
+  "snapshot": {
+    "files": 434,
+    "bytes": 37599482,
+    "sqlite_opened": false
+  },
+  "config_checks": 8,
+  "original_acl_checks": 4,
+  "gallery_files": 149,
+  "protected_unchanged": true,
+  "bot_worker": 54692,
+  "bot_application": 7248,
+  "console_worker": 31484,
+  "console_application": 48548,
+  "controller": 14268,
+  "controller_restart": {
+    "id": "229bd4033ed3ffa3c1833ac1c3c0dd84",
+    "accepted_pending": true,
+    "final": "succeeded",
+    "console_pid_before": 47408,
+    "console_pid_after": 48548,
+    "bot_unchanged": true
+  },
+  "browser": {
+    "actual_instance": true,
+    "build": "20261027-startup-1",
+    "status_label": "在线",
+    "cards_after_five_renders": 1,
+    "page_errors": [],
+    "production_writes": 0
+  },
+  "qq": {
+    "build": "20261027-startup-1",
+    "account_group_and_bot_profile_checked": true,
+    "cases": [
+      {
+        "marker": "S9P01",
+        "scene": "private",
+        "input_count": 1,
+        "reply_count": 1,
+        "correct_normal_reply": true,
+        "request_finished": true,
+        "accepted": true,
+        "source_matches": true,
+        "receipt_matches": 1,
+        "request_hash": "f886cbcdb72a",
+        "server_to_accepted_seconds": 7.311,
+        "native_client_reply_observed": true
+      },
+      {
+        "marker": "S9G01",
+        "scene": "group",
+        "input_count": 1,
+        "reply_count": 1,
+        "correct_normal_reply": true,
+        "request_finished": true,
+        "accepted": true,
+        "source_matches": true,
+        "receipt_matches": 1,
+        "request_hash": "f064f3e5b45a",
+        "server_to_accepted_seconds": 10.781,
+        "native_client_reply_observed": true
+      }
+    ],
+    "identities_exported": false,
+    "chat_content_exported": false,
+    "data_deleted": false,
+    "test_messages_sent_by_launcher": false,
+    "normal_model_chain_used": true
+  },
+  "observation": {
+    "seconds": 375.032,
+    "samples": 19,
+    "max_lease_age_seconds": 0.131,
+    "stopped_seen": false,
+    "all_qq_ready": true,
+    "bot_pid_unchanged": true,
+    "console_pid_unchanged": true
+  },
+  "rollback_synthetic": {
+    "manifest_files": 36,
+    "old_code_restored": true,
+    "new_helpers_unreferenced": true,
+    "separate_stop_and_start_shells": true,
+    "changed_runtime_refused": true,
+    "production_writes": 0
+  },
+  "production_rollback": false,
+  "push": false,
+  "merge_main": false,
+  "fixture_cleanup": {
+    "remaining_fixture_processes": 0,
+    "broad_kill_used": false
+  },
+  "post_seal_test_cleanup_regression": {
+    "tests": 4,
+    "seconds": 232.947,
+    "result": "OK",
+    "shells": [
+      "PowerShell 7",
+      "Windows PowerShell 5.1"
+    ]
+  }
+}

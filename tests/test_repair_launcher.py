@@ -61,6 +61,20 @@ class LauncherRegression(unittest.TestCase):
                             except OSError: break
                             time.sleep(.1)
                         time.sleep(.2)  # kernel closes owned Job and log handles
+                def collect_children(children):
+                    # Finish every fixture launcher before asserting any one
+                    # result. Failure/timeout must not abandon its siblings.
+                    results=[];errors=[]
+                    for child in children:
+                        try:
+                            out,err=child.communicate(timeout=30)
+                        except subprocess.TimeoutExpired as error:
+                            child.kill()  # exact Popen created by this fixture
+                            out,err=child.communicate(timeout=10)
+                            errors.append(error)
+                        results.append((child.returncode,out,err))
+                    if errors:raise errors[0]
+                    return results
                 def stop_fixture(state):
                     # Check start time AND nonce before stopping this fixture's
                     # worker. A stale PID must never target an unrelated task.
@@ -115,9 +129,8 @@ class LauncherRegression(unittest.TestCase):
                     # Concurrent launches serialize on this instance's file lock.
                     command = [shell,'-NoProfile','-NonInteractive','-File',str(CORE),*args]
                     pending = [subprocess.Popen(command, env=fixture_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(2)]
-                    for child in pending:
-                        out, err = child.communicate(timeout=30)
-                        self.assertEqual(child.returncode, 0, (out+err).decode('utf-8',errors='replace'))
+                    for code,out,err in collect_children(pending):
+                        self.assertEqual(code, 0, (out+err).decode('utf-8',errors='replace'))
                     self.assertEqual(json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8'))['pid'], state['pid'])
                     # A reused PID/start-time mismatch must not authorize reuse or stop.
                     altered = dict(state, ticks='1')
@@ -169,15 +182,16 @@ class LauncherRegression(unittest.TestCase):
                 # Stale metadata is harmless after the verified worker exits;
                 # a fresh worker must be created, rather than reusing the PID.
                 fresh = [subprocess.Popen([shell,'-NoProfile','-NonInteractive','-File',str(CORE),*args],env=fixture_env,stdout=subprocess.PIPE,stderr=subprocess.PIPE) for _ in range(2)]
-                fresh_outputs=[]
-                for child in fresh:
-                    out,err=child.communicate(timeout=30)
-                    self.assertEqual(child.returncode,0,(out+err).decode('utf-8',errors='replace'))
-                    fresh_outputs.append(out.decode('utf-8'))
-                self.assertEqual(sum('Bot created' in out for out in fresh_outputs),1)
-                self.assertEqual(sum('Bot reuse' in out for out in fresh_outputs),1)
-                self.assertNotEqual(json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8'))['nonce'],state['nonce'])
-                cleanup()
+                try:
+                    fresh_outputs=[]
+                    for code,out,err in collect_children(fresh):
+                        self.assertEqual(code,0,(out+err).decode('utf-8',errors='replace'))
+                        fresh_outputs.append(out.decode('utf-8'))
+                    self.assertEqual(sum('Bot created' in out for out in fresh_outputs),1)
+                    self.assertEqual(sum('Bot reuse' in out for out in fresh_outputs),1)
+                    self.assertNotEqual(json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8'))['nonce'],state['nonce'])
+                finally:
+                    cleanup()
                 # Required settings, port conflict, timeout and nonzero exit.
                 for scenario in ('missing-config', 'missing-dependency', 'conflict', 'timeout', 'exit'):
                     with self.subTest(scenario=scenario):
