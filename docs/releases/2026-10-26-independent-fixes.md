@@ -2,6 +2,8 @@
 
 实施与限制见 [评审记录](../reviews/2026-10-26-independent-fixes.md)。当前实际版本 `20261026-review-2`，功能提交 `d62fe254a6c1d3ae53233f31bb0391ad8bcaf9bd`，34/34配套文件已核；状态为**已部署，待验收/试用**。仅本地 dev，未推送/PR/main 合并。下文保留首次review-1和后续补充过程，最终生效记录在末尾。
 
+后续状态（2026-10-26）：[定向 QQ 与生产控制台验收](../reviews/2026-10-26-review2-live-acceptance.md)通过，用户指示后的[dev 推送与运行核验](2026-10-26-review2-dev-publication.md)已完成；对应运行功能源码已匿名下载并核对一致。上段和下文未验收/未推送为原部署任务当时状态。R05、素材权利链及长期稳定性仍开放，main 未晋级。
+
 ## 发布清单与备份方案
 
 来源为本轮已提交开发源码；沿用上一版 29 文件清单，新增 build_info.py、gallery_policy.py、gallery_query.py、public-gallery-source.json 和 console/lifecycle.js，预计 34 文件配套发布。
