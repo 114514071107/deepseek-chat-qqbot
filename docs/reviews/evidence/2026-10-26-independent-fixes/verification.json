@@ -41,5 +41,16 @@
     "existing_public_content_files": 138,
     "unknown_auto_collected_files": 5,
     "sqlite_opened_for_inventory": false
+  },
+  "post_deployment_block_fix": {
+    "python": {
+      "total": 255,
+      "passed": 254,
+      "skipped": 1,
+      "seconds": 339.591
+    },
+    "both_shells_api_fault_recovery_seconds": 115.153,
+    "legacy_orphan_verified_seconds": 8.685,
+    "production_code_copied_before_fix": false
   }
 }

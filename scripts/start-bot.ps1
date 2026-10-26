@@ -73,8 +73,22 @@ function Stop-Owned($State) {
     $identities=@(Get-Family $State.pid | ForEach-Object { Get-Identity $_ })
     # Keep the verified process handle open: PID reuse cannot redirect Kill().
     $owned=Get-Process -Id $State.pid -ErrorAction Stop
+    $null=$owned.Handle
     if ($owned.StartTime.ToUniversalTime().Ticks.ToString() -ne $State.ticks -or !(Test-Worker $State)) { throw 'Worker identity changed before stop' }
     $owned.Kill()
+    if ($owned.WaitForExit(1000)) {
+        # Some legacy workers did not retain a Job that actually contained Node.
+        # These identities were captured while the worker was still verified.
+        foreach($identity in $identities | Where-Object { $_.pid -ne $State.pid }) {
+            $current=Get-Identity $identity.pid
+            if ($current -and $current.ticks -eq $identity.ticks -and $current.exe -eq $identity.exe) {
+                $child=Get-Process -Id $identity.pid -ErrorAction Stop
+                $null=$child.Handle
+                if ($child.StartTime.ToUniversalTime().Ticks.ToString() -ne $identity.ticks) { throw 'Child identity changed before stop' }
+                $child.Kill()
+            }
+        }
+    }
     $deadline=[DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $alive=@($identities | Where-Object { $current=Get-Identity $_.pid; $current -and $current.ticks -eq $_.ticks })
@@ -83,6 +97,38 @@ function Stop-Owned($State) {
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Stop timeout: owned process family or port has not exited; no restart attempted'
+}
+
+function Stop-LegacyConsole($State,$StatePath) {
+    if (!$State -or $State.component -ne 'Console' -or $State.root -ne $root -or
+        $State.nonce -notmatch '^[0-9a-f]{32}$' -or (Get-Process -Id ([int]$State.pid) -ErrorAction SilentlyContinue)) { throw 'Legacy worker provenance is not verified' }
+    $observation=Read-Json (Join-Path $control ($State.nonce+'.json'))
+    if (!$observation -or $observation.component -ne 'Console' -or [int]$observation.pid -ne [int]$State.pid) { throw 'Legacy worker observation is missing or inconsistent' }
+    $cutoff=(Get-Item -LiteralPath $StatePath).LastWriteTimeUtc.Ticks+20000000
+    $node=(Get-Command node.exe -ErrorAction Stop).Source
+    $module=Join-Path $root 'dsh-console\server.js'
+    $owner=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $verified=@()
+    foreach($child in @(Get-CimInstance Win32_Process -Filter ('ParentProcessId='+[int]$State.pid))) {
+        $identity=Get-Identity $child.ProcessId
+        if (!$identity -or $identity.exe -ne $node -or [long]$identity.ticks -lt [long]$State.ticks -or [long]$identity.ticks -gt $cutoff -or
+            $child.CommandLine.IndexOf(('"'+$module+'"'),[StringComparison]::OrdinalIgnoreCase) -lt 0 -or
+            $child.CommandLine -notmatch ('--port\s+'+[int]$State.port+'(?:\s|$)')) { throw 'Legacy child identity/command/start time is not verified' }
+        $account=Invoke-CimMethod -InputObject $child -MethodName GetOwnerSid
+        if ($account.ReturnValue -ne 0 -or $account.Sid -ne $owner) { throw 'Legacy child owner is not verified' }
+        $verified+=$identity
+    }
+    $listeners=@([DshLauncherProcess]::ListeningPids([int]$State.port))
+    if (!$verified.Count -or @($listeners | Where-Object { @($verified | ForEach-Object {$_.pid}) -notcontains $_ }).Count) { throw 'Legacy listener is not a verified original child' }
+    Save-Json (Join-Path $control 'Console-legacy-stop.json') @{root=$root;nonce=$State.nonce;worker_pid=$State.pid;children=$verified;at=[DateTime]::UtcNow.ToString('o')}
+    foreach($identity in $verified) {
+        $child=Get-Process -Id $identity.pid -ErrorAction Stop
+        $null=$child.Handle
+        if ($child.StartTime.ToUniversalTime().Ticks.ToString() -ne $identity.ticks -or $child.Path -ne $identity.exe) { throw 'Legacy child identity changed before stop' }
+        $child.Kill()
+        if (!$child.WaitForExit($TimeoutSeconds*1000)) { throw 'Legacy child stop timeout' }
+    }
+    if (@([DshLauncherProcess]::ListeningPids([int]$State.port)).Count) { throw 'Legacy port still occupied after verified stop' }
 }
 
 function Confirm-Ready($Name,$State) {
@@ -231,7 +277,10 @@ try {
             }
             if ($Action -in @('Stop','Restart')) {
                 if ($existing) { Stop-Owned $state }
-                elseif ($listeners.Count) { throw 'Port is occupied without verified ownership; refusing stop' }
+                elseif ($listeners.Count) {
+                    if ($name -eq 'Console' -and $state) { Stop-LegacyConsole $state $statePath }
+                    else { throw 'Port is occupied without verified ownership; refusing stop' }
+                }
                 if ($Action -eq 'Stop') { continue }
                 $existing=$false; $listeners=@()
             }
