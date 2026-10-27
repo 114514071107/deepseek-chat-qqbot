@@ -52,3 +52,10 @@ test('later contradictory platform evidence separates self linked sources instea
   for(const [uid,user] of [['p1','private-A'],['g1','different-private-user']])profiles.sources[uid]={source:f.scopes[uid],app:'fixture-app',observed_at:30,message_id:'profile',identity:{namespace:'qq_user_openid',value:user,basis:uid==='p1'?'qq_author_user':'qq_author_pair'}};
   f.save('workbench_profiles_v1.json',profiles);const r=f.w.list();assert.notEqual(by(r,'p1').id,by(r,'g1').id);assert.equal(by(r,'g1').conflict,true);
 });
+test('a legacy archive and a known person cannot both claim the same original notes file without identity proof',t=>{
+  const f=fixture(t),key='p2_'+hash(['qq_official','fixture-bot','self','member-A-1']);
+  f.histories[key]=[{role:'user',text:'UNSCOPED-OLD',ts:1}];f.save('history_v2.json',f.histories);
+  fs.mkdirSync(path.join(f.data,'memories'));fs.writeFileSync(path.join(f.data,'memories',key+'.md'),'UNCLAIMED-NOTES');
+  const list=f.w.list(),known=by(list,'g1'),legacy=by(list,key);assert.notEqual(known.id,legacy.id);
+  for(const p of [known,legacy])assert.ok(!JSON.stringify(f.w.memory(new URLSearchParams({person:p.id}))).includes('UNCLAIMED-NOTES'));
+});

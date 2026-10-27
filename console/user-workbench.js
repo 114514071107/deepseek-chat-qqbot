@@ -230,7 +230,7 @@ function createUserWorkbench(data){
     const text=file=>{try{if(fs.statSync(file).size>1024*1024)fail('记忆文件超过读取上限');return fs.readFileSync(file,'utf8');}catch(e){if(e.code==='ENOENT')return '';throw e;}};
     const allThoughts={...readBounded(path.join(data,'thoughts_all.json'),{}),...readBounded(path.join(data,'thoughts_v2.json'),{})},seen=new Set(),owners=new Map(),originalOwners=new Map();
     for(const o of s.origins.values()){const uid=o.original_uid||o.uid;originalOwners.set(uid,(originalOwners.get(uid)||0)+1);}
-    for(const person of s.people)for(const o of person.sources)if(!o.legacy){const k=personal(o);if(!owners.has(k))owners.set(k,new Set());owners.get(k).add(person.id);}
+    for(const person of s.people)for(const o of person.sources){const k=o.legacy?(o.original_uid||o.uid):personal(o);if(!owners.has(k))owners.set(k,new Set());owners.get(k).add(person.id);}
     const sections=p.sources.filter(o=>(mode==='all'||o.kind===mode)&&(!group||o.group===group)).map(o=>{
       const uid=o.original_uid||o.uid,direct=!o.projection_only||o.legacy&&originalOwners.get(uid)===1,notesKey=o.legacy?uid:personal(o),canRead=direct||!o.legacy,notes=[];
       const ambiguous=owners.get(notesKey)?.size>1;
