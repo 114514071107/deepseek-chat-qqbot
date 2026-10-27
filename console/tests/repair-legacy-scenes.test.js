@@ -9,7 +9,7 @@ test('historical private and group rows recover scene without scope table or dat
  const f=fixture(t);f.save('history_all.json',{oldPrivate:[f.row(f.source(),'PRIVATE')],oldGroup:[f.row(f.source('group-A'),'GROUP')]});
  const before=fs.readFileSync(path.join(f.root,'history_all.json'),'utf8'),list=f.w.list();
  const p=list.people.find(p=>p.sources.some(o=>o.uid==='oldPrivate')),g=list.people.find(p=>p.sources.some(o=>o.uid==='oldGroup'));
- assert.equal(p.sources[0].kind,'private');assert.equal(g.sources[0].group,'group-A');assert.equal(p.status,'pending');
+ assert.equal(p.sources[0].kind,'private');assert.equal(g.sources[0].group,'group-A');assert.equal(p.status,'automatic_confirmed');
  assert.equal(p.sources[0].projection_only,true);assert.match(p.sources[0].scene_basis,/source/);
  assert.equal(f.w.history(new URLSearchParams({person:p.id,mode:'private'})).entries[0].text,'PRIVATE');
  assert.equal(fs.readFileSync(path.join(f.root,'history_all.json'),'utf8'),before);
@@ -60,7 +60,7 @@ test('fully identified mixed archives retain an ambiguous file index without bec
  const f=fixture(t);f.save('history_all.json',{mixed:[f.row(f.source(),'P'),f.row(f.source('group-A'),'G')]});
  f.save('console_people_v1.json',{version:2,groups:[['mixed']],denied:[]});
  const list=f.w.list();assert.equal(list.counts.conversation_sources,2);assert.equal(list.counts.metadata_keys,0);
- assert.equal(list.archive_indexes.length,1);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.counts.confirmed_users,0);
+ assert.equal(list.archive_indexes.length,1);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.counts.confirmed_users,2);assert.ok(list.people.every(p=>!p.manual));
 });
 test('source-less assistant-only history is readable outbound evidence and cannot confirm a person',t=>{
  const f=fixture(t);f.save('history_all.json',{old:[{id:'bot-only',role:'assistant',text:'BOT-ONLY',ts:1,delivery:{status:'accepted'}}]});
@@ -72,7 +72,7 @@ test('source-less assistant-only history is readable outbound evidence and canno
 test('partial unknown mixed-file human references stay unresolved rather than shrink to one subset',t=>{
  const f=fixture(t);f.save('history_all.json',{mixed:[f.row(f.source('group-A'),'KNOWN'),{id:'unknown',role:'user',text:'UNKNOWN',ts:2}]});
  f.save('console_people_v1.json',{version:2,groups:[['mixed']],denied:[]});const before=fs.readFileSync(path.join(f.root,'console_people_v1.json'),'utf8');
- const list=f.w.list();assert.equal(list.counts.confirmed_users,0);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.archive_indexes.length,1);
+ const list=f.w.list();assert.equal(list.counts.confirmed_users,1);assert.equal(list.unresolved_mapping_references,1);assert.equal(list.archive_indexes.length,1);assert.ok(list.people.every(p=>!p.manual));
  assert.equal(list.archive_indexes[0].related_sources.length,2);assert.ok(list.people.every(p=>p.sources.every(o=>o.uid!=='mixed')));
  assert.equal(fs.readFileSync(path.join(f.root,'console_people_v1.json'),'utf8'),before);
 });

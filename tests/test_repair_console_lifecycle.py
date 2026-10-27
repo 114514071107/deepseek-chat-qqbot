@@ -12,6 +12,7 @@ import unittest
 import urllib.request
 import urllib.error
 import base64
+import ast
 
 REPO=Path(__file__).resolve().parents[1]
 TOKEN='synthetic-lifecycle-credential-0123456789'
@@ -41,7 +42,8 @@ class ActualConsoleLifecycle(unittest.TestCase):
                 for dll in ('python312.dll','python3.dll'):shutil.copyfile(Path(sys.base_prefix)/dll,py/dll)
                 (py/'astrbot._pth').write_text(str(Path(sys.base_prefix)/'Lib')+'\n'+str(Path(sys.base_prefix)/'DLLs')+'\n',encoding='utf-8')
                 bp,cp=port(),port()
-                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version="20261027-startup-1",qq_connection={"configured":1,"ready":1,"status":"ready"},at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
+                fixture_version=next(ast.literal_eval(n.value) for n in ast.parse((root/'data/plugins/astrbot_plugin_dsh_soul/build_info.py').read_text()).body if isinstance(n,ast.Assign) and n.targets[0].id=='BUILD_VERSION')
+                (root/'run').write_text('import socket,time,json,os,pathlib\ns=socket.socket();s.bind(("127.0.0.1",'+str(bp)+'));s.listen()\np=pathlib.Path("dsh_data/admin_v2/live.json")\nwhile True:\n p.write_text(json.dumps(dict(pid=os.getpid(),version='+repr(fixture_version)+',qq_connection={"configured":1,"ready":1,"status":"ready"},at=time.time())),encoding="utf-8");time.sleep(.1)\n',encoding='utf-8')
                 literal=str(cfg/'console-credential.clixml').replace("'","''")
                 cmd="$s=ConvertTo-SecureString '"+TOKEN+"' -AsPlainText -Force; New-Object System.Management.Automation.PSCredential('dsh',$s)|Export-Clixml -LiteralPath '"+literal+"'"
                 prep=subprocess.run([shell,'-NoProfile','-NonInteractive','-Command',cmd],capture_output=True,env=env)
@@ -123,7 +125,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         timed=subprocess.run(command,capture_output=True,encoding='utf-8',errors='replace',env=env,timeout=15)
                         self.assertNotEqual(timed.returncode,0);self.assertIn('Stop timeout',timed.stdout)
                         self.assertEqual(http('/api/lifecycle?id='+'b'*32)['status'],'failed')
-                        self.assertEqual(http('/api/health')['api_ver'],'20261027-startup-1')
+                        self.assertEqual(http('/api/health')['api_ver'],fixture_version)
                     finally:launcher.write_bytes(source)
                     stopped=launch('Console','Stop');self.assertEqual(stopped.returncode,0,stopped.stdout)
                     # Foreign Console port holder is never stopped.
@@ -143,7 +145,7 @@ class ActualConsoleLifecycle(unittest.TestCase):
                         self.assertEqual(json.loads((root/'.launcher/operations'/('d'*32+'.json')).read_text(encoding='utf-8-sig'))['status'],'failed')
                     finally:console.write_bytes(console_source)
                     recovered=launch('Console');self.assertEqual(recovered.returncode,0,recovered.stdout+recovered.stderr)
-                    self.assertEqual(http('/api/health')['api_ver'],'20261027-startup-1')
+                    self.assertEqual(http('/api/health')['api_ver'],fixture_version)
                     self.assertEqual(http('/api/lifecycle?id='+'d'*32)['status'],'failed')
                 finally:
                     launch('Bot','Stop',False);launch('Console','Stop',False)

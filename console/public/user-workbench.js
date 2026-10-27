@@ -1,6 +1,6 @@
 /* Existing workbench styling; associations affect display only. */
 window.UserWorkbench=(()=>{
-  const state={person:null,mode:'private',group:'',source:'',offset:0,listOffset:0,anchor:null,query:'',category:'all',outbound:''};
+  const state={person:null,mode:'all',group:'',source:'',offset:0,listOffset:0,anchor:null,query:'',category:'all',outbound:''};
   let epoch=0,controller=null,catalog=null,saving=false,cancelReview=null;
   const outboundCache=new Map();
   const outboundHtml=uid=>(outboundCache.get(uid)||[]).map(row=>'<div data-read-key="outbound:'+esc(uid+':'+(row.id||row.ts))+'"><p class="dim">'+esc(row.delivery?.status||'投递状态未留存，不能认作成功')+' / assistant / 原始出站旧档</p>'+histEntryHtml(row)+'</div>').join('');
@@ -29,8 +29,12 @@ window.UserWorkbench=(()=>{
       if(!live(id))return;
       const nextState={...state},nextPerson=()=>r.people.find(p=>p.id===nextState.person);
       if(nextState.anchor){nextState.person=r.people.find(p=>p.sources.some(o=>o.uid===nextState.anchor))?.id||null;nextState.anchor=null;}
+      if(!r.people.some(p=>p.id===nextState.person)&&selected()){
+        const previousSources=new Set(selected().sources.map(o=>o.uid));
+        nextState.person=r.people.find(p=>p.sources.some(o=>previousSources.has(o.uid)))?.id||nextState.person;
+      }
       if(!r.people.some(p=>p.id===nextState.person)){
-        nextState.person=r.people[0]?.id||null;nextState.mode=nextPerson()?.legacy?'legacy':nextPerson()?.sources.some(o=>o.kind==='private')?'private':'group';
+        nextState.person=r.people[0]?.id||null;nextState.mode='all';
         nextState.group='';nextState.source='';nextState.offset=0;
       }
       if(nextState.group&&!nextPerson()?.sources.some(o=>o.group===nextState.group)){nextState.group='';nextState.source='';}
@@ -46,11 +50,11 @@ window.UserWorkbench=(()=>{
       if(reading)$('#view').style.minHeight=$('#view').getBoundingClientRect().height+'px';
       $('#people-refresh-error')?.remove();
       const counts=r.counts;
-      $('#view').innerHTML='<div class="stat-row" id="people-counts">'+[['已确认用户',counts.confirmed_users],['待确认来源',counts.pending_sources],['历史旧档',counts.legacy_archives],['会话来源',counts.conversation_sources]].map(([label,value])=>'<div class="stat"><div class="lb">'+label+'</div><div class="vl">'+value+'</div></div>').join('')+'</div>'+
+      $('#view').innerHTML='<div class="stat-row" id="people-counts">'+[['用户',counts.confirmed_users],['关联待核来源',counts.pending_sources],['历史旧档',counts.legacy_archives],['会话来源',counts.conversation_sources]].map(([label,value])=>'<div class="stat"><div class="lb">'+label+'</div><div class="vl">'+value+'</div></div>').join('')+'</div>'+
         '<p class="dim">未知来源可能属于已有用户，以上数字不能相加作为真实人数。旧档不代表已识别的人物或场景；'+counts.metadata_keys+' 个无聊天资料键另列，不计用户。</p>'+
         (r.unresolved_mapping_references?'<p role="status">'+r.unresolved_mapping_references+' 个旧关联引用尚无法唯一对应来源，原决定已保留，请核对后重新确认。</p>':'')+
-        '<form id="people-search-form" class="row"><label for="people-search">搜索用户</label><input id="people-search" maxlength="256" value="'+esc(state.query)+'" placeholder="昵称、备注或来源"><label for="people-category">分类</label><select id="people-category">'+[['all','全部分类'],['confirmed','已确认用户'],['pending','待人工确认'],['legacy','历史旧档 / 来源未定']].map(([key,label])=>'<option value="'+key+'" '+(state.category===key?'selected':'')+'>'+label+'</option>').join('')+'</select><button class="act" type="submit">查找用户</button></form>'+
-        [['confirmed','已确认用户','有可信依据或维护者明确确认'],['pending','待人工确认','缺少可信跨场景映射；独立列出，不猜测合并'],['legacy','历史旧档 / 来源未定','有消息但无可靠场景；可人工确认人物，场景继续未知']].filter(([key])=>state.category==='all'||state.category===key).map(([key,title,note])=>'<section class="people-section" aria-label="'+title+'"><h3>'+title+'</h3><p class="dim">'+note+'</p><div class="uchips" id="people-list-'+key+'">'+r.people.filter(p=>p.category===key).map(p=>'<button type="button" class="uchip'+(p.id===state.person?' on':'')+'" aria-pressed="'+(p.id===state.person)+'" data-person="'+esc(p.id)+'"><div class="un">'+esc(p.label)+'</div><div class="uu">'+p.origin_count+' 个来源 / '+esc([...new Set(p.sources.map(o=>({group:'群聊',private:'私聊',legacy:'场景未知'}[o.kind])))].join('、'))+' / '+esc(p.status_label)+(p.conflict?'（证据冲突）':'')+'<br>最近活动 '+esc(fmtT(p.last_at))+'</div></button>').join('')+'</div>'+(!r.people.some(p=>p.category===key)?'<p class="dim">本页没有此类入口。</p>':'')+'</section>').join('')+
+        '<form id="people-search-form" class="row"><label for="people-search">搜索用户</label><input id="people-search" maxlength="256" value="'+esc(state.query)+'" placeholder="昵称、备注或来源"><label for="people-category">分类</label><select id="people-category">'+[['all','全部分类'],['confirmed','用户'],['pending','关联证据待核对'],['legacy','历史旧档 / 来源未定']].map(([key,label])=>'<option value="'+key+'" '+(state.category===key?'selected':'')+'>'+label+'</option>').join('')+'</select><button class="act" type="submit">查找用户</button></form>'+
+        [['confirmed','用户','新来源自动建档；本人验证后跨场景归到同一人。资料缺失可发送「设置称呼 你的称呼」'],['pending','关联证据待核对','仅在证据冲突或人工解除时列出；新来源自动建档，无需逐个确认'],['legacy','历史旧档 / 来源未定','有消息但无可靠场景；可人工确认人物，场景继续未知']].filter(([key])=>state.category==='all'||state.category===key).map(([key,title,note])=>'<section class="people-section" aria-label="'+title+'"><h3>'+title+'</h3><p class="dim">'+note+'</p><div class="uchips" id="people-list-'+key+'">'+r.people.filter(p=>p.category===key).map(p=>'<button type="button" class="uchip'+(p.id===state.person?' on':'')+'" aria-pressed="'+(p.id===state.person)+'" data-person="'+esc(p.id)+'"><div class="un">'+esc(p.display_name||p.label)+'</div><div class="uu">'+p.origin_count+' 个来源 / '+esc([...new Set(p.sources.map(o=>({group:'群聊',private:'私聊',legacy:'场景未知'}[o.kind])))].join('、'))+' / '+esc(p.status_label)+(p.conflict?'（证据冲突）':'')+'<br>最近活动 '+esc(fmtT(p.last_at))+'</div></button>').join('')+'</div>'+(!r.people.some(p=>p.category===key)?'<p class="dim">本页没有此类入口。</p>':'')+'</section>').join('')+
         '<p class="dim">当前筛选 '+r.total+' 个展示入口；已加载 '+r.people.length+' 个。此数不是自然人数。</p><div class="row"><button class="act" id="people-prev" '+(state.listOffset?'':'disabled')+'>上一页用户</button><button class="act" id="people-next" '+(r.next_offset===null?'disabled':'')+'>下一页用户</button></div>'+
         '<details class="card" id="people-metadata"><summary>无聊天资料键（'+r.metadata_total+'）</summary><p class="dim">这些键只用于备注、积分或设置；未列作用户，原数据未移动。精确对应多个来源时不猜测归属。</p><ul class="source-list">'+r.metadata.map(m=>'<li>'+esc(m.label||'无称呼')+' / '+(m.related_count?'精确关联 '+m.related_count+' 个来源':'未找到会话来源')+'<br><span class="mono">'+esc(m.uid)+'</span></li>').join('')+'</ul><span class="dim">最多显示 100 项；更多可按资料键搜索。</span></details><div id="people-detail"></div>';
       $('#people-archive-indexes')?.remove();
@@ -62,7 +66,7 @@ window.UserWorkbench=(()=>{
       }
       document.querySelectorAll('[data-person]').forEach(button=>button.onclick=()=>{
         state.person=button.dataset.person;state.group='';state.source='';state.offset=0;curUid=null;
-        const p=selected();state.mode=p.legacy?'legacy':p.sources.some(o=>o.kind==='private')?'private':'group';render();
+        const p=selected();state.mode='all';render();
       });
       $('#people-prev').onclick=()=>{state.listOffset=Math.max(0,state.listOffset-100);render();};
       $('#people-next').onclick=()=>{state.listOffset=r.next_offset;render();};
@@ -81,15 +85,15 @@ window.UserWorkbench=(()=>{
     if(state.group&&!p.sources.some(o=>o.group===state.group))state.group='';
     let others=catalog.people.filter(other=>other.id!==p.id);
     const groups=[...new Set(p.sources.filter(o=>o.kind==='group').map(o=>o.group))];
-    $('#people-detail').innerHTML='<div class="card"><h3>'+esc(p.label)+'</h3>'+
-      '<p class="dim" id="people-status">'+esc(p.status_label)+(p.conflict?' / 证据冲突，自动归类已受阻':'')+'；'+esc(p.profile_kind==='qq_nickname'?'QQ 昵称':p.profile_kind==='platform_name'?'平台用户名，不能认作全局 QQ 昵称':'昵称未获取')+(p.profile_at?' / 资料更新 '+esc(fmtT(p.profile_at)):'')+(p.nickname_conflict?' / 多来源称呼不同：优先 QQ 昵称，同类沿用最早观察到的资料来源，该来源改名可更新':'')+(p.profile_source_uid?' / 主称呼来源 '+esc(p.profile_source_uid):'')+'</p>'+
+    $('#people-detail').innerHTML='<div class="card"><h3>'+esc(p.display_name||p.label)+'</h3>'+
+      '<p class="dim" id="people-status">'+esc(p.status_label)+(p.conflict?' / 证据冲突，自动归类已受阻':'')+'；'+esc(p.profile_kind==='self_selected'?'本人设置的称呼':p.profile_kind==='qq_nickname'?'QQ 昵称':p.profile_kind==='platform_name'?'平台用户名，不能认作全局 QQ 昵称':'昵称未获取')+(p.profile_at?' / 资料更新 '+esc(fmtT(p.profile_at)):'')+(p.nickname_conflict?' / 多来源称呼不同：优先最新本人称呼，其次平台资料；称呼不作为合并依据':'')+(p.profile_source_uid?' / 主称呼来源 '+esc(p.profile_source_uid):'')+'</p>'+
       '<ul class="dim">'+p.basis.map(b=>'<li>'+esc(b)+'</li>').join('')+'</ul>'+
-      '<div class="row" role="group" aria-label="查看场景">'+['private','group',...(p.sources.some(o=>o.legacy)?['legacy']:[])].map(mode=>'<button class="act scene-button" data-mode="'+mode+'" aria-pressed="'+(state.mode===mode)+'" '+(p.legacy&&mode!=='legacy'?'disabled':'')+'>'+({private:'私聊',group:'群聊',legacy:'旧档（场景未知）'}[mode])+'</button>').join('')+
+      '<div class="row" role="group" aria-label="查看场景">'+['all','private','group',...(p.sources.some(o=>o.legacy)?['legacy']:[])].map(mode=>'<button class="act scene-button" data-mode="'+mode+'" aria-pressed="'+(state.mode===mode)+'" '+(p.legacy&&!['all','legacy'].includes(mode)?'disabled':'')+'>'+({all:'全部消息',private:'私聊',group:'群聊',legacy:'旧档（场景未知）'}[mode])+'</button>').join('')+
       (state.mode==='group'?'<label for="people-group">具体群</label><select id="people-group"><option value="">全部群聊</option>'+groups.map(group=>'<option '+(state.group===group?'selected ':'')+'value="'+esc(group)+'">'+esc(group)+'</option>').join('')+'</select>':'')+'</div>'+
       '<p class="dim">仅查看各来源最近最多 150 条滚动记录，未加载完整归档。群回复仅展示可核验关联的已接受消息。</p>'+
       '<div id="people-history" aria-live="polite"></div><div class="row"><button class="act" id="people-history-prev" '+(state.offset?'':'hidden')+'>上一页记录</button><button class="act" id="people-more" hidden>加载下一页记录</button><span id="people-range" class="dim"></span></div></div>'+
       '<details class="card" id="people-associations"><summary>来源与人工关联</summary><p class="dim">只改变管理展示；不更改认证、主人权限、积分账本或发送目标。旧档可确认人物，场景仍未知。展开关联或管理面板时暂缓自动刷新，收起后恢复。</p>'+
-      '<ul class="source-list">'+p.sources.map(o=>'<li><b>'+esc(o.profile?.value||'昵称未获取')+'</b> '+esc(o.profile?.kind==='qq_nickname'?'QQ 昵称':o.profile?'平台用户名（非已核验 QQ 昵称）':'')+(o.profile?' / '+esc(o.profile.source)+' / '+esc(fmtT(o.profile.at)):'')+(o.group_card?'<br>群名片/群备注：'+esc(o.group_card.value)+' / '+esc(o.group_card.source):'')+(o.name?'<br>备注/历史称呼（性质未核验）：'+esc(o.name):'')+'<br>'+esc(o.label)+'<br>场景识别：'+esc(o.scene_status==='identified'?'已识别 / '+o.scene_basis:'尚未识别 / '+o.scene_reason)+'<br>人物证据：'+esc(o.identity_basis||o.identity_reason)+(o.identity_at?' / 原观察 '+esc(fmtT(o.identity_at))+' / 消息 '+esc(o.identity_message_id):'')+(o.identity_conflict_count?' / 保留 '+o.identity_conflict_count+' 份冲突证据':'')+(o.projection_only?'<br>历史派生视图，只读，不是管理目标':'')+'<br><span class="mono">'+esc(o.platform+' / '+o.bot+' / '+o.uid)+'</span>'+(o.observed_app?'<br>身份应用/帐号：'+esc(o.observed_app):' / 应用未观测')+'</li>').join('')+'</ul>'+
+      '<ul class="source-list">'+p.sources.map(o=>'<li><b>'+esc(o.profile?.value||'昵称未获取')+'</b> '+esc(o.profile?.kind==='self_selected'?'本人设置的称呼':o.profile?.kind==='qq_nickname'?'QQ 昵称':o.profile?'平台用户名（非已核验 QQ 昵称）':'')+(o.profile?' / '+esc(o.profile.source)+' / '+esc(fmtT(o.profile.at)):'')+(o.group_card?'<br>群名片/群备注：'+esc(o.group_card.value)+' / '+esc(o.group_card.source):'')+(o.name?'<br>备注/历史称呼（性质未核验）：'+esc(o.name):'')+'<br>'+esc(o.label)+'<br>场景识别：'+esc(o.scene_status==='identified'?'已识别 / '+o.scene_basis:'尚未识别 / '+o.scene_reason)+'<br>人物证据：'+esc(o.identity_basis||o.identity_reason)+(o.identity_at?' / 原观察 '+esc(fmtT(o.identity_at))+' / 消息 '+esc(o.identity_message_id):'')+(o.identity_conflict_count?' / 保留 '+o.identity_conflict_count+' 份冲突证据':'')+(o.projection_only?'<br>历史派生视图，只读，不是管理目标':'')+'<br><span class="mono">'+esc(o.platform+' / '+o.bot+' / '+o.uid)+'</span>'+(o.observed_app?'<br>身份应用/帐号：'+esc(o.observed_app):' / 应用未观测')+'</li>').join('')+'</ul>'+
       '<div class="row"><label for="people-link-search">查找待关联入口</label><input id="people-link-search" placeholder="备注或来源标识" maxlength="256"><button class="act" id="people-link-find">查找</button></div><div class="row"><label for="people-associate">确认同一用户入口</label><select id="people-associate"><option value="">选择另一个入口</option>'+others.map(other=>'<option value="'+esc(other.id)+'">'+esc(other.label+' — '+other.sources.map(o=>o.label).join('；'))+'</option>').join('')+'</select><button class="act" id="people-link">关联展示</button></div>'+
       '<p class="source-list dim">'+p.sources.flatMap(o=>(o.index_aliases||[]).map(a=>'资料别名 '+a.uid+' → '+o.uid+'（对应 '+a.related_count+' 个来源，仅作资料索引）')).map(esc).join('<br>')+'</p>'+
       '<button class="act" id="people-deny">确认所选另一入口不是此人</button>'+
@@ -147,5 +151,5 @@ window.UserWorkbench=(()=>{
       hydrateStickerSamples(target);
     }catch(error){if(!live(id)||error.name==='AbortError')return;target.innerHTML='<p role="alert">记录加载失败：'+esc(error.message)+' <button class="act" id="people-history-retry">重试记录</button></p>';$('#people-history-retry').onclick=()=>loadHistory(id);}
   }
-  return {render,leave,busy,version:'20261027-startup-1'};
+  return {render,leave,busy,version:'20261028-identity-1'};
 })();

@@ -1782,6 +1782,12 @@ class DshSoul(Star):
                     self.pending_sticker.pop(uid, [])))
                 return
             bubbles = [format_qq_text(b) for b in (_bubbles_napcat(text) or [text])]
+            if not voice and not preserve_literal_message(text) and not sticker_only_request(event.message_str or ""):
+                from user_directory import onboarding
+                hint = onboarding(event, scope, DATA)
+                if hint:
+                    bubbles.append(hint)
+                    text += NL + NL + hint
             rc = getattr(resp, "result_chain", None)
             others = [c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]
             rows = self.pending_sticker.pop(uid, [])
@@ -3189,6 +3195,13 @@ class DshSoul(Star):
                 return  # 真休眠：包括主人在内的消息都不响应
             # 按用户 reply 开关：全用户通用（含主人），false 入口直接拦截（不记历史不进 LLM，热生效）
             if not self._perm(uid, "reply"):
+                event.stop_event()
+                return
+            # Pairing codes stay out of model inputs, points and chat archives.
+            from user_directory import handle as identity_command
+            identity_ack = identity_command(event, scope, DATA, trimmed)
+            if identity_ack is not None:
+                await self._send(scope.target, MessageChain(chain=[_qq_plain(identity_ack)]))
                 event.stop_event()
                 return
             # 积分限额：每条用户消息扣 1 分（主人豁免；points_enabled=false 完全跳过；现读现写热生效）

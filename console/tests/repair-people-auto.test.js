@@ -25,7 +25,7 @@ test('trusted author mappings auto join private and two groups, including a late
 test('no evidence and equal strings in different domains never guess identity',t=>{
   const f=fixture(t);f.scopes.g1.sender=f.scopes.p1.sender;f.save('scopes_v2.json',f.scopes);
   const list=f.w.list();assert.notEqual(by(list,'p1').id,by(list,'g1').id);
-  assert.equal(by(list,'p1').status,'pending');assert.equal(by(list,'legacy').status,'legacy');
+  assert.equal(by(list,'p1').status,'automatic_confirmed');assert.equal(by(list,'legacy').status,'legacy');
 });
 test('nickname types and an established source stay visible without using a note as a QQ nickname',t=>{
   const f=fixture(t);f.profile('p1','private-A',30,'新版');f.profile('g1','private-A',10,'旧版');

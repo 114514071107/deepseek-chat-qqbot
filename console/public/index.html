@@ -130,7 +130,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261027-startup-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261028-identity-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -620,43 +620,58 @@ async function uidSelector() {
   return (swCache.users || []).map((u) => ({ uid: u.uid, master: u.master, name: u.name }));
 }
 
+const memoryState={person:null,anchor:null,mode:'all',group:'',offset:0};
+let memorySaving=false;
 async function vMemory({refresh=false,manual=false}={}) {
+  if(memorySaving&&refresh)return;
   const version=++memoryVersion;
-  const users = await uidSelector();
-  if (!curUid && users.length) curUid = users[0].uid;
-  const selectedUid=curUid;
-  const read=uid=>Promise.all([api('/api/thoughts?uid='+encodeURIComponent(uid)),api('/api/notes?uid='+encodeURIComponent(uid)),api('/api/session?uid='+encodeURIComponent(uid)),api('/api/memes?uid='+encodeURIComponent(uid))]);
-  const initial=await read(selectedUid);
-  if(version!==memoryVersion||cur!=='memory'||curUid!==selectedUid||refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)))return;
+  const alive=()=>version===memoryVersion&&cur==='memory';
+  const people=[];let offset=0;
+  do {
+    const page=await api('/api/people?limit=100&offset='+offset);
+    if(!alive())return;
+    if(!page.ok)throw Error(page.error||'用户目录加载失败');
+    people.push(...page.people);offset=page.next_offset;
+  }while(offset!==null&&people.length<10000);
+  let person=people.find(p=>p.id===memoryState.person)||people.find(p=>p.sources.some(o=>o.uid===memoryState.anchor))||people[0];
+  if(!person){$('#view').innerHTML='<div class="card">还没有聊天用户。</div>';return;}
+  const next={...memoryState,person:person.id,anchor:person.sources[0]?.uid};
+  if(next.group&&!person.sources.some(o=>o.kind==='group'&&o.group===next.group))next.group='';
+  const q=new URLSearchParams({person:person.id,mode:next.mode,group:next.group,offset:String(next.offset),limit:'150'});
+  const [memory,history]=await Promise.all([api('/api/people/memory?'+q),api('/api/people/history?'+q)]);
+  if(!alive()||refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)))return;
+  if(!memory.ok||!history.ok)throw Error(memory.error||history.error||'人物资料加载失败');
+  Object.assign(memoryState,next);
   const reading=refresh?window.ReadingState.capture($('#view')):null;
-  $("#view").innerHTML =
-    '<div class="row"><select id="m-uid">' + users.map((u) => '<option value="' + u.uid + '"' + (u.uid === curUid ? " selected" : "") + ">" + (u.master ? "👑 " : "👤 ") + esc(u.name || u.uid.slice(0, 16) + "…") + "</option>").join("") + '</select><button class="act" id="m-load">加载</button></div>' +
-    '<div class="grid"><div class="card"><h3>念头（可删除）</h3><div id="m-th"></div></div>' +
-    '<div class="card"><h3>长期记忆</h3><pre id="m-notes"></pre></div>' +
-    '<div class="card"><h3>会话摘要</h3><pre id="m-sess"></pre></div>' +
-    '<div class="card"><h3>本来源学习资料（旧档图鉴保留）</h3><pre id="m-memes"></pre></div></div>';
-  const load = async (initial=null) => {
-    const loadVersion=initial?version:++memoryVersion;
-    curUid = $("#m-uid").value;
-    const uid=curUid;
-    const [th,notes,sess,memes]=initial||await read(uid);
-    if(loadVersion!==memoryVersion||cur!=='memory'||curUid!==uid)return;
-    $("#m-th").innerHTML = th.thoughts.length ? th.thoughts.map((t, i) =>
-      '<div class="kv"><span>' + esc(t.text) + ' <span class="dim">· ' + esc(t.src) + " · " + fmtT(t.t) + '</span></span>' +
-      '<button class="act danger" data-thdel="' + (th.thoughts.length - 1 - i) + '">删</button></div>').join("") : '<div class="dim">无</div>';
-    document.querySelectorAll("[data-thdel]").forEach((b) => (b.onclick = async () => {
-      memoryVersion++;
-      const result=await post("/api/thought/del", { uid: curUid, index: parseInt(b.dataset.thdel, 10) });
-      if (!result.ok) alert(result.error || "运行态未确认删除");
-      await load();
-    }));
-    $("#m-notes").textContent = notes.text;
-    $("#m-sess").textContent = JSON.stringify(sess.session, null, 2);
-    $("#m-memes").textContent = memes.text;
-  };
-  $("#m-load").onclick = () => load();
-  await load(initial);
-  if(reading&&cur==='memory')reading.restore();
+  const groups=[...new Set(person.sources.filter(o=>o.kind==='group').map(o=>o.group))];
+  const scene=row=>row.scene==='private'?'私聊':row.scene==='group'?'群聊 · '+row.group:'旧档 · 场景未知';
+  $('#view').innerHTML='<div class="row"><label for="m-uid">用户</label><select id="m-uid">'+people.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===next.person?'selected':'')+'>'+esc(p.display_name||p.label)+'</option>').join('')+'</select>'+
+    '<label for="m-mode">消息来源</label><select id="m-mode">'+[['all','全部消息'],['private','私聊'],['group','群聊'],['legacy','旧档（场景未知）']].map(([key,label])=>'<option value="'+key+'" '+(key===next.mode?'selected':'')+'>'+label+'</option>').join('')+'</select>'+
+    (next.mode==='group'?'<label for="m-group">具体群</label><select id="m-group"><option value="">全部群</option>'+groups.map(g=>'<option value="'+esc(g)+'" '+(g===next.group?'selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+'<button class="act" id="m-load">刷新</button></div>'+
+    '<p class="dim">已验证关联的用户共用一个入口；未验证的来源暂时独立建档，无需维护者逐个确认。平台没有提供称呼时，由本人发送「设置称呼 你的称呼」；群聊与私聊可由本人发送「关联身份」验证。旧档没有可靠场景时保留未知标记。</p>'+
+    '<div class="card"><h3>'+esc(person.display_name||person.label)+' · 聊天记录</h3><p class="dim">每来源近期最多 150 条，本页 '+history.entries.length+' 条；完整原档保留。</p><div id="m-history">'+history.entries.map(row=>'<div data-read-key="memory-history:'+esc(row.view_key)+'"><p class="dim">'+esc(scene(row))+' · '+esc(row.speaker)+'</p>'+histEntryHtml(row)+'</div>').join('')+(history.entries.length?'':'<p class="dim">此筛选暂无记录。</p>')+'</div><div class="row"><button class="act" id="m-first" '+(next.offset?'':'hidden')+'>回到最新</button><button class="act" id="m-more" '+(history.next_offset===null?'hidden':'')+'>下一页记录</button></div></div>'+
+    memory.sections.map((section,si)=>'<section class="card" data-read-key="memory-source:'+esc(section.uid)+'"><h3>'+esc(section.label)+'</h3>'+(section.notice?'<p class="dim">'+esc(section.notice)+'</p>':'')+'<div class="grid"><div><h4>念头</h4>'+section.thoughts.map((t,ti)=>'<div class="kv"><span>'+esc(t.text)+' <span class="dim">'+esc(t.src)+' · '+fmtT(t.t)+'</span></span>'+(section.operation_uid?'<button class="act danger" data-memory-delete="'+si+':'+ti+'">删</button>':'')+'</div>').join('')+(section.thoughts.length?'':'<p class="dim">暂无</p>')+'</div><div><h4>长期记忆</h4>'+section.notes.map(n=>'<p class="dim">'+esc(n.note)+'</p><pre>'+esc(n.text)+'</pre>').join('')+(section.notes.length?'':'<p class="dim">暂无独立记忆文件；同一原记忆键在本页只展示一次。</p>')+'</div><div><h4>本来源会话摘要</h4><pre>'+esc(JSON.stringify(section.session,null,2))+'</pre></div><div><h4>本来源学习资料</h4><pre>'+esc(section.memes||'暂无')+'</pre></div></div></section>').join('');
+  $('#m-uid').onchange=()=>{memoryState.person=$('#m-uid').value;memoryState.anchor=null;memoryState.offset=0;memoryState.group='';vMemory();};
+  $('#m-mode').onchange=()=>{memoryState.mode=$('#m-mode').value;memoryState.group='';memoryState.offset=0;vMemory();};
+  if($('#m-group'))$('#m-group').onchange=()=>{memoryState.group=$('#m-group').value;memoryState.offset=0;vMemory();};
+  $('#m-load').onclick=()=>vMemory({refresh:true,manual:true});
+  $('#m-first').onclick=()=>{memoryState.offset=0;vMemory();};
+  $('#m-more').onclick=()=>{memoryState.offset=history.next_offset;vMemory();};
+  document.querySelectorAll('[data-memory-delete]').forEach(button=>button.onclick=async()=>{
+    const [si,ti]=button.dataset.memoryDelete.split(':').map(Number),section=memory.sections[si],thought=section.thoughts[ti],personId=person.id;
+    if(memorySaving||cur!=='memory'||memoryState.person!==personId||!button.isConnected||!section.operation_uid)return;
+    if(!confirm('删除「'+person.label+'」'+section.label+'的这条念头？'))return;
+    button.disabled=true;memorySaving=true;memoryVersion++;
+    // Freeze the concrete source and index from this rendered item, never curUid.
+    let result;
+    try{result=await post('/api/thought/del',{uid:section.operation_uid,index:thought.index});}
+    catch(error){result={ok:false,error:error.message};}
+    finally{memorySaving=false;}
+    if(!result.ok)alert(result.error||'运行态未确认删除');
+    if(cur==='memory'&&memoryState.person===personId)await vMemory({refresh:true,manual:true});
+  });
+  hydrateStickerSamples($('#m-history'));
+  if(reading&&alive())reading.restore();
 }
 
 // ---------- 图库页 ----------

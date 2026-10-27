@@ -14,7 +14,7 @@ test('a matching frozen receipt recovers an assistant row into its unique existi
  fs.writeFileSync(path.join(root,'scopes_v2.json'),JSON.stringify({existing:{...source,message_id:'in'}}));
  fs.writeFileSync(path.join(root,'history_all.json'),JSON.stringify({oldOut:[{id:'old-out',role:'assistant',text:'RECOVER RECEIPT',ts:2,delivery:{status:'accepted',message_id:'platform-out',attempt_id:'attempt'}}]}));
  fs.writeFileSync(path.join(root,'delivery_receipts_v2.json'),JSON.stringify({oldOut:[{attempt_id:'attempt',message_id:'platform-out',status:'accepted',provenance}]}));
- const w=createUserWorkbench(root),list=w.list();assert.equal(list.counts.pending_sources,1);assert.equal(list.counts.conversation_sources,1);assert.equal(list.outbound_archives.length,0);
+ const w=createUserWorkbench(root),list=w.list();assert.equal(list.counts.pending_sources,0);assert.equal(list.counts.confirmed_users,1);assert.equal(list.counts.conversation_sources,1);assert.equal(list.outbound_archives.length,0);
  const history=w.history(new URLSearchParams({person:list.people[0].id,mode:'group'}));assert.equal(history.entries[0]?.text,'RECOVER RECEIPT');assert.match(history.entries[0].source_projection.basis,/回执/);assert.equal(history.entries[0].provenance.job_id,'original-job');
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'history_all.json'),'utf8')).oldOut[0].source,undefined);
 });
