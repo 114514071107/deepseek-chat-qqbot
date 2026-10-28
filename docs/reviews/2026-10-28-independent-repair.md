@@ -94,3 +94,5 @@ A01全归档浏览需另立只读索引/全量分页工作单；A02全局统计�
 - D08：[tests/identity_lifecycle_browser.cjs:20](<D:/DSH Workspace/deepseek-chat-qqbot/tests/identity_lifecycle_browser.cjs:20>)
 - I03：[plugin/astrbot_plugin_dsh_soul/main.py:3730](<D:/DSH Workspace/deepseek-chat-qqbot/plugin/astrbot_plugin_dsh_soul/main.py:3730>)
 - I05：[tests/probe_worker_logs.py:16](<D:/DSH Workspace/deepseek-chat-qqbot/tests/probe_worker_logs.py:16>)
+
+本地功能提交 `daa013d1a1b2d27523e88c860b66d31903c8e165` 已固定范围。首次cached diff检查的日志尾空格/测试EOF空行失败未被外层Shell拦住，导致提交先发生；随后追加仅规范空白与此流程记录的提交，检查通过后才配套发布，不改写历史。该偏差不记为首次检查通过。

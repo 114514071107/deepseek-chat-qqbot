@@ -107,4 +107,3 @@ class RuntimeACL(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('Target membership changed since Plan', result.stderr)
             self.assertEqual(before, self.command("(Get-Acl -LiteralPath '" + literal + "').Sddl"))
-

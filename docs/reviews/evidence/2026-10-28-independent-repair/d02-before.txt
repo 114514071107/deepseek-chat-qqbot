@@ -8,7 +8,7 @@ not ok 1 - manual merge followed by reliable contradiction isolates histories, n
   failureType: 'testCodeFailure'
   error: |-
     Expected "actual" to be strictly unequal to:
-    
+
     'person_17e603783a34cbc89e15dbd0898d01d26fdd9979394954ef29e2b0b49235fcb5'
   code: 'ERR_ASSERTION'
   name: 'AssertionError'

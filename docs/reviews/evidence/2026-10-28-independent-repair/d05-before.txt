@@ -8,9 +8,9 @@ not ok 1 - stable outbound alias deduplicates before recent cap and paging while
   failureType: 'testCodeFailure'
   error: |-
     Expected values to be strictly equal:
-    
+
     2 !== 1
-    
+
   code: 'ERR_ASSERTION'
   name: 'AssertionError'
   expected: 1
