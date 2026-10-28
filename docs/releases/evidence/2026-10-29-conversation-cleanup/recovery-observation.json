@@ -1,0 +1,242 @@
+{
+  "seconds": 236.17,
+  "samples": 13,
+  "all_ready": true,
+  "same_processes": true,
+  "rows": [
+    {
+      "at": 1793221876.540609,
+      "lease_age_seconds": 0.03,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221895.915458,
+      "lease_age_seconds": 0.098,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221915.1145163,
+      "lease_age_seconds": 0.114,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221934.5687397,
+      "lease_age_seconds": 0.132,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221954.0242562,
+      "lease_age_seconds": 0.112,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221973.0413954,
+      "lease_age_seconds": 0.039,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793221992.3647099,
+      "lease_age_seconds": 0.036,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222011.874224,
+      "lease_age_seconds": 0.094,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222031.0775397,
+      "lease_age_seconds": 0.118,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222050.2982118,
+      "lease_age_seconds": 0.115,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222069.4915736,
+      "lease_age_seconds": 0.117,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222088.85344,
+      "lease_age_seconds": 0.053,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    },
+    {
+      "at": 1793222108.1772618,
+      "lease_age_seconds": 0.088,
+      "stopped": false,
+      "plugin_version": "20261029-conversations-1",
+      "bot_pid": 13444,
+      "console_pid": 63252,
+      "api_version": "20261029-conversations-1",
+      "frontend_version": "20261029-conversations-1",
+      "qq": {
+        "status": "ready",
+        "configured": 1,
+        "ready": 1
+      },
+      "bot_running": true,
+      "bot_state": "succeeded",
+      "bot_readiness": "ready"
+    }
+  ]
+}

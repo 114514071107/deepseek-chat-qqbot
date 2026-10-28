@@ -1,0 +1,10 @@
+{
+  "started": 1793220689.4180803,
+  "finished": 1793220738.9183648,
+  "seconds": 49.5,
+  "stopped_components": [
+    "Console",
+    "Bot"
+  ],
+  "success": true
+}

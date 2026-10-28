@@ -1,0 +1,36 @@
+{
+  "at": 1793221929.534325,
+  "code_targets_verified": 45,
+  "loaded": {
+    "at": 1793221929.534325,
+    "lease_age_seconds": 0.084,
+    "stopped": false,
+    "plugin_version": "20261029-conversations-1",
+    "bot_pid": 13444,
+    "console_pid": 63252,
+    "api_version": "20261029-conversations-1",
+    "frontend_version": "20261029-conversations-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  },
+  "security": {
+    "unauth": 401,
+    "cross_origin": 403,
+    "authenticated_html_hash": true
+  },
+  "catalog": {
+    "total": 6,
+    "private": 3,
+    "group": 3,
+    "same_ids_as_before": true
+  },
+  "recovery_files_verified": 15,
+  "remaining_actions": 0,
+  "configs_unchanged": 5
+}

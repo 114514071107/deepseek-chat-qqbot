@@ -1,0 +1,8 @@
+{
+  "attempt": 1,
+  "applied": 0,
+  "reason": "Fresh lease retained after owned process stop; cleanup guard refused before backup/apply",
+  "service_restarted": true,
+  "seconds": 41.0,
+  "later_action": "Preserved first stopped snapshot; waited for lease to age naturally in a new controlled window; guard unchanged"
+}

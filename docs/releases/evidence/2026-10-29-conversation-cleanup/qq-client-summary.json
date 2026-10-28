@@ -1,0 +1,12 @@
+{
+  "private_case": "CP1029-P",
+  "private_reply_received": true,
+  "initial_group_case": "CP1029-G",
+  "initial_group_reply_received": false,
+  "recovery_group_case": "CP1029-GR",
+  "recovery_group_reply_received": true,
+  "account_checked_in_native_profile": true,
+  "group_checked_in_native_details": true,
+  "native_screenshots_saved_to_public_evidence": false,
+  "private_ids_or_chat_bodies_in_summary": false
+}

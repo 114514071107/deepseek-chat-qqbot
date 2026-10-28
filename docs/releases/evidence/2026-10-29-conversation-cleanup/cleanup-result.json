@@ -1,0 +1,13 @@
+{
+  "applied": 15,
+  "quarantined_files": 13,
+  "rewritten_thought_indexes": 2,
+  "recovery_hashes_verified": 15,
+  "remaining_actions": 0,
+  "repeated_apply": 0,
+  "raw_chat_actions": 0,
+  "snapshot_files": 488,
+  "other_snapshot_files_unchanged": 473,
+  "configs_unchanged": 5,
+  "runtime_code_unchanged": true
+}

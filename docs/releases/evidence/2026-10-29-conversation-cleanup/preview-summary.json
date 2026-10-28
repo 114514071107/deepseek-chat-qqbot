@@ -1,0 +1,17 @@
+{
+  "actions": 15,
+  "private_keys": 3,
+  "group_keys": 3,
+  "ambiguous_keys": 0,
+  "reasons": {
+    "retired_identity_or_unscoped_shared_material": 4,
+    "mixed_or_unattributed": 1,
+    "retired_actor_or_unattributed_summary": 8,
+    "remove_retired_actor_thought_index": 2
+  },
+  "replacements": 2,
+  "raw_chat_action_count": 0,
+  "matches_reviewed_paths": true,
+  "code_targets_verified": 45,
+  "protected_configs": 5
+}

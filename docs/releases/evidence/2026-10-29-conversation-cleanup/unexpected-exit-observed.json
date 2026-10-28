@@ -1,0 +1,48 @@
+{
+  "Bot": {
+    "pid": 32780,
+    "status": "ready",
+    "fields": [
+      "root",
+      "ticks",
+      "pid",
+      "status",
+      "port",
+      "exe",
+      "nonce",
+      "component"
+    ]
+  },
+  "Console": {
+    "status": "ready",
+    "pid": 57004,
+    "fields": [
+      "status",
+      "port",
+      "root",
+      "nonce",
+      "ticks",
+      "component",
+      "pid",
+      "exe"
+    ]
+  },
+  "Controller": {
+    "pid": 15664,
+    "fields": [
+      "nonce",
+      "stage",
+      "exe",
+      "pid",
+      "version",
+      "ticks",
+      "root"
+    ]
+  },
+  "heartbeat": {
+    "pid": 33936,
+    "version": "20261029-conversations-1",
+    "age_seconds": 484.969,
+    "stopped": false
+  }
+}

@@ -1,0 +1,13 @@
+{"sample": 0, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.03, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 1, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.098, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 2, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.114, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 3, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.132, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 4, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.112, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 5, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.039, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 6, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.036, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 7, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.094, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 8, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.118, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 9, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.115, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 10, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.117, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 11, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.053, "qq": {"status": "ready", "configured": 1, "ready": 1}}
+{"sample": 12, "bot_pid": 13444, "console_pid": 63252, "lease_age_seconds": 0.088, "qq": {"status": "ready", "configured": 1, "ready": 1}}

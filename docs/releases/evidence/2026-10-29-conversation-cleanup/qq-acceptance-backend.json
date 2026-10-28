@@ -1,0 +1,63 @@
+{
+  "at": 1793221882.259372,
+  "cases": [
+    {
+      "case": "CP1029-P",
+      "private": true,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "expected_reply": true,
+      "delivery_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true
+    },
+    {
+      "case": "CP1029-GR",
+      "private": false,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "expected_reply": true,
+      "delivery_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true
+    }
+  ],
+  "earlier_group_case": {
+    "case": "CP1029-G",
+    "inbound": 0,
+    "client_reply_received": false,
+    "service_unavailable_observed": true
+  },
+  "main_usage_delta": {
+    "calls": 2,
+    "in": 18683,
+    "out": 27,
+    "hit": 4096,
+    "miss": 14587
+  },
+  "billing_amount_verified": false,
+  "loaded": {
+    "at": 1793221886.7851033,
+    "lease_age_seconds": 0.103,
+    "stopped": false,
+    "plugin_version": "20261029-conversations-1",
+    "bot_pid": 13444,
+    "console_pid": 63252,
+    "api_version": "20261029-conversations-1",
+    "frontend_version": "20261029-conversations-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  }
+}

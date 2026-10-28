@@ -1,0 +1,16 @@
+[
+  {
+    "time": "2026-10-28T20:51:58.3430477Z",
+    "phase": "running",
+    "exit_code": null,
+    "pid": 32780,
+    "component": "Bot"
+  },
+  {
+    "component": "Console",
+    "pid": 57004,
+    "exit_code": null,
+    "phase": "running",
+    "time": "2026-10-28T20:52:14.7218513Z"
+  }
+]
