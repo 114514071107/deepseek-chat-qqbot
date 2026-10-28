@@ -1,0 +1,14 @@
+{
+  "at": 1793222350.5763092,
+  "head": "f781ea43578b5a010ecbaab9613e1551e458c1f0",
+  "origin_dev": "f781ea43578b5a010ecbaab9613e1551e458c1f0",
+  "remote_dev": "f781ea43578b5a010ecbaab9613e1551e458c1f0",
+  "equal": true,
+  "ahead_behind": [
+    "0",
+    "0"
+  ],
+  "local_main_unchanged": true,
+  "forced": false,
+  "upstream_written": false
+}
