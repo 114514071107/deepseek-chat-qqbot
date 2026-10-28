@@ -1,0 +1,214 @@
+TAP version 13
+# Subtest: manual merge followed by reliable contradiction isolates histories, notes and directory identities without rewriting decisions
+ok 1 - manual merge followed by reliable contradiction isolates histories, notes and directory identities without rewriting decisions
+  ---
+  duration_ms: 81.6986
+  type: 'test'
+  ...
+# Subtest: trusted author mappings auto join private and two groups, including a later source and restart
+ok 2 - trusted author mappings auto join private and two groups, including a later source and restart
+  ---
+  duration_ms: 33.2047
+  type: 'test'
+  ...
+# Subtest: no evidence and equal strings in different domains never guess identity
+ok 3 - no evidence and equal strings in different domains never guess identity
+  ---
+  duration_ms: 11.3456
+  type: 'test'
+  ...
+# Subtest: nickname types and an established source stay visible without using a note as a QQ nickname
+ok 4 - nickname types and an established source stay visible without using a note as a QQ nickname
+  ---
+  duration_ms: 18.8212
+  type: 'test'
+  ...
+# Subtest: unlink of automatic sources persists rejection instead of silently rejoining
+ok 5 - unlink of automatic sources persists rejection instead of silently rejoining
+  ---
+  duration_ms: 23.3739
+  type: 'test'
+  ...
+# Subtest: old manual groups stay manual and future reliable source joins without overwriting decisions
+ok 6 - old manual groups stay manual and future reliable source joins without overwriting decisions
+  ---
+  duration_ms: 16.1172
+  type: 'test'
+  ...
+# Subtest: stale revision and a second writer cannot lose an existing mapping
+ok 7 - stale revision and a second writer cannot lose an existing mapping
+  ---
+  duration_ms: 24.118
+  type: 'test'
+  ...
+# Subtest: deny is visible, survives new evidence, and only explicit reconfirmation removes the block
+ok 8 - deny is visible, survives new evidence, and only explicit reconfirmation removes the block
+  ---
+  duration_ms: 29.9686
+  type: 'test'
+  ...
+# Subtest: application and instance boundaries, mismatched evidence and conflicting claims block auto merge
+ok 9 - application and instance boundaries, mismatched evidence and conflicting claims block auto merge
+  ---
+  duration_ms: 19.2242
+  type: 'test'
+  ...
+# Subtest: OneBot numeric account auto merges while nickname updates remain display only
+ok 10 - OneBot numeric account auto merges while nickname updates remain display only
+  ---
+  duration_ms: 14.2044
+  type: 'test'
+  ...
+# Subtest: same exact original identity can be automatically confirmed even without a nickname
+ok 11 - same exact original identity can be automatically confirmed even without a nickname
+  ---
+  duration_ms: 11.088
+  type: 'test'
+  ...
+# Subtest: exact source strings with conflicting application evidence cannot collapse into one entry
+ok 12 - exact source strings with conflicting application evidence cannot collapse into one entry
+  ---
+  duration_ms: 10.5746
+  type: 'test'
+  ...
+# Subtest: verified app and group-member identity survive SDK self-id placeholders without crossing groups
+ok 13 - verified app and group-member identity survive SDK self-id placeholders without crossing groups
+  ---
+  duration_ms: 10.646
+  type: 'test'
+  ...
+# Subtest: a prior manual denial also blocks a later exact-origin proof
+ok 14 - a prior manual denial also blocks a later exact-origin proof
+  ---
+  duration_ms: 25.0464
+  type: 'test'
+  ...
+# Subtest: mapping capacity is rejected before an unsupported store can be written
+ok 15 - mapping capacity is rejected before an unsupported store can be written
+  ---
+  duration_ms: 17.3731
+  type: 'test'
+  ...
+# Subtest: new trusted conversation is automatically a user without owner confirmation; names never join people
+ok 16 - new trusted conversation is automatically a user without owner confirmation; names never join people
+  ---
+  duration_ms: 24.6335
+  type: 'test'
+  ...
+# Subtest: self verified private and two group identities share one named entry after restart and all-history stays scoped
+ok 17 - self verified private and two group identities share one named entry after restart and all-history stays scoped
+  ---
+  duration_ms: 16.9279
+  type: 'test'
+  ...
+# Subtest: memory lists only selected person sources and deduplicates shared memory keys without changing data
+ok 18 - memory lists only selected person sources and deduplicates shared memory keys without changing data
+  ---
+  duration_ms: 22.4295
+  type: 'test'
+  ...
+# Subtest: self proof does not bypass existing deny, foreign app metadata or source mismatch
+ok 19 - self proof does not bypass existing deny, foreign app metadata or source mismatch
+  ---
+  duration_ms: 34.9183
+  type: 'test'
+  ...
+# Subtest: unverified identical memory keys stay unassigned; verification shows the original file only once
+ok 20 - unverified identical memory keys stay unassigned; verification shows the original file only once
+  ---
+  duration_ms: 22.222
+  type: 'test'
+  ...
+# Subtest: legacy metadata stays readable only for an unsplit archive; split unknown metadata is not assigned
+ok 21 - legacy metadata stays readable only for an unsplit archive; split unknown metadata is not assigned
+  ---
+  duration_ms: 16.069
+  type: 'test'
+  ...
+# Subtest: later contradictory platform evidence separates self linked sources instead of displaying both as one conflicted person
+ok 22 - later contradictory platform evidence separates self linked sources instead of displaying both as one conflicted person
+  ---
+  duration_ms: 11.9166
+  type: 'test'
+  ...
+# Subtest: a legacy archive and a known person cannot both claim the same original notes file without identity proof
+ok 23 - a legacy archive and a known person cannot both claim the same original notes file without identity proof
+  ---
+  duration_ms: 14.6685
+  type: 'test'
+  ...
+# Subtest: list contains no message bodies; ambiguous QQ identities and same names remain separate
+ok 24 - list contains no message bodies; ambiguous QQ identities and same names remain separate
+  ---
+  duration_ms: 68.1426
+  type: 'test'
+  ...
+# Subtest: explicit association produces one entry for private and two groups; unlink preserves original stores
+ok 25 - explicit association produces one entry for private and two groups; unlink preserves original stores
+  ---
+  duration_ms: 55.0297
+  type: 'test'
+  ...
+# Subtest: private/group/group-filter projections keep sources, accepted replies and media
+ok 26 - private/group/group-filter projections keep sources, accepted replies and media
+  ---
+  duration_ms: 47.0952
+  type: 'test'
+  ...
+# Subtest: pagination, empty modes, legacy and invalid input have explicit bounds
+ok 27 - pagination, empty modes, legacy and invalid input have explicit bounds
+  ---
+  duration_ms: 28.7932
+  type: 'test'
+  ...
+# Subtest: mapping needs confirmation/current revision; explicit legacy identity confirmation preserves unknown scene
+ok 28 - mapping needs confirmation/current revision; explicit legacy identity confirmation preserves unknown scene
+  ---
+  duration_ms: 47.2758
+  type: 'test'
+  ...
+# Subtest: authentication, cross-origin, media and original scope operations remain protected
+ok 29 - authentication, cross-origin, media and original scope operations remain protected
+  ---
+  duration_ms: 19.915
+  type: 'test'
+  ...
+# Subtest: aggregate identity cannot become a mutation uid even when a runtime is online
+ok 30 - aggregate identity cannot become a mutation uid even when a runtime is online
+  ---
+  duration_ms: 19.3096
+  type: 'test'
+  ...
+# Subtest: nickname changes do not split identity; source caps and unaccepted replies are explicit
+ok 31 - nickname changes do not split identity; source caps and unaccepted replies are explicit
+  ---
+  duration_ms: 22.0922
+  type: 'test'
+  ...
+# Subtest: oversized history is rejected before loading or mutating the file
+ok 32 - oversized history is rejected before loading or mutating the file
+  ---
+  duration_ms: 10.2575
+  type: 'test'
+  ...
+# Subtest: deny API is authenticated, source protected, confirmed and display-only
+ok 33 - deny API is authenticated, source protected, confirmed and display-only
+  ---
+  duration_ms: 28.4251
+  type: 'test'
+  ...
+# Subtest: standalone confirmation preserves authentication, source checks, revision and raw data
+ok 34 - standalone confirmation preserves authentication, source checks, revision and raw data
+  ---
+  duration_ms: 28.8057
+  type: 'test'
+  ...
+1..34
+# tests 34
+# suites 0
+# pass 34
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 669.2184

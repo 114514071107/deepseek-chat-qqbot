@@ -173,6 +173,9 @@ def managed(fn):
         own_budget=None;saved_budget=None
         try:
             if event is not None:
+                if name=='gate':
+                    from event_admission import reserve
+                    if not reserve(self,event):return
                 scope=self._scope(event)
                 if name=='gate':
                     instance=self.runtime.token()
@@ -226,6 +229,9 @@ def managed(fn):
                 event.stop_event()
             raise
         finally:
+            if event is not None and name=='gate' and event.get_extra('_dsh_event_admission')=='reserved':
+                from event_admission import retain
+                retain(self,event,'cancelled_before_gate')
             if own_budget is not None:
                 own_budget.active=False;_budget_job.reset(saved_budget)
     run._dsh_managed=True

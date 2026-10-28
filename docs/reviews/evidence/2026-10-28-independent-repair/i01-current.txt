@@ -1,0 +1,44 @@
+test_default_cold_start_requires_loaded_heartbeat_not_just_port (test_repair_startup_ownership.ExistingStartOwnership.test_default_cold_start_requires_loaded_heartbeat_not_just_port) ... ERROR
+test_dual_component_summary_cannot_hide_unready_bot (test_repair_startup_ownership.ExistingStartOwnership.test_dual_component_summary_cannot_hide_unready_bot) ... FAIL
+test_reused_readiness_timeout_preserves_original_instance (test_repair_startup_ownership.ExistingStartOwnership.test_reused_readiness_timeout_preserves_original_instance) ... ok
+
+======================================================================
+ERROR: test_default_cold_start_requires_loaded_heartbeat_not_just_port (test_repair_startup_ownership.ExistingStartOwnership.test_default_cold_start_requires_loaded_heartbeat_not_just_port)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_startup_ownership.py", line 46, in test_default_cold_start_requires_loaded_heartbeat_not_just_port
+    state=json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8-sig'))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh default readiness y0lei4ug\\.launcher\\Bot.json'
+
+======================================================================
+FAIL: test_dual_component_summary_cannot_hide_unready_bot (test_repair_startup_ownership.ExistingStartOwnership.test_dual_component_summary_cannot_hide_unready_bot)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_startup_ownership.py", line 107, in test_dual_component_summary_cannot_hide_unready_bot
+    self.assertEqual(started.returncode,0,started.stdout+started.stderr)
+AssertionError: 1 != 0 : AuthorizationManager check failed.
+    + CategoryInfo          : SecurityError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_startup_ownership.py", line 120, in test_dual_component_summary_cannot_hide_unready_bot
+    self.assertEqual(stopped.returncode,0,stopped.stdout+stopped.stderr)
+AssertionError: 1 != 0 : AuthorizationManager check failed.
+    + CategoryInfo          : SecurityError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnauthorizedAccess
+
+
+----------------------------------------------------------------------
+Ran 3 tests in 56.940s
+
+FAILED (failures=1, errors=1)

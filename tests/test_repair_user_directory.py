@@ -21,6 +21,8 @@ class UserDirectoryRegression(unittest.TestCase):
     def event(self, sender='private-a', group='', app='fixture-app', name=''):
         e = ScopeEvent(sender, group)
         e.bot = SimpleNamespace(api=SimpleNamespace(_http=SimpleNamespace(_token=SimpleNamespace(app_id=app))))
+        # Installed official adapter: C2C and group use different placeholders.
+        e.message_obj.self_id = 'qq_official' if group else 'unknown_selfid'
         s = bind_scope(e)
         raw = {'id':s.message_id, 'timestamp':s.received_at,
                'author':{('member_openid' if group else 'user_openid'):sender}}
@@ -71,6 +73,24 @@ class UserDirectoryRegression(unittest.TestCase):
         self.assertIn('过期', self.call(self.event('m','g'), '关联身份 '+code, now=401))
         self.assertGreaterEqual(len({r['person'] for r in self.state()['sources'].values()}), 1)
         self.assertIn('私聊', self.call(self.event('m','g'), '关联身份'))
+
+    def test_cross_instance_and_unproven_bot_are_isolated(self):
+        a = self.event(); code = self.token(self.call(a, '关联身份'))
+        e, s = self.event('m','g')
+        self.assertIn('无效', self.call((e,replace(s,instance='another-instance')), '关联身份 '+code))
+        self.assertIn('无效', self.call((e,replace(s,bot='unproven-bot')), '关联身份 '+code))
+        self.assertIn('无效', self.call((e,replace(s,bot='qq_official_adapter_placeholder')), '关联身份 '+code))
+
+    def test_first_name_survives_new_event_and_concurrent_claim_never_merges_without_private_confirmation(self):
+        from concurrent.futures import ThreadPoolExecutor
+        a=self.event();self.assertIn('已将',self.call(a,'设置称呼 小禾'))
+        # Fresh adapter event and fresh handle/store read, as after restart.
+        self.assertEqual(next(iter(self.state()['sources'].values()))['nickname']['value'],'小禾')
+        code=self.token(self.call(self.event(),'关联身份'))
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            replies=list(pool.map(lambda pair:self.call(pair,'关联身份 '+code),[self.event('m1','g'),self.event('m2','g')]))
+        self.assertLessEqual(sum('确认关联' in reply for reply in replies),1)
+        self.assertEqual(len({r['person'] for r in self.state()['sources'].values()}),len(self.state()['sources']))
 
     def test_competing_claim_invalidates_challenge_and_requires_restart(self):
         a = self.event(); code = self.token(self.call(a, '关联身份'))

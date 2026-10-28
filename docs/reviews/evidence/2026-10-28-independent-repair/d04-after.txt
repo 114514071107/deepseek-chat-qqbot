@@ -1,0 +1,9 @@
+test_authenticated_app_is_part_of_event_key (test_repair_event_admission.EventAdmissionRegression.test_authenticated_app_is_part_of_event_key) ... ok
+test_capacity_retention_active_failure_no_id_and_restart_semantics (test_repair_event_admission.EventAdmissionRegression.test_capacity_retention_active_failure_no_id_and_restart_semantics) ... ok
+test_concurrent_duplicate_local_command_charges_sends_and_records_once (test_repair_event_admission.EventAdmissionRegression.test_concurrent_duplicate_local_command_charges_sends_and_records_once) ... ok
+test_media_and_model_boundary_once_and_cancelled_admission_not_retried (test_repair_event_admission.EventAdmissionRegression.test_media_and_model_boundary_once_and_cancelled_admission_not_retried) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.549s
+
+OK

@@ -1,0 +1,14 @@
+[
+  {
+    "target": "repository",
+    "code": 1,
+    "stdout": "",
+    "stderr": "AuthorizationManager check failed.\n    + CategoryInfo          : SecurityError: (:) [], ParentContainsErrorRecordException\n    + FullyQualifiedErrorId : UnauthorizedAccess\n"
+  },
+  {
+    "target": "byte_identical_temp",
+    "code": 1,
+    "stdout": "Launcher failed: RuntimeRoot does not exist\nCheck protected runtime settings/dependencies and logs: C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh I01 copy pz_aury3\\instance\\logs\\launcher\n{\"component\":\"Bot\",\"time\":\"2026-10-28T05:06:51.8735547Z\",\"ok\":false,\"action\":\"Status\",\"running\":null,\"error\":\"RuntimeRoot does not exist\",\"status\":\"failed\"}\n",
+    "stderr": ""
+  }
+]

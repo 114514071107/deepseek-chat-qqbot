@@ -1,0 +1,1 @@
+{"passed":3,"checks":["late timer cannot overwrite committed delete or restore stale action indices","failed timer preserves draft, focus and live controls","failed in-flight history refresh preserves a newly opened confirmation and cancel context"]}

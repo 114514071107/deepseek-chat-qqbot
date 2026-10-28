@@ -1,0 +1,82 @@
+test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result) ... ERROR
+
+======================================================================
+ERROR: test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_console_entry.py", line 14, in test_missing_credential_fails_and_cmd_propagates_final_result
+    self.assertNotEqual(p.returncode,0,p.stdout+p.stderr)
+AssertionError: 0 == 0 : dsh-console started on http://127.0.0.1:7850
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 627, in _rmtree_unsafe
+    os.rmdir(fullname)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh 独立 console l22hzdxx\\dsh-console'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 909, in onexc
+    _os.unlink(path)
+PermissionError: [WinError 5] 拒绝访问。: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh 独立 console l22hzdxx\\dsh-console'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 637, in _rmtree_unsafe
+    os.rmdir(path)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh 独立 console l22hzdxx\\dsh-console'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 909, in onexc
+    _os.unlink(path)
+PermissionError: [WinError 5] 拒绝访问。: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh 独立 console l22hzdxx\\dsh-console'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_console_entry.py", line 7, in test_missing_credential_fails_and_cmd_propagates_final_result
+    with tempfile.TemporaryDirectory(prefix='dsh 独立 console ') as tmp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 950, in __exit__
+    self.cleanup()
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 954, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 934, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 781, in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 629, in _rmtree_unsafe
+    onexc(os.rmdir, fullname, err)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 924, in onexc
+    cls._rmtree(path, ignore_errors=ignore_errors,
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 934, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 781, in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 639, in _rmtree_unsafe
+    onexc(os.rmdir, path, err)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 924, in onexc
+    cls._rmtree(path, ignore_errors=ignore_errors,
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\tempfile.py", line 934, in _rmtree
+    _shutil.rmtree(name, onexc=onexc)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 781, in rmtree
+    return _rmtree_unsafe(path, onexc)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 639, in _rmtree_unsafe
+    onexc(os.rmdir, path, err)
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\shutil.py", line 637, in _rmtree_unsafe
+    os.rmdir(path)
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh 独立 console l22hzdxx\\dsh-console'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.596s
+
+FAILED (errors=1)

@@ -1,0 +1,10 @@
+test_plan_apply_restricted_token_atomic_save_and_rollback (test_repair_acl.ConfigACL.test_plan_apply_restricted_token_atomic_save_and_rollback) ... ok
+test_plan_rejects_data_as_backup_before_any_permission_change (test_repair_acl.ConfigACL.test_plan_rejects_data_as_backup_before_any_permission_change) ... ok
+test_apply_rejects_new_unreviewed_object_before_changing_any_dacl (test_repair_runtime_acl.RuntimeACL.test_apply_rejects_new_unreviewed_object_before_changing_any_dacl) ... ok
+test_inspect_has_no_backup_or_permission_side_effect (test_repair_runtime_acl.RuntimeACL.test_inspect_has_no_backup_or_permission_side_effect) ... ok
+test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores (test_repair_runtime_acl.RuntimeACL.test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 14.874s
+
+OK

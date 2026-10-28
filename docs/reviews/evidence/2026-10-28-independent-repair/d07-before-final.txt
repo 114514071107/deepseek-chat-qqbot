@@ -1,0 +1,15 @@
+test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result) ... FAIL
+
+======================================================================
+FAIL: test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_console_entry.py", line 15, in test_missing_credential_fails_and_cmd_propagates_final_result
+    self.assertNotEqual(p.returncode,0,p.stdout+p.stderr)
+AssertionError: 0 == 0 : dsh-console started on http://127.0.0.1:7850
+
+
+----------------------------------------------------------------------
+Ran 1 test in 1.300s
+
+FAILED (failures=1)

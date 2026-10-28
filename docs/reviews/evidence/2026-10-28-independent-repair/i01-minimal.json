@@ -1,0 +1,66 @@
+[
+  {
+    "shell": "powershell.exe",
+    "target": "minimal.ps1",
+    "process_bypass": false,
+    "code": 0,
+    "stdout": "entered",
+    "stderr": ""
+  },
+  {
+    "shell": "powershell.exe",
+    "target": "minimal.ps1",
+    "process_bypass": true,
+    "code": 0,
+    "stdout": "entered",
+    "stderr": ""
+  },
+  {
+    "shell": "powershell.exe",
+    "target": "start-bot.ps1",
+    "process_bypass": false,
+    "code": 1,
+    "stdout": "",
+    "stderr": "AuthorizationManager check failed.\n    + CategoryInfo          : SecurityError: (:) [], ParentContainsErrorRecordException\n    + FullyQualifiedErrorId : UnauthorizedAccess\n"
+  },
+  {
+    "shell": "powershell.exe",
+    "target": "start-bot.ps1",
+    "process_bypass": true,
+    "code": 0,
+    "stdout": "PowerShell 5.1.26100.9711\nLogs: C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh I01 中文 xpvg6y23\\logs\\launcher\n{\"component\":\"Bot\",\"time\":\"2026-10-28T05:06:20.2194079Z\",\"action\":\"Status\",\"readiness\":\"not_running\",\"ok\":true,\"running\":false,\"status\":\"succeeded\",\"error\":\"\"}\n",
+    "stderr": ""
+  },
+  {
+    "shell": "pwsh.exe",
+    "target": "minimal.ps1",
+    "process_bypass": false,
+    "code": 0,
+    "stdout": "entered",
+    "stderr": ""
+  },
+  {
+    "shell": "pwsh.exe",
+    "target": "minimal.ps1",
+    "process_bypass": true,
+    "code": 0,
+    "stdout": "entered",
+    "stderr": ""
+  },
+  {
+    "shell": "pwsh.exe",
+    "target": "start-bot.ps1",
+    "process_bypass": false,
+    "code": 0,
+    "stdout": "PowerShell 7.6.5\nLogs: C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh I01 中文 xpvg6y23\\logs\\launcher\n{\"time\":\"2026-10-28T05:06:21.4937328Z\",\"ok\":true,\"running\":false,\"status\":\"succeeded\",\"component\":\"Bot\",\"readiness\":\"not_running\",\"action\":\"Status\",\"error\":\"\"}\n",
+    "stderr": ""
+  },
+  {
+    "shell": "pwsh.exe",
+    "target": "start-bot.ps1",
+    "process_bypass": true,
+    "code": 0,
+    "stdout": "PowerShell 7.6.5\nLogs: C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh I01 中文 xpvg6y23\\logs\\launcher\n{\"time\":\"2026-10-28T05:06:22.1640473Z\",\"running\":false,\"ok\":true,\"status\":\"succeeded\",\"action\":\"Status\",\"component\":\"Bot\",\"error\":\"\",\"readiness\":\"not_running\"}\n",
+    "stderr": ""
+  }
+]

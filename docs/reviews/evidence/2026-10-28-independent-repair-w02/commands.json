@@ -1,0 +1,17 @@
+[
+  {
+    "name": "acl-red",
+    "command": "python -B -m unittest discover -s tests -p test_repair_runtime_acl.py -v (DSH_TEST_ACL_SCRIPT=original 73080c8 script in temporary directory)",
+    "exit_code": 1
+  },
+  {
+    "name": "acl-green",
+    "command": "D:\\dsbot\\venv\\Scripts\\python.exe -B -m unittest discover -s tests -p *acl.py -v",
+    "exit_code": 0
+  },
+  {
+    "name": "worker-logs",
+    "command": "D:\\dsbot\\venv\\Scripts\\python.exe -B tests/probe_worker_logs.py",
+    "exit_code": 0
+  }
+]

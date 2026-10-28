@@ -1,0 +1,14 @@
+test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result) ... FAIL
+
+======================================================================
+FAIL: test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_console_entry.py", line 19, in test_missing_credential_fails_and_cmd_propagates_final_result
+    self.assertEqual(p.returncode,37,p.stdout+p.stderr)
+AssertionError: 1 != 37 : b"'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n"
+
+----------------------------------------------------------------------
+Ran 1 test in 0.055s
+
+FAILED (failures=1)

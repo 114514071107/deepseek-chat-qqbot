@@ -7,6 +7,15 @@ function directory(f){const sources={};for(const uid of ['p1','g1','g2']){const 
   const key=hash([s.platform,s.instance,s.bot,s.private?'private':'group',s.group,s.sender,app]);
   sources[key]={source:s,app,person:'a'.repeat(32),created_at:1,nickname:{value:'小禾',kind:'self_selected',source:'dsh.self_selected',at:20}};
 }f.save('user_directory_v1.json',{version:1,sources,pending:{}});}
+test('installed official C2C/group placeholders share only verified app and instance management identity',t=>{
+ const f=fixture(t);for(const uid of ['p1','g1','g2']){
+  f.scopes[uid].bot=uid==='p1'?'unknown_selfid':'qq_official';
+  f.histories[uid]=f.histories[uid].filter(r=>r.id===uid+'-u'||r.id===uid+'-a').map(r=>({...r,source:{...r.source,bot:f.scopes[uid].bot}}));
+ }
+ f.save('scopes_v2.json',f.scopes);f.save('history_v2.json',f.histories);directory(f);
+ const list=f.w.list();assert.equal(by(list,'p1').sources.length,3);assert.equal(by(list,'p1').id,by(list,'g1').id);
+ assert.equal(by(createUserWorkbench(f.data).list(),'p1').display_name,'小禾');
+});
 test('new trusted conversation is automatically a user without owner confirmation; names never join people',t=>{
   const f=fixture(t),r=f.w.list();assert.equal(by(r,'p1').status,'automatic_confirmed');assert.equal(by(r,'p1').category,'confirmed');
   assert.notEqual(by(r,'p1').id,by(r,'other').id);assert.equal(by(r,'legacy').status,'legacy');

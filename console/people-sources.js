@@ -67,6 +67,27 @@ function collectSources({sources,histories,names,friends,points,sourceValid,prof
     }
     outboundArchives.splice(outboundArchives.indexOf(archive),1);
   }
+  // Canonical bucket wins over reattached outbound aliases. Only full source
+  // plus stable record/attempt/platform-message evidence can collapse rows.
+  // Keep divergent versions on the projected row for audit, never edit storage.
+  for(const uid of Object.keys(projectedHistories)){
+    const seen=new Map(),result=[];
+    for(const row of projectedHistories[uid]){
+      if(row.role!=='assistant'||!sourceValid(row.source)){result.push(row);continue;}
+      const base=hash(identity(row.source)),keys=[['record',row.id],['attempt',row.delivery?.attempt_id],['message',row.delivery?.message_id]]
+        .filter(([,value])=>typeof value==='string'&&value).map(([kind,value])=>hash([base,kind,value]));
+      const existing=keys.map(k=>seen.get(k)).find(Boolean);
+      if(existing){
+        if(hash(row)!==existing.originalHash){
+          existing.row.projection_conflicts||=[];
+          if(!existing.row.projection_conflicts.some(v=>hash(v)===hash(row)))existing.row.projection_conflicts.push(row);
+        }
+        keys.forEach(k=>seen.set(k,existing));continue;
+      }
+      const copy={...row},item={row:copy,originalHash:hash(row)};result.push(copy);keys.forEach(k=>seen.set(k,item));
+    }
+    projectedHistories[uid]=result;
+  }
   const memoryOwners=new Map();
   for(const [uid,o] of origins)if(!o.legacy){const key=memoryKey(o.source);if(!memoryOwners.has(key))memoryOwners.set(key,[]);memoryOwners.get(key).push(uid);}
   for(const item of metadata){

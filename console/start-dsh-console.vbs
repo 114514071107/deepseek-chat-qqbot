@@ -1,8 +1,7 @@
-' ds-niang console launcher (windowless, independent process)
-' double-click, then open http://127.0.0.1:7850 in browser
-Dim shell, fso, dir
+' Wait for the same cmd final result. Hidden window does not imply success.
+Dim shell, fso, dir, result
 Set fso = CreateObject("Scripting.FileSystemObject")
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
 Set shell = CreateObject("WScript.Shell")
-shell.CurrentDirectory = dir
-shell.Run "node """ & dir & "\server.js"" --port 7850", 0, False
+result = shell.Run(Chr(34) & dir & "\start-dsh-console.cmd" & Chr(34), 0, True)
+WScript.Quit result

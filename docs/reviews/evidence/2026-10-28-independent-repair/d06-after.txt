@@ -1,0 +1,1 @@
+{"passed":4,"checks":["503 selection B never displays A and auto-off offers explicit retry","inline retry recovers B","A B C out-of-order response commits C only","320/390 long names reflow and keyboard refresh"]}

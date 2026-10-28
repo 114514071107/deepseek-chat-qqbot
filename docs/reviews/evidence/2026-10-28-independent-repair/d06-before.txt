@@ -1,0 +1,8 @@
+locator.waitFor: Timeout 2500ms exceeded.
+Call log:
+  - waiting for locator('#view [role=alert]') to be visible
+
+    at D:\DSH Workspace\deepseek-chat-qqbot\tests\memory_failure_browser.cjs:14:80 {
+  log: [ "  - waiting for locator('#view [role=alert]') to be visible" ],
+  name: 'TimeoutError'
+}

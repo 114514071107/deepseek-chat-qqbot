@@ -1,0 +1,21 @@
+test_concurrent_duplicate_local_command_charges_sends_and_records_once (test_repair_event_admission.EventAdmissionRegression.test_concurrent_duplicate_local_command_charges_sends_and_records_once) ... FAIL
+
+======================================================================
+FAIL: test_concurrent_duplicate_local_command_charges_sends_and_records_once (test_repair_event_admission.EventAdmissionRegression.test_concurrent_duplicate_local_command_charges_sends_and_records_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_event_admission.py", line 34, in test_concurrent_duplicate_local_command_charges_sends_and_records_once
+    self.assertEqual(len(charges),1);self.assertEqual(len(sends),1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 5 != 1
+
+----------------------------------------------------------------------
+Ran 1 test in 0.145s
+
+FAILED (failures=1)

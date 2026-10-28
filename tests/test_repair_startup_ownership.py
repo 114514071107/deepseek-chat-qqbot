@@ -43,6 +43,7 @@ class ExistingStartOwnership(unittest.TestCase):
             try:
                 result=subprocess.run(args,env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=25)
                 self.assertNotEqual(result.returncode,0,'S01: port alone reported startup success: '+result.stdout)
+                self.assertTrue((root/'.launcher/Bot.json').exists(), 'Launcher never created worker state; primary result: '+result.stdout+result.stderr)
                 state=json.loads((root/'.launcher/Bot.json').read_text(encoding='utf-8-sig'))
                 self.assertFalse(alive(state['pid']),'Newly created failed startup must clean its verified worker')
             finally:subprocess.run([*args,'-Action','Stop'],env=env,capture_output=True,timeout=15)

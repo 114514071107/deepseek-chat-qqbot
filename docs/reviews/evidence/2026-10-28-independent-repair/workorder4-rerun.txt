@@ -1,0 +1,23 @@
+test_actual_http_transport_started_timeout_remains_unknown (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_actual_http_transport_started_timeout_remains_unknown) ... Executing <Task pending name='Task-2' coro=<DeliveryDeadlineRegression.test_actual_http_transport_started_timeout_remains_unknown() running at D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_workorder4_p2.py:226> wait_for=<Future pending cb=[Task.task_wakeup()] created at C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.219 seconds
+ok
+test_authentication_wait_timeout_does_not_close_unused_credential (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_authentication_wait_timeout_does_not_close_unused_credential) ... ok
+test_custom_media_reader_cannot_start_or_run_after_deadline (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_custom_media_reader_cannot_start_or_run_after_deadline) ... ok
+test_deadline_crossing_in_receipt_write_does_not_claim_dispatch (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_deadline_crossing_in_receipt_write_does_not_claim_dispatch) ... ok
+test_executor_queued_media_does_not_start_after_caller_timeout (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_executor_queued_media_does_not_start_after_caller_timeout) ... ok
+test_expired_request_starts_neither_prepare_nor_post (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_expired_request_starts_neither_prepare_nor_post) ... ok
+test_in_flight_message_deadline_is_unknown_and_never_retried (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_in_flight_message_deadline_is_unknown_and_never_retried) ... ok
+test_known_acceptance_survives_deadline_crossing (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_known_acceptance_survives_deadline_crossing) ... ok
+test_media_task_queued_on_loop_cannot_start_after_expiry (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_media_task_queued_on_loop_cannot_start_after_expiry) ... ok
+test_plain_text_checks_deadline_after_preparation_too (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_plain_text_checks_deadline_after_preparation_too) ... ok
+test_post_authentication_deadline_check_prevents_http_post (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_post_authentication_deadline_check_prevents_http_post) ... ok
+test_preparation_cannot_run_past_remaining_deadline (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_preparation_cannot_run_past_remaining_deadline) ... ok
+test_successful_media_stages_keep_original_request_id (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_successful_media_stages_keep_original_request_id) ... ok
+test_upload_finishing_after_deadline_cannot_start_message (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_upload_finishing_after_deadline_cannot_start_message) ... ok
+test_waiting_for_credential_lock_honors_deadline (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_waiting_for_credential_lock_honors_deadline) ... ok
+test_first_image_slow_during_supplemental_gate (test_repair_workorder4_p2.EventProvenanceRegression.test_first_image_slow_during_supplemental_gate) ... ok
+test_supplemental_image_slow_during_first_inject (test_repair_workorder4_p2.EventProvenanceRegression.test_supplemental_image_slow_during_first_inject) ... ok
+
+----------------------------------------------------------------------
+Ran 17 tests in 13.759s
+
+OK

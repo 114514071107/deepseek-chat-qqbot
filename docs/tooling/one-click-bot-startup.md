@@ -98,3 +98,6 @@ Console 的 DSH_RUNTIME_ROOT 支持需与此次 server.js 配套发布；插件�
 命令：`D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s tests -p test_repair_launcher.py`。
 
 测试使用临时中文/空格路径、复制到临时目录的 Python 可执行文件作为 astrbot.exe、合成 run 文件、随机本机端口及有限生命周期 Node 替身；没有导入生产插件或启动真实 Bot。覆盖 PS1 默认 Bot 无 Node、cmd 默认双组件及缺 Console 失败、临时 DPAPI 凭据、并发冷启动、重复启动、失效 PID、启动时间不符、端口冲突、非零退出、超时清理、UTF-8 中文配置与日志、真实 cmd 入口的两种解释器选择及父 Job 独立性。解释器版本与最终结果见补修记录；不能据此宣称真实 QQ 已验收。
+# 2026-10-28 独立 Console 入口补充
+
+`console/start-dsh-console.cmd`（部署后在dsh-console）和VBS均使用同实例shell预检、认证、controller/worker及最终状态；VBS隐藏窗口但等待结果并传播退出码。缺凭据/端口冲突/归属不明准确失败，不能凭端口存在判成功。运行副本默认父目录实例，开发副本沿用默认D:\dsbot，可用`-RuntimeRoot`显式指定；任意cwd和中文空格路径已用临时实例验证。D07只接入口默认root参数，不重写worker内核；旧历史说明保留。

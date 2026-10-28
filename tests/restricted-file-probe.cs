@@ -10,12 +10,14 @@ public static class RestrictedFileProbe {
  [DllImport("advapi32.dll")] static extern bool RevertToSelf();
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CreateFile(string p,uint a,uint s,IntPtr n,uint c,uint f,IntPtr t);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr p);
- public static int[] Probe(string path) {
+ public static int[] Probe(string path) { return ProbeAccess(path,new uint[]{0x80000000,0x40000000},0); }
+ public static int[] ProbeDirectory(string path) { return ProbeAccess(path,new uint[]{2,0x40},0x02000000); }
+ static int[] ProbeAccess(string path,uint[] accesses,uint flags) {
   IntPtr original,restricted=IntPtr.Zero; if(!OpenProcessToken(GetCurrentProcess(),0xB,out original))throw new Exception("OpenToken failed");
   var sid=new SecurityIdentifier("S-1-5-12");byte[] data=new byte[sid.BinaryLength];sid.GetBinaryForm(data,0);IntPtr mem=Marshal.AllocHGlobal(data.Length);Marshal.Copy(data,0,mem,data.Length);
   try {var entry=new SID{Sid=mem,Attributes=0};if(!CreateRestrictedToken(original,1,0,IntPtr.Zero,0,IntPtr.Zero,1,ref entry,out restricted))throw new Exception("CreateRestrictedToken failed");
    if(!ImpersonateLoggedOnUser(restricted))throw new Exception("Impersonation failed");
-   try {var result=new int[2];int i=0;foreach(uint access in new uint[]{0x80000000,0x40000000}) {var handle=CreateFile(path,access,7,IntPtr.Zero,3,0,IntPtr.Zero);result[i++]=handle==new IntPtr(-1)?Marshal.GetLastWin32Error():0;if(handle!=new IntPtr(-1))CloseHandle(handle);}return result;}
+   try {var result=new int[accesses.Length];int i=0;foreach(uint access in accesses) {var handle=CreateFile(path,access,7,IntPtr.Zero,3,flags,IntPtr.Zero);result[i++]=handle==new IntPtr(-1)?Marshal.GetLastWin32Error():0;if(handle!=new IntPtr(-1))CloseHandle(handle);}return result;}
    finally {RevertToSelf();}
   } finally {Marshal.FreeHGlobal(mem);CloseHandle(original);if(restricted!=IntPtr.Zero)CloseHandle(restricted);}
  }

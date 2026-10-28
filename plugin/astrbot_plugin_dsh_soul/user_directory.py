@@ -77,7 +77,17 @@ def _row(store, scope, observed, now):
 
 def _domain(row):
     s = row['source']
-    return [s['platform'], s['instance'], s['bot'], row['app']]
+    return [s['platform'], s['instance'], management_bot(s, row['app']), row['app']]
+
+
+def management_bot(source, app):
+    # Installed official adapter uses these two placeholders for group/C2C.
+    # App is observed from the authenticated SDK token, never raw client data.
+    # Real/unknown bot values retain their own domain. Fingerprints stay intact.
+    if (source['platform'] == 'qq_official' and app and source['instance']
+            and source['bot'] in ('qq_official', 'unknown_selfid')):
+        return ['qq_official_adapter_placeholder']  # tagged value cannot collide with a literal self_id
+    return source['bot']
 
 
 def _code():

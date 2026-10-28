@@ -3143,6 +3143,12 @@ class DshSoul(Star):
     @managed
     async def gate(self, event: AstrMessageEvent):
         event.set_extra("_dsh_admitted", False)
+        from event_admission import reserve, retain
+        # The managed wrapper reserves before any lifecycle await/reset. This
+        # fallback also protects undecorated integration calls to this method.
+        if event.get_extra('_dsh_event_admission') != 'reserved' and not reserve(self,event):
+            return
+        event.set_extra('_dsh_event_admission','consumed')
         item = None
         try:
             scope = self._scope(event)
@@ -3344,6 +3350,7 @@ class DshSoul(Star):
             event.stop_event()
             self._err("gate", e)
         finally:
+            retain(self,event,'gate_complete' if event.get_extra('_dsh_admitted') else 'terminal_or_unknown')
             if item is not None:
                 if not item["images"] and has_img:
                     item["error"] = item["error"] or "图片准备未完成"

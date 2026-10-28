@@ -1,0 +1,35 @@
+test_apply_rejects_new_unreviewed_object_before_changing_any_dacl (test_repair_runtime_acl.RuntimeACL.test_apply_rejects_new_unreviewed_object_before_changing_any_dacl) ... FAIL
+test_inspect_has_no_backup_or_permission_side_effect (test_repair_runtime_acl.RuntimeACL.test_inspect_has_no_backup_or_permission_side_effect) ... FAIL
+test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores (test_repair_runtime_acl.RuntimeACL.test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores) ... FAIL
+
+======================================================================
+FAIL: test_apply_rejects_new_unreviewed_object_before_changing_any_dacl (test_repair_runtime_acl.RuntimeACL.test_apply_rejects_new_unreviewed_object_before_changing_any_dacl)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_runtime_acl.py", line 102, in test_apply_rejects_new_unreviewed_object_before_changing_any_dacl
+    self.assertEqual(planned.returncode, 0, planned.stderr)
+AssertionError: 1 != 0 : protect-config-acl.ps1: A parameter cannot be found that matches parameter name 'RelativeTargets'.
+
+
+======================================================================
+FAIL: test_inspect_has_no_backup_or_permission_side_effect (test_repair_runtime_acl.RuntimeACL.test_inspect_has_no_backup_or_permission_side_effect)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_runtime_acl.py", line 53, in test_inspect_has_no_backup_or_permission_side_effect
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 1 != 0 : protect-config-acl.ps1: Cannot validate argument on parameter 'Mode'. The argument "Inspect" does not belong to the set "Plan,Apply,Restore" specified by the ValidateSet attribute. Supply an argument that is in the set and then try the command again.
+
+
+======================================================================
+FAIL: test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores (test_repair_runtime_acl.RuntimeACL.test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_runtime_acl.py", line 77, in test_runtime_root_protects_code_secrets_logs_and_parent_replacement_then_restores
+    self.assertEqual(planned.returncode, 0, planned.stderr)
+AssertionError: 1 != 0 : protect-config-acl.ps1: A parameter cannot be found that matches parameter name 'RelativeTargets'.
+
+
+----------------------------------------------------------------------
+Ran 3 tests in 4.555s
+
+FAILED (failures=3)

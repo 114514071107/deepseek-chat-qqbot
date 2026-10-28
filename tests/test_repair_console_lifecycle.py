@@ -70,8 +70,13 @@ class ActualConsoleLifecycle(unittest.TestCase):
                     observations=[p.read_text(encoding='utf-8-sig',errors='replace') for p in (root/'.launcher/operations').glob('*')]
                     self.fail('operation did not resolve: '+str(last)+' records='+str(observations))
                 try:
-                    first=launch('Console');self.assertEqual(first.returncode,0,first.stdout+first.stderr)
+                    entry='cmd.exe /d /s /c "'+subprocess.list2cmdline([str(root/'dsh-console/start-dsh-console.cmd'),'-RuntimeRoot',str(root),'-ConsolePort',str(cp),'-TimeoutSeconds','12'])+'"'
+                    first=subprocess.run(entry,cwd=os.environ['SystemRoot'],env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=45)
+                    self.assertEqual(first.returncode,0,first.stdout+first.stderr)
                     before=http('/api/health');self.assertEqual(before['api_ver'],before['frontend_ver'])
+                    repeated=subprocess.run(entry,cwd=os.environ['SystemRoot'],env=env,capture_output=True,encoding='utf-8',errors='replace',timeout=45)
+                    self.assertEqual(repeated.returncode,0,repeated.stdout+repeated.stderr)
+                    self.assertEqual(before['pid'],http('/api/health')['pid'])
                     accepted=http('/api/console',{'action':'restart'})
                     self.assertEqual(accepted['status'],'pending');self.assertFalse(accepted['ok'])
                     done=wait(accepted['id']);self.assertEqual(done['status'],'succeeded',done)

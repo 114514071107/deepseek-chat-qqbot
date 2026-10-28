@@ -1,0 +1,6 @@
+test_real_restart_and_bot_ownership_both_shells (test_repair_console_lifecycle.ActualConsoleLifecycle.test_real_restart_and_bot_ownership_both_shells) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 247.888s
+
+OK

@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$RuntimeRoot = 'D:\dsbot',
+    [string]$RuntimeRoot = $(if ($env:DSH_ENTRY_RUNTIME_ROOT) { $env:DSH_ENTRY_RUNTIME_ROOT } else { 'D:\dsbot' }),
     [switch]$WithConsole = ($env:DSH_LAUNCH_WITH_CONSOLE -eq '1'),
     [ValidateRange(1,120)][int]$TimeoutSeconds = 30,
     [ValidateRange(1,65535)][int]$BotPort = 6185,

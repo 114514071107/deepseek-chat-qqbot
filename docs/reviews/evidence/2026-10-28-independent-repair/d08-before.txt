@@ -1,0 +1,5 @@
+page.waitForFunction: Timeout 30000ms exceeded.
+    at D:\DSH Workspace\deepseek-chat-qqbot\tests\identity_lifecycle_browser.cjs:20:171 {
+  log: [],
+  name: 'TimeoutError'
+}

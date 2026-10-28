@@ -1,0 +1,30 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {seed}=require('./workbench-fixture'),{createUserWorkbench}=require('../user-workbench'),{memoryKey}=require('../people-sources');
+const by=(r,uid)=>r.people.find(p=>p.sources.some(o=>o.uid===uid));
+test('manual merge followed by reliable contradiction isolates histories, notes and directory identities without rewriting decisions',t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-conflict-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const f=seed(root),w=createUserWorkbench(f.data);let r=w.list();
+ w.link({left:by(r,'p1').id,right:by(r,'other').id,revision:r.revision,confirm:true});
+ assert.equal(by(w.list(),'p1').id,by(w.list(),'other').id);
+ const mapping=fs.readFileSync(path.join(f.data,'console_people_v1.json'));
+ fs.mkdirSync(path.join(f.data,'memories'));fs.writeFileSync(path.join(f.data,'memories',memoryKey(f.scopes.p1)+'.md'),'PRIVATE-A-NOTES');
+ const profiles={version:1,sources:{}};
+ for(const uid of ['p1','other'])profiles.sources[uid]={source:f.scopes[uid],app:'fixture-app',observed_at:30,message_id:'proof',identity:{namespace:'qq_user_openid',value:f.scopes[uid].sender,basis:'qq_author_user'}};
+ f.save('workbench_profiles_v1.json',profiles);r=w.list();const a=by(r,'p1'),b=by(r,'other');
+ assert.notEqual(a.id,b.id);assert.ok(a.conflict&&b.conflict);assert.equal(a.sources.length,1);assert.equal(b.sources.length,1);
+ assert.ok(!JSON.stringify(w.history(new URLSearchParams({person:b.id,mode:'all'}))).includes('SYNTHETIC-p1'));
+ assert.ok(!JSON.stringify(w.memory(new URLSearchParams({person:b.id}))).includes('PRIVATE-A-NOTES'));
+ assert.equal(w.list(new URLSearchParams({category:'pending'})).total,2);
+ assert.equal(w.list(new URLSearchParams({q:'private-A'})).people.filter(p=>p.sources.some(o=>o.uid==='other')).length,0);
+ f.save('names_all.json',{p1:'改名'});assert.equal(by(w.list(),'p1').id,a.id);
+ assert.deepEqual(fs.readFileSync(path.join(f.data,'console_people_v1.json')),mapping);
+ // A later group observation can join only the matching private identity.
+ profiles.sources.g1={source:f.scopes.g1,app:'fixture-app',observed_at:31,message_id:'group-proof',identity:{namespace:'qq_user_openid',value:'private-A',basis:'qq_author_pair'}};
+ f.save('workbench_profiles_v1.json',profiles);r=w.list();const changed=by(r,'p1');
+ assert.ok(changed.sources.some(o=>o.uid==='g1'));assert.notEqual(changed.id,by(r,'other').id);
+ assert.ok(!JSON.stringify(w.memory(new URLSearchParams({person:by(r,'other').id}))).includes('PRIVATE-A-NOTES'));
+ w.deny({left:changed.id,right:by(r,'other').id,revision:r.revision,confirm:true});
+ r=w.list();assert.notEqual(by(r,'p1').id,by(r,'other').id);
+ w.unlink({person:by(r,'p1').id,scope:'g1',revision:r.revision,confirm:true});
+ r=w.list();assert.notEqual(by(r,'p1').id,by(r,'g1').id);assert.notEqual(by(r,'p1').id,by(r,'other').id);
+});

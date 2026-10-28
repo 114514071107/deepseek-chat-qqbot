@@ -1,0 +1,51 @@
+test_local_pairing_stops_before_points_model_and_plugin_history_and_respects_disable (test_repair_user_directory.DirectoryGateRegression.test_local_pairing_stops_before_points_model_and_plugin_history_and_respects_disable) ... ok
+test_competing_claim_invalidates_challenge_and_requires_restart (test_repair_user_directory.UserDirectoryRegression.test_competing_claim_invalidates_challenge_and_requires_restart) ... ERROR
+test_conflicting_platform_identity_cannot_report_successful_self_pairing (test_repair_user_directory.UserDirectoryRegression.test_conflicting_platform_identity_cannot_report_successful_self_pairing) ... ERROR
+test_cross_instance_and_unproven_bot_are_isolated (test_repair_user_directory.UserDirectoryRegression.test_cross_instance_and_unproven_bot_are_isolated) ... ok
+test_denied_sources_remain_denied_and_file_lock_never_overwrites (test_repair_user_directory.UserDirectoryRegression.test_denied_sources_remain_denied_and_file_lock_never_overwrites) ... ERROR
+test_expired_cross_app_and_different_group_claims_do_not_bind (test_repair_user_directory.UserDirectoryRegression.test_expired_cross_app_and_different_group_claims_do_not_bind) ... ok
+test_group_claim_cannot_merge_until_original_private_confirms_and_replay_fails (test_repair_user_directory.UserDirectoryRegression.test_group_claim_cannot_merge_until_original_private_confirms_and_replay_fails) ... ERROR
+test_name_is_self_selected_not_qq_nickname_and_normal_chat_never_joins (test_repair_user_directory.UserDirectoryRegression.test_name_is_self_selected_not_qq_nickname_and_normal_chat_never_joins) ... ok
+test_pairing_issuance_is_bounded_and_expired_codes_do_not_return (test_repair_user_directory.UserDirectoryRegression.test_pairing_issuance_is_bounded_and_expired_codes_do_not_return) ... ok
+test_untrusted_event_cannot_write_and_onboarding_is_once_per_source (test_repair_user_directory.UserDirectoryRegression.test_untrusted_event_cannot_write_and_onboarding_is_once_per_source) ... ok
+
+======================================================================
+ERROR: test_competing_claim_invalidates_challenge_and_requires_restart (test_repair_user_directory.UserDirectoryRegression.test_competing_claim_invalidates_challenge_and_requires_restart)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_user_directory.py", line 86, in test_competing_claim_invalidates_challenge_and_requires_restart
+    challenge = re.search(r'ȷ�Ϲ��� ([A-Z2-7]{16})',response)[1]
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_conflicting_platform_identity_cannot_report_successful_self_pairing (test_repair_user_directory.UserDirectoryRegression.test_conflicting_platform_identity_cannot_report_successful_self_pairing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_user_directory.py", line 120, in test_conflicting_platform_identity_cannot_report_successful_self_pairing
+    challenge=re.search(r'ȷ�Ϲ��� ([A-Z2-7]{16})',self.call(g,'�������� '+code))[1]
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_denied_sources_remain_denied_and_file_lock_never_overwrites (test_repair_user_directory.UserDirectoryRegression.test_denied_sources_remain_denied_and_file_lock_never_overwrites)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_user_directory.py", line 105, in test_denied_sources_remain_denied_and_file_lock_never_overwrites
+    challenge = re.search(r'ȷ�Ϲ��� ([A-Z2-7]{16})',self.call(g,'�������� '+code))[1]
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_group_claim_cannot_merge_until_original_private_confirms_and_replay_fails (test_repair_user_directory.UserDirectoryRegression.test_group_claim_cannot_merge_until_original_private_confirms_and_replay_fails)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_user_directory.py", line 59, in test_group_claim_cannot_merge_until_original_private_confirms_and_replay_fails
+    challenge = re.search(r'ȷ�Ϲ��� ([A-Z2-7]{16})', response)[1]
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+TypeError: 'NoneType' object is not subscriptable
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.377s
+
+FAILED (errors=4)

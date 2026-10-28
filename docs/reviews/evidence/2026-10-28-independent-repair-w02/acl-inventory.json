@@ -1,0 +1,85 @@
+{
+  "production_apply": false,
+  "inspect_affected_objects": 46376,
+  "proposal": "Exact per-object DACLs in private acl-rollback.json plus separate drive-root ancestor-dacl.json; no production permission changed",
+  "selected_source_dacl_checks": [
+    {
+      "path": "D:\\dsbot",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\data",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\data\\cmd_config.json",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\data\\plugins",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\data\\plugins\\astrbot_plugin_dsh_soul",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\data\\plugins\\astrbot_plugin_dsh_soul\\main.py",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\dsh-console",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\logs",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\logs\\launcher",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\.launcher",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\deployment-config",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\dsh_data",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\deployment-backups",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\venv",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\astrbot-run.log",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\astrbot-stderr.log",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\console-run.log",
+      "source_dacl_matches": true
+    },
+    {
+      "path": "D:\\dsbot\\console-stderr.log",
+      "source_dacl_matches": true
+    }
+  ],
+  "inspect_broad_access_objects": 35508,
+  "backup_only_maintenance_and_system": true,
+  "reparse_points_seen": 0,
+  "backup_protected": true,
+  "service_account_status": "No owned live Bot/Console at this check; deployment follow-up must verify owner",
+  "snapshot_objects": 46376
+}

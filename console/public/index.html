@@ -94,6 +94,10 @@
   .scene-button[aria-pressed="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
   .source-list { padding-left:20px; overflow-wrap:anywhere; }
   #people-detail select { max-width:100%; }
+  #m-uid,#m-mode,#m-group { max-width:100%; min-width:0; }
+  #m-content,#m-feedback { overflow-wrap:anywhere; min-width:0; }
+  #m-content .grid { grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); }
+  #m-content .grid > * { min-width:0; }
   .people-section { margin:18px 0; border-top:1px solid var(--line); padding-top:12px; }
   .people-section h3 { margin:0; font-size:15px; }
   #people-review { color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; width:min(640px,calc(100% - 24px)); max-height:85vh; overflow:auto; }
@@ -130,7 +134,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261028-identity-2"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261028-repair-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -212,7 +216,7 @@ $("#btn-ref").onclick = () => refreshNow(true);
 setInterval(() => { if ($("#auto-ref").checked) refreshNow(false); }, 5000);
 // 兜底：任何页签的数据请求失败都不许静默卡死，标记后等下轮自动重试
 window.addEventListener("unhandledrejection", (e) => {
-  $("#hdr-status").innerHTML = '<span class="tag bad">请求失败（自动重试中…）</span>';
+  $("#hdr-status").innerHTML = '<span class="tag bad">'+($("#auto-ref").checked?'请求失败，等待下次自动刷新':'请求失败，请手动重试')+'</span>';
   e.preventDefault();
 });
 
@@ -422,7 +426,8 @@ function histEntryHtml(e) {
   if (e.files && e.files.length)
     media += "<div>" + e.files.map((p,i) => '<a href="' + mediaUrl(p) + '" download>附件 ' + (i+1) + '</a>').join(" · ") + "</div>";
   return (e.source_projection?'<div class="h-note">历史来源依据：'+esc(e.source_projection.basis)+'；只读派生，原字段保留</div>':'')+'<div class="msg ' + (e.role === "assistant" ? "a" : "u") + '"><div class="meta">' +
-    (e.role === "assistant" ? "她" : "对方") + " · " + fmtT(e.ts) + "</div>" + esc(txt) + media + "</div>";
+    (e.role === "assistant" ? "她" : "对方") + " · " + fmtT(e.ts) + "</div>" + esc(txt) + media + "</div>"+
+    (e.projection_conflicts?.length?'<details class="h-note"><summary>同一出站记录存在 '+e.projection_conflicts.length+' 份冲突版本（只读审计）</summary><pre>'+esc(JSON.stringify(e.projection_conflicts,null,2))+'</pre></details>':'');
 }
 // 老记录「动作：表情 X」无 sticker 键：按情绪桶取一张示意图（同桶只查一次）
 async function hydrateStickerSamples(root) {
@@ -622,10 +627,25 @@ async function uidSelector() {
 
 const memoryState={person:null,anchor:null,mode:'all',group:'',offset:0};
 let memorySaving=false;
+let memoryCommitted='';
+const memoryKey=state=>JSON.stringify([state.person,state.mode,state.group,state.offset]);
+function showMemoryFailure(node){
+  node.setAttribute('role','alert');
+  const selected=$('#m-uid')?.selectedOptions[0]?.textContent||'当前人物';
+  node.textContent=selected+'：资料加载失败。'+(memoryCommitted===memoryKey(memoryState)?'下方保留该人物上次成功加载的快照。':'未显示其他人物正文。')+($('#auto-ref').checked?'自动刷新已开启，将在下次刷新时重试。':'自动刷新已关闭，请点击重试。');
+  const retry=document.createElement('button');retry.className='act';retry.textContent='重试';retry.onclick=()=>vMemory({refresh:true,manual:true});node.append(retry);
+}
+$('#auto-ref').addEventListener('change',()=>{const node=$('#m-feedback');if(cur==='memory'&&node?.getAttribute('role')==='alert')showMemoryFailure(node);});
 async function vMemory({refresh=false,manual=false}={}) {
   if(memorySaving&&refresh)return;
   const version=++memoryVersion;
   const alive=()=>version===memoryVersion&&cur==='memory';
+  const content=$('#m-content');
+  if(content&&memoryCommitted!==memoryKey(memoryState)){content.replaceChildren();_lastHtml='';}
+  let feedback=$('#m-feedback');
+  if(!feedback){feedback=document.createElement('div');feedback.id='m-feedback';$('#view').prepend(feedback);}
+  feedback.setAttribute('role','status');feedback.textContent='正在加载所选人物资料…';
+  try {
   const people=[];let offset=0;
   do {
     const page=await api('/api/people?limit=100&offset='+offset);
@@ -642,6 +662,8 @@ async function vMemory({refresh=false,manual=false}={}) {
   if(!alive()||refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)))return;
   if(!memory.ok||!history.ok)throw Error(memory.error||history.error||'人物资料加载失败');
   Object.assign(memoryState,next);
+  memoryCommitted=memoryKey(next);
+  $('#hdr-status').textContent='人物资料已更新';
   const reading=refresh?window.ReadingState.capture($('#view')):null;
   const groups=[...new Set(person.sources.filter(o=>o.kind==='group').map(o=>o.group))];
   const scene=row=>row.scene==='private'?'私聊':row.scene==='group'?'群聊 · '+row.group:'旧档 · 场景未知';
@@ -649,8 +671,11 @@ async function vMemory({refresh=false,manual=false}={}) {
     '<label for="m-mode">消息来源</label><select id="m-mode">'+[['all','全部消息'],['private','私聊'],['group','群聊'],['legacy','旧档（场景未知）']].map(([key,label])=>'<option value="'+key+'" '+(key===next.mode?'selected':'')+'>'+label+'</option>').join('')+'</select>'+
     (next.mode==='group'?'<label for="m-group">具体群</label><select id="m-group"><option value="">全部群</option>'+groups.map(g=>'<option value="'+esc(g)+'" '+(g===next.group?'selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+'<button class="act" id="m-load">刷新</button></div>'+
     '<p class="dim">已验证关联的用户共用一个入口；未验证的来源暂时独立建档，无需维护者逐个确认。平台没有提供称呼时，由本人发送「设置称呼 你的称呼」；群聊与私聊可由本人发送「关联身份」验证。旧档没有可靠场景时保留未知标记。</p>'+
-    '<div class="card"><h3>'+esc(person.display_name||person.label)+' · 聊天记录</h3><p class="dim">每来源近期最多 150 条，本页 '+history.entries.length+' 条；完整原档保留。</p><div id="m-history">'+history.entries.map(row=>'<div data-read-key="memory-history:'+esc(row.view_key)+'"><p class="dim">'+esc(scene(row))+' · '+esc(row.speaker)+'</p>'+histEntryHtml(row)+'</div>').join('')+(history.entries.length?'':'<p class="dim">此筛选暂无记录。</p>')+'</div><div class="row"><button class="act" id="m-first" '+(next.offset?'':'hidden')+'>回到最新</button><button class="act" id="m-more" '+(history.next_offset===null?'hidden':'')+'>下一页记录</button></div></div>'+
-    memory.sections.map((section,si)=>'<section class="card" data-read-key="memory-source:'+esc(section.uid)+'"><h3>'+esc(section.label)+'</h3>'+(section.notice?'<p class="dim">'+esc(section.notice)+'</p>':'')+'<div class="grid"><div><h4>念头</h4>'+section.thoughts.map((t,ti)=>'<div class="kv"><span>'+esc(t.text)+' <span class="dim">'+esc(t.src)+' · '+fmtT(t.t)+'</span></span>'+(section.operation_uid?'<button class="act danger" data-memory-delete="'+si+':'+ti+'">删</button>':'')+'</div>').join('')+(section.thoughts.length?'':'<p class="dim">暂无</p>')+'</div><div><h4>长期记忆</h4>'+section.notes.map(n=>'<p class="dim">'+esc(n.note)+'</p><pre>'+esc(n.text)+'</pre>').join('')+(section.notes.length?'':'<p class="dim">暂无独立记忆文件；同一原记忆键在本页只展示一次。</p>')+'</div><div><h4>本来源会话摘要</h4><pre>'+esc(JSON.stringify(section.session,null,2))+'</pre></div><div><h4>本来源学习资料</h4><pre>'+esc(section.memes||'暂无')+'</pre></div></div></section>').join('');
+    '<div id="m-feedback" role="status"></div><div id="m-content"><div class="card"><h3>'+esc(person.display_name||person.label)+' · 聊天记录</h3><p class="dim">每来源近期最多 150 条，本页 '+history.entries.length+' 条；分页和搜索仅覆盖近期滚动记录，不读取完整归档。</p><div id="m-history">'+history.entries.map(row=>'<div data-read-key="memory-history:'+esc(row.view_key)+'"><p class="dim">'+esc(scene(row))+' · '+esc(row.speaker)+'</p>'+histEntryHtml(row)+'</div>').join('')+(history.entries.length?'':'<p class="dim">此筛选暂无记录。</p>')+'</div><div class="row"><button class="act" id="m-first" '+(next.offset?'':'hidden')+'>回到最新</button><button class="act" id="m-more" '+(history.next_offset===null?'hidden':'')+'>下一页记录</button></div></div>'+
+    memory.sections.map((section,si)=>'<section class="card" data-read-key="memory-source:'+esc(section.uid)+'"><h3>'+esc(section.label)+'</h3>'+(section.notice?'<p class="dim">'+esc(section.notice)+'</p>':'')+'<div class="grid"><div><h4>念头</h4>'+section.thoughts.map((t,ti)=>'<div class="kv"><span>'+esc(t.text)+' <span class="dim">'+esc(t.src)+' · '+fmtT(t.t)+'</span></span>'+(section.operation_uid?'<button class="act danger" data-memory-delete="'+si+':'+ti+'">删</button>':'')+'</div>').join('')+(section.thoughts.length?'':'<p class="dim">暂无</p>')+'</div><div><h4>长期记忆</h4>'+section.notes.map(n=>'<p class="dim">'+esc(n.note)+'</p><pre>'+esc(n.text)+'</pre>').join('')+(section.notes.length?'':'<p class="dim">暂无独立记忆文件；同一原记忆键在本页只展示一次。</p>')+'</div><div><h4>本来源会话摘要</h4><pre>'+esc(JSON.stringify(section.session,null,2))+'</pre></div><div><h4>本来源学习资料</h4><pre>'+esc(section.memes||'暂无')+'</pre></div></div></section>').join('')+'</div>';
+  // The shared HTML cache can skip an unchanged refresh; clear its live
+  // loading/error node even when no template replacement was needed.
+  $('#m-feedback').replaceChildren();$('#m-feedback').setAttribute('role','status');
   $('#m-uid').onchange=()=>{memoryState.person=$('#m-uid').value;memoryState.anchor=null;memoryState.offset=0;memoryState.group='';vMemory();};
   $('#m-mode').onchange=()=>{memoryState.mode=$('#m-mode').value;memoryState.group='';memoryState.offset=0;vMemory();};
   if($('#m-group'))$('#m-group').onchange=()=>{memoryState.group=$('#m-group').value;memoryState.offset=0;vMemory();};
@@ -672,6 +697,12 @@ async function vMemory({refresh=false,manual=false}={}) {
   });
   hydrateStickerSamples($('#m-history'));
   if(reading&&alive())reading.restore();
+  } catch(error) {
+    if(!alive())return;
+    const node=$('#m-feedback')||feedback;
+    showMemoryFailure(node);
+    $('#hdr-status').textContent='人物资料加载失败';
+  }
 }
 
 // ---------- 图库页 ----------

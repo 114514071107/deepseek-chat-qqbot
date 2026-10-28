@@ -7,6 +7,7 @@ const at=row=>Number.isFinite(Number(row.ts))?Number(row.ts):0;
 // Recovered aliases can be older than the base file. Select recent rows before paging.
 const recent=rows=>rows.slice().sort((a,b)=>at(a)-at(b)||String(a.id||'').localeCompare(String(b.id||''))||hash(a).localeCompare(hash(b))).slice(-150);
 const decisionKeys=o=>[o.base,...(o.identity_origin?[o.identity_origin]:[]),...(o.decision_aliases||[])];
+const managementBot=(s,app)=>s.platform==='qq_official'&&app&&s.instance&&['qq_official','unknown_selfid'].includes(s.bot)?['qq_official_adapter_placeholder']:s.bot;
 const fail=message=>{throw Object.assign(new Error(message),{statusCode:400});};
 function readBounded(file,fallback,max=32*1024*1024){
   try{if(fs.statSync(file).size>max)fail('工作台读取上限已达到，请缩小原始数据后重试；未修改记录');
@@ -67,15 +68,6 @@ function classify(origins,mapping,aliasOwners){
     if(!merged)roots.push(o.uid);bases.set(exact,roots);
   }
   const claimed=new Set();
-  for(const group of mapping.groups){
-    if(!Array.isArray(group)||group.length>20)fail('人工关联来源上限为20');
-    const raw=[...new Set(group)],active=raw.filter(uid=>origins.has(uid)||aliasOwners.get(uid)?.length===1);
-    if(active.some(uid=>claimed.has(uid)))fail('管理关联文件含重叠来源');active.forEach(uid=>claimed.add(uid));
-    const members=[...new Set(raw.map(uid=>origins.has(uid)?uid:aliasOwners.get(uid)?.length===1?aliasOwners.get(uid)[0]:null).filter(uid=>uid&&origins.has(uid)))];
-    if(members.length>1||(mapping.version===2&&group.length===1&&members.length===1)){
-      members.forEach(uid=>{manual.set(uid,[...(manual.get(uid)||[]),hash(group.slice().sort())]);join(members[0],uid);});
-    }
-  }
   const conflict=rows=>{
     const domains=new Map();
     for(const o of rows){if(o.identity_conflict)return true;if(o.identity_domain){
@@ -83,6 +75,20 @@ function classify(origins,mapping,aliasOwners){
       domains.set(o.identity_domain,o.identity_value);}}
     return false;
   };
+  for(const group of mapping.groups){
+    if(!Array.isArray(group)||group.length>20)fail('人工关联来源上限为20');
+    const raw=[...new Set(group)],active=raw.filter(uid=>origins.has(uid)||aliasOwners.get(uid)?.length===1);
+    if(active.some(uid=>claimed.has(uid)))fail('管理关联文件含重叠来源');active.forEach(uid=>claimed.add(uid));
+    const members=[...new Set(raw.map(uid=>origins.has(uid)?uid:aliasOwners.get(uid)?.length===1?aliasOwners.get(uid)[0]:null).filter(uid=>uid&&origins.has(uid)))];
+    if(members.length>1||(mapping.version===2&&group.length===1&&members.length===1)){
+      // Keep the original decision, but quarantine its whole component on
+      // reliable counterevidence. Unproven archives cannot be assigned a side.
+      const rows=[...new Set(members.flatMap(uid=>membersOf(uid)))];
+      const quarantine=conflict(rows);
+      members.forEach(uid=>{manual.set(uid,[...(manual.get(uid)||[]),hash(group.slice().sort())]);if(!quarantine)join(members[0],uid);});
+      if(quarantine)rows.forEach(o=>conflicted.add(o.uid));
+    }
+  }
   const automatic=new Map();
   for(const o of origins.values())if(!o.legacy)for(const key of [o.identity_key,o.self_identity_key].filter(Boolean)){
     if(!automatic.has(key))automatic.set(key,[]);automatic.get(key).push(o.uid);
@@ -145,7 +151,7 @@ function createUserWorkbench(data){
       const matches=verified.get(o.base)||[];
       if(matches.length!==1||o.observed_app&&matches[0].app!==o.observed_app)continue;
       const row=matches[0],a=o.source,n=row.nickname;
-      o.self_identity_key=hash([a.platform,a.instance,a.bot,row.app,'dsh_self_verified',row.person]);
+      o.self_identity_key=hash([a.platform,a.instance,managementBot(a,row.app),row.app,'dsh_self_verified',row.person]);
       o.observed_app=row.app;
       o.identity_origin ||= hash([a.platform,a.instance,row.app,a.private?'user_openid':'member_openid',a.group,a.sender]);
       o.identity_basis=[o.identity_basis,'用户本人完成的本地称呼/关联验证（仅用于管理展示）'].filter(Boolean).join('；');
@@ -166,7 +172,7 @@ function createUserWorkbench(data){
         '昵称未获取'+(rows.find(o=>o.name)?' / '+(legacy?'历史称呼：':'备注：')+rows.find(o=>o.name).name:'');
       const selfIdentities=[...new Set(rows.map(o=>o.self_identity_key).filter(Boolean))].sort();
       const identities=selfIdentities.length?selfIdentities:[...new Set(rows.map(o=>o.identity_key).filter(Boolean))].sort();
-      const key=manual?['manual',manualKeys]:status==='automatic_confirmed'?(identities.length?['identity',identities]:['source',rows[0].identity_origin||rows[0].base]):rows.map(o=>o.uid);
+      const key=manual?['manual',manualKeys,...(conflict?[rows.map(o=>o.uid).sort()]:[])]:status==='automatic_confirmed'?(identities.length?['identity',identities]:['source',rows[0].identity_origin||rows[0].base]):rows.map(o=>o.uid);
       let last=0;for(const uid of members)for(const row of histories[uid]||[])last=Math.max(last,at(row));
       return {id:'person_'+hash(key),label,display_name:chosen?.value||label,nickname:chosen?.kind==='qq_nickname'?chosen.value:null,profile_kind:chosen?.kind||null,
         profile_at:chosen?.at||null,profile_source_uid:chosen?.uid||null,nickname_conflict:new Set(fields.map(n=>n.kind+':'+n.value)).size>1,status,conflict,

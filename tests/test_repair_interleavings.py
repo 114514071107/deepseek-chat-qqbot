@@ -36,7 +36,7 @@ class PipelineInterleavings(unittest.IsolatedAsyncioTestCase):
             async def waiting():await asyncio.Event().wait()
             old=obj.runtime.spawn(waiting(),key=friend.key)
             for message in ('总开关 关','总开关 开'):
-                event=ScopeEvent('owner');event.message_str=message;event.stop_event=lambda:None
+                event=ScopeEvent('owner');event.message_str=message;event.message_obj.message_id='synthetic-'+message;event.stop_event=lambda:None
                 await obj.gate(event)
             await asyncio.gather(old,return_exceptions=True)
             self.assertTrue(old.cancelled());self.assertEqual(len(sent),2)

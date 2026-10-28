@@ -1,0 +1,35 @@
+[
+  {
+    "shell": "powershell.exe",
+    "exit_code": 1,
+    "live": {},
+    "final": {
+      "stdout": null,
+      "stderr": null
+    },
+    "worker_stdout": "",
+    "worker_stderr": "AuthorizationManager 检查失败。\r\n    + CategoryInfo          : SecurityError: (:) []，ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : UnauthorizedAccess\r\n",
+    "phase": null,
+    "observation_exit": null,
+    "output_route_buffering_exit_verified": false,
+    "worker_exited": true
+  },
+  {
+    "shell": "pwsh.exe",
+    "exit_code": 7,
+    "live": {
+      "stdout": "SYNTHETIC_STDOUT_FLUSH\n",
+      "stderr": "SYNTHETIC_STDERR_FLUSH\n"
+    },
+    "final": {
+      "stdout": "SYNTHETIC_STDOUT_FLUSH\nSYNTHETIC_STDOUT_BUFFERED",
+      "stderr": "SYNTHETIC_STDERR_FLUSH\n"
+    },
+    "worker_stdout": "",
+    "worker_stderr": "",
+    "phase": "exited",
+    "observation_exit": 7,
+    "output_route_buffering_exit_verified": true,
+    "worker_exited": true
+  }
+]
