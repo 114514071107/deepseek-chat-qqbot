@@ -1,0 +1,63 @@
+{
+  "release_commit": "b971dab53e22daba57a31f07a48808cca40e7240",
+  "version": "20261028-repair-1",
+  "runtime_files": 40,
+  "source_staged_runtime_verified": true,
+  "protected_configs_and_identity_files_unchanged": 6,
+  "protected_baseline_files": 6,
+  "snapshot_files": 477,
+  "snapshot_bytes": 58136536,
+  "sqlite_opened": false,
+  "restore_experiment_run": false,
+  "before_service_listeners": 0,
+  "live": {
+    "at": 1793168651.106334,
+    "lease_age_seconds": 0.12,
+    "stopped": false,
+    "plugin_version": "20261028-repair-1",
+    "bot_pid": 41412,
+    "console_pid": 23348,
+    "api_version": "20261028-repair-1",
+    "frontend_version": "20261028-repair-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  },
+  "ownership": {
+    "processes": [
+      {
+        "pid": 41412,
+        "same_as_maintenance": true,
+        "created_utc": "2026-10-28T06:21:23.3454810Z"
+      },
+      {
+        "pid": 23348,
+        "same_as_maintenance": true,
+        "created_utc": "2026-10-28T06:21:39.6670200Z"
+      }
+    ],
+    "listeners": [
+      {
+        "LocalAddress": "127.0.0.1",
+        "LocalPort": 7850,
+        "OwningProcess": 23348
+      },
+      {
+        "LocalAddress": "127.0.0.1",
+        "LocalPort": 6185,
+        "OwningProcess": 41412
+      }
+    ]
+  },
+  "qq_client_delivery_verified": false,
+  "production_acl_applied": false,
+  "production_browser_writes": 0,
+  "gallery_sqlite_sample_skipped": true,
+  "backup": "D:\\dsbot\\deployment-backups\\20261028-user-directory\\independent-repair",
+  "date_shanghai": "2026-10-28T14:24:11.138048+08:00"
+}

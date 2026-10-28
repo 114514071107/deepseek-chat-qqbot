@@ -96,3 +96,15 @@ A01全归档浏览需另立只读索引/全量分页工作单；A02全局统计�
 - I05：[tests/probe_worker_logs.py:16](<D:/DSH Workspace/deepseek-chat-qqbot/tests/probe_worker_logs.py:16>)
 
 本地功能提交 `daa013d1a1b2d27523e88c860b66d31903c8e165` 已固定范围。首次cached diff检查的日志尾空格/测试EOF空行失败未被外层Shell拦住，导致提交先发生；随后追加仅规范空白与此流程记录的提交，检查通过后才配套发布，不改写历史。该偏差不记为首次检查通过。
+
+## 交付状态
+
+本地功能提交daa013d，校正规范记录提交b971dab；已用后者配套部署 `20261028-repair-1`，40份清单/source-staged-runtime匹配，实际新Bot/Console、监听归属、心跳/QQ ready、认证页面均已核。两服务主体等于维护主体。准确执行、备份和回退见[发布记录](../releases/2026-10-28-independent-repair.md)。本轮停写物理快照477文件/58,136,536字节，6份受保护配置和身份文件不变；不连接SQLite或自动迁移数据。原评审3份文档及证据目录仍未跟踪、保持未提交。
+
+补充验证：现版会话隔离专项5项通过exit0（session-isolation-final.txt），Console入口最终专项1项通过exit0（console-entry-final.txt），当前真实配置的有效资源上限只读核对见proactive-budget.json，与前述默认值一致；没有跨job失败预算。最后的源码哈希匹配说明后续测试只使用临时实例，没有暗中更新已部署功能。
+
+本任务已经集中申请必要真实QQ/现有预算模型验收和具体ACL窗口，尚无本任务内明确许可，因此保持待验收/待Apply。用户验收、真实QQ客户端收发、付费费用/长期稳定验收、远端push及main晋级均未完成，不用“已部署”代替这些状态。
+
+最少剩余决定：①审阅W02完整实例与D:\父目录DACL差异并批准具体窗口，或继续保留；②仅旧档人物提供原确认者/时间/理由或本人可验证证据，无法取得则保留无法恢复；③选择主动失败预算/退避/通知政策，提案未启用；④批准指定测试账号/群/私聊范围的QQ及模型实测。无须重复申请同版本部署许可。
+
+清理遗留：首次独立Console红测试因旧异步入口占用cwd而未清理完的合成临时目录 `C:\Users\Rocket\AppData\Local\Temp\dsh 独立 console l22hzdxx` 仍存在。后续精确Remove-Item清理被自动审批拒绝，返回仅为blocked by policy，无更具体原因；已停止删除尝试，只读确认存在。生产部署不受影响，未绕过限制。

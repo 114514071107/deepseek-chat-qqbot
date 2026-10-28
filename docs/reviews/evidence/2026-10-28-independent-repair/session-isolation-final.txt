@@ -1,0 +1,11 @@
+test_existing_explicit_denial_survives_new_conversation_keys (test_repair_session_scope.SessionScopeRegression.test_existing_explicit_denial_survives_new_conversation_keys) ... ok
+test_final_group_request_excludes_framework_legacy_and_private_memory (test_repair_session_scope.SessionScopeRegression.test_final_group_request_excludes_framework_legacy_and_private_memory) ... ok
+test_keys_separate_people_groups_private_and_instances (test_repair_session_scope.SessionScopeRegression.test_keys_separate_people_groups_private_and_instances) ... ok
+test_private_learned_material_cannot_reappear_through_shared_meme_store (test_repair_session_scope.SessionScopeRegression.test_private_learned_material_cannot_reappear_through_shared_meme_store) ... Executing <Task finished name='Task-20' coro=<SessionScopeRegression.test_private_learned_material_cannot_reappear_through_shared_meme_store() done, defined at D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_session_scope.py:52> result=None created at C:\Users\Rocket\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.735 seconds
+ok
+test_switching_groups_does_not_reset_search_cooldown (test_repair_session_scope.SessionScopeRegression.test_switching_groups_does_not_reset_search_cooldown) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 1.108s
+
+OK

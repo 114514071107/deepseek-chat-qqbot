@@ -1,0 +1,25 @@
+{
+  "effective_resources": {
+    "foreground": 2,
+    "background": 1,
+    "media": 2,
+    "background_media": 1,
+    "queue": 8,
+    "deadline": 120,
+    "model_timeout": 45,
+    "tool_timeout": 15,
+    "media_timeout": 65,
+    "model_calls": 6,
+    "tool_steps": 8,
+    "output_tokens": 1024,
+    "input_chars": 48000,
+    "output_chars": 8192,
+    "tool_chars": 4000,
+    "tasks": 64,
+    "archive_bytes": 33554432,
+    "archive_rows": 4000
+  },
+  "proactive_enabled": "default",
+  "cross_job_failure_budget_implemented": false,
+  "production_config_written": false
+}

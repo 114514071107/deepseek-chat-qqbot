@@ -1,0 +1,6 @@
+test_missing_credential_fails_and_cmd_propagates_final_result (test_repair_console_entry.ConsoleEntry.test_missing_credential_fails_and_cmd_propagates_final_result) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 7.051s
+
+OK
