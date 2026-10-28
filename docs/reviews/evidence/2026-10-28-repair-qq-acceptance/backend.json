@@ -1,0 +1,55 @@
+{
+  "at": 1793172218.2523077,
+  "cases": [
+    {
+      "case": "private",
+      "user_rows": 1,
+      "assistant_rows": 1,
+      "expected_reply_recorded": true,
+      "source_private_correct": true,
+      "assistant_delivery_statuses": [
+        "accepted"
+      ],
+      "request_states": [
+        {
+          "request_state": "finished"
+        }
+      ],
+      "private_canary_in_group_assistant": null
+    },
+    {
+      "case": "group",
+      "user_rows": 1,
+      "assistant_rows": 1,
+      "expected_reply_recorded": true,
+      "source_private_correct": true,
+      "assistant_delivery_statuses": [
+        "accepted"
+      ],
+      "request_states": [
+        {
+          "request_state": "finished"
+        }
+      ],
+      "private_canary_in_group_assistant": false
+    }
+  ],
+  "old_directory_sources": 2,
+  "new_directory_sources": 4,
+  "added_sources": 2,
+  "added_pair_is_linked": true,
+  "added_pair_scenes": [
+    "group",
+    "private"
+  ],
+  "prior_nicknames_preserved": true,
+  "pending_challenges": 0,
+  "existing_manual_mapping_unchanged": true,
+  "protected_static_unchanged": true,
+  "sqlite_opened": false,
+  "media_file_selected_or_sent": false,
+  "actual_adapter_group_bot_placeholder": true,
+  "actual_adapter_private_bot_placeholder": true,
+  "same_authenticated_app": true,
+  "same_platform_and_instance": true
+}

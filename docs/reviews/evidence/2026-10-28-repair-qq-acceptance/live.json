@@ -1,0 +1,23 @@
+{
+  "files_verified": 40,
+  "code_unchanged": true,
+  "startup_reused": true,
+  "live": {
+    "at": 1793172339.1066768,
+    "lease_age_seconds": 0.104,
+    "stopped": false,
+    "plugin_version": "20261028-repair-1",
+    "bot_pid": 41412,
+    "console_pid": 23348,
+    "api_version": "20261028-repair-1",
+    "frontend_version": "20261028-repair-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  }
+}

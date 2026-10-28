@@ -1,0 +1,148 @@
+{
+  "counts": {
+    "confirmed_users": 7,
+    "pending_sources": 0,
+    "legacy_archives": 4,
+    "unassigned_legacy_archives": 0,
+    "conversation_sources": 9,
+    "metadata_keys": 5,
+    "raw_keys": 18
+  },
+  "people": [
+    {
+      "person": "P01",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "platform_name",
+      "private_sources": 1,
+      "group_sources": 1,
+      "unknown_archives": 0,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    },
+    {
+      "person": "P02",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "platform_name",
+      "private_sources": 1,
+      "group_sources": 2,
+      "unknown_archives": 1,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    },
+    {
+      "person": "P03",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "self_selected",
+      "private_sources": 1,
+      "group_sources": 1,
+      "unknown_archives": 1,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 2
+    },
+    {
+      "person": "P04",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "platform_name",
+      "private_sources": 0,
+      "group_sources": 1,
+      "unknown_archives": 0,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    },
+    {
+      "person": "P05",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "missing",
+      "private_sources": 0,
+      "group_sources": 1,
+      "unknown_archives": 0,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    },
+    {
+      "person": "P06",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "missing",
+      "private_sources": 0,
+      "group_sources": 0,
+      "unknown_archives": 1,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    },
+    {
+      "person": "P07",
+      "status": "manual_confirmed",
+      "conflict": false,
+      "nickname_kind": "missing",
+      "private_sources": 0,
+      "group_sources": 0,
+      "unknown_archives": 1,
+      "manual_decision": true,
+      "natural_person_evidence": "requires_original_confirmation_evidence",
+      "notes_files": 0
+    }
+  ],
+  "total": 7,
+  "unresolved_mapping_references": 0,
+  "outbound_only_archives": 0,
+  "stores": {
+    "history_all.json": {
+      "exists": true,
+      "entries": 4,
+      "rows": 303
+    },
+    "history_v2.json": {
+      "exists": true,
+      "entries": 9,
+      "rows": 453
+    },
+    "scopes_v2.json": {
+      "exists": true,
+      "entries": 9
+    },
+    "workbench_profiles_v1.json": {
+      "exists": true,
+      "entries": 8
+    },
+    "console_people_v1.json": {
+      "exists": true,
+      "entries": 3
+    },
+    "user_directory_v1.json": {
+      "exists": true,
+      "entries": 4
+    },
+    "delivery_receipts_v2.json": {
+      "exists": true,
+      "entries": 9
+    },
+    "history_archive.jsonl": {
+      "exists": true,
+      "lines": 323,
+      "with_source": 0,
+      "request_states": 0
+    },
+    "history_archive_v2.jsonl": {
+      "exists": true,
+      "lines": 812,
+      "with_source": 812,
+      "request_states": 169
+    }
+  },
+  "files_read": 27,
+  "read_hashes_unchanged": true,
+  "sqlite_connected": false,
+  "real_data_written": false
+}

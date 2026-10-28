@@ -29,3 +29,7 @@
 备份目录 **`D:\dsbot\deployment-backups\20261028-user-directory\independent-repair`**：release-manifest/release-version、previous-code、staged、停写数据及manifest、六文件前置哈希、source-b971dab…zip（CRC通过）、Stop/Start输出、process-ownership、live-verification、browser-live、final-summary及rollback-code.ps1。backup目录仅继承已保护父目录，无Users/AuthUsers Allow；D:\祖先替换风险另见D03，不以备份私有化宣称宿主边界完整。
 
 当前状态：**已部署，待独立验收/用户试用；未push、未PR、未合并main**。生产ACL未Apply、业务数据未迁移/恢复/清理；旧资料与新增资料保留。回退仅按本目录同版清单恢复代码/入口，不把旧业务快照自动还原。详见[脱敏生效证据](../reviews/evidence/2026-10-28-independent-repair/deployment-summary.json)。
+
+## 获准真实QQ专项后的状态补充
+
+2026-10-28，用户明确许可后，复用本轮同版新启动证据，重新核40文件/实际进程/心跳/QQ ready；指定账号的群与私聊模型消息、身份帮助及跨场景认领确认/过期/重放已实际收发，详见[专项矩阵](../reviews/2026-10-28-repair-real-qq-acceptance.md)。不重复部署/重启。自助目录因正常验证命令新增两条来源并关联，旧称呼及原人工映射保持，其余5份配置/凭据/人工映射哈希不变；不恢复发布前目录快照。媒体实收/账单/长期稳定未验收，ACL窗口另行安排、不Apply，未push/PR/main。

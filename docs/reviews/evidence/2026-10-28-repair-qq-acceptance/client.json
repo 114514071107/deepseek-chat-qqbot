@@ -1,0 +1,62 @@
+{
+  "authorized_test_account_verified_by_profile": true,
+  "authorized_group_verified_by_group_card": true,
+  "official_bot_badge_and_existing_conversation_verified": true,
+  "another_logged_in_account_not_used": true,
+  "cases": [
+    {
+      "id": "Q01",
+      "operation": "private identity help",
+      "client_reply_verified": true,
+      "paid_model_request": false
+    },
+    {
+      "id": "Q02",
+      "operation": "first issue, group claim, delayed private confirmation",
+      "group_challenge_received": true,
+      "private_confirmation_rejected_after_expiry": true,
+      "seconds_since_issue_at_readonly_probe": 358.5,
+      "binding_created": false
+    },
+    {
+      "id": "Q03",
+      "operation": "new issue, group claim, original private confirmation",
+      "client_success_verified": true,
+      "backend_same_person_verified": true
+    },
+    {
+      "id": "Q04",
+      "operation": "replay used confirmation code",
+      "new_client_rejection_verified": true
+    },
+    {
+      "id": "Q05",
+      "operation": "private foreground model request R1P-1028A",
+      "client_expected_reply_verified": true,
+      "reply": "验收私聊77"
+    },
+    {
+      "id": "Q06",
+      "operation": "group foreground model request R1G-1028A",
+      "client_expected_reply_verified": true,
+      "reply": "验收群聊81",
+      "complete_private_synthetic_canary_visible": false
+    },
+    {
+      "id": "Q07",
+      "operation": "synthetic media selection",
+      "client_media_sent": false,
+      "file_dialog_cancelled": true,
+      "status": "not_verified",
+      "reason": "native dialog editable element unavailable in cached app state; focus could not be reliably bound"
+    }
+  ],
+  "intentional_test_messages_sent": 10,
+  "foreground_model_requests": 2,
+  "provider_bill_verified": false,
+  "production_fault_injection": false,
+  "actual_duplicate_platform_id_tested": false,
+  "raw_client_screenshots_saved": false,
+  "raw_pairing_codes_saved": false,
+  "acl_apply": false
+}
