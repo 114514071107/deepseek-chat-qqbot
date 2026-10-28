@@ -75,7 +75,7 @@ test_state_changes_points_and_chat_do_not_restore_old_snapshots (test_repair_int
 test_child_exit_code_is_preserved_under_both_real_shells (test_repair_launcher.LauncherExitCodeRegression.test_child_exit_code_is_preserved_under_both_real_shells) ... ok
 test_cmd_selects_once_and_preserves_quoted_arguments_and_exit_code (test_repair_launcher.LauncherExitCodeRegression.test_cmd_selects_once_and_preserves_quoted_arguments_and_exit_code) ... ok
 test_fast_worker_exit_before_identity_uses_its_exact_observation (test_repair_launcher.LauncherExitCodeRegression.test_fast_worker_exit_before_identity_uses_its_exact_observation) ... ok
-test_same_core_under_both_shells_and_explorer_entry (test_repair_launcher.LauncherRegression.test_same_core_under_both_shells_and_explorer_entry) ... 
+test_same_core_under_both_shells_and_explorer_entry (test_repair_launcher.LauncherRegression.test_same_core_under_both_shells_and_explorer_entry) ...
   test_same_core_under_both_shells_and_explorer_entry (test_repair_launcher.LauncherRegression.test_same_core_under_both_shells_and_explorer_entry) (shell='powershell.exe') ... FAIL
 test_verified_legacy_orphan_is_stopped_without_targeting_port_owner_alone (test_repair_legacy_console_stop.LegacyConsoleStop.test_verified_legacy_orphan_is_stopped_without_targeting_port_owner_alone) ... ok
 test_actual_loaded_hook_does_not_duplicate_loops_and_terminate_waits (test_repair_lifecycle.LifecycleRegression.test_actual_loaded_hook_does_not_duplicate_loops_and_terminate_waits) ... ok
@@ -162,26 +162,26 @@ test_installed_ready_handler_produces_required_metadata (test_repair_platform_re
 test_missing_or_changed_sdk_contract_is_unknown (test_repair_platform_ready.PlatformReady.test_missing_or_changed_sdk_contract_is_unknown) ... ok
 test_only_current_ready_and_open_sockets_count (test_repair_platform_ready.PlatformReady.test_only_current_ready_and_open_sockets_count) ... ok
 test_auth_failure_open_connection_invalidates_confirmation (test_repair_platform_resume.ResumeReadiness.test_auth_failure_open_connection_invalidates_confirmation) ... [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
-[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功! 
+[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功!
 [INFO]	(gateway.py:56)on_closed	[botpy] 关闭, 返回码: 4004, 返回信息: synthetic
 [INFO]	(gateway.py:58)on_closed	[botpy] 鉴权失败，重置token...
 ok
 test_authenticated_resumed_is_ready_then_invalid_session_revokes (test_repair_platform_resume.ResumeReadiness.test_authenticated_resumed_is_ready_then_invalid_session_revokes) ... [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
-[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功! 
+[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功!
 ok
 test_closed_old_socket_and_unconfirmed_second_socket_never_prove_ready (test_repair_platform_resume.ResumeReadiness.test_closed_old_socket_and_unconfirmed_second_socket_never_prove_ready) ... [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
 [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
-[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功! 
+[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功!
 ok
 test_first_ready_on_observed_connection_is_confirmed (test_repair_platform_resume.ResumeReadiness.test_first_ready_on_observed_connection_is_confirmed) ... [INFO]	(gateway.py:142)ws_identify	[botpy] 鉴权中...
 [INFO]	(gateway.py:85)on_message	[botpy] 机器人「synthetic」启动成功！
 ok
 test_pinned_adapter_connector_installs_before_resumed_event (test_repair_platform_resume.ResumeReadiness.test_pinned_adapter_connector_installs_before_resumed_event) ... ok
 test_resume_without_current_auth_attempt_is_not_ready (test_repair_platform_resume.ResumeReadiness.test_resume_without_current_auth_attempt_is_not_ready) ... [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
-[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功! 
+[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功!
 ok
 test_sequential_runtime_reload_preserves_same_connection_receipt (test_repair_platform_resume.ResumeReadiness.test_sequential_runtime_reload_preserves_same_connection_receipt) ... [INFO]	(gateway.py:175)ws_resume	[botpy] 重连启动...
-[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功! 
+[INFO]	(gateway.py:90)on_message	[botpy] 机器人重连成功!
 ok
 test_full_tool_set_proxy_survives_inject_and_both_permission_layers (test_repair_proxy_integration.ProxyIntegration.test_full_tool_set_proxy_survives_inject_and_both_permission_layers) ... ok
 test_cancel_in_flight_message_preserves_unknown_result_and_closes_credential (test_repair_qq_delivery.QQDeliveryRegression.test_cancel_in_flight_message_preserves_unknown_result_and_closes_credential) ... ok
@@ -347,7 +347,7 @@ test_raw_author_pair_maps_only_with_app_and_matching_sender_group_message (test_
 test_real_scope_path_retains_provenance_for_management_profiles (test_repair_user_profiles.ProfileCaptureRegression.test_real_scope_path_retains_provenance_for_management_profiles) ... ok
 test_same_scope_under_a_different_application_cannot_reuse_old_identity_proof (test_repair_user_profiles.ProfileCaptureRegression.test_same_scope_under_a_different_application_cannot_reuse_old_identity_proof) ... ok
 test_sparse_later_event_preserves_prior_identity_evidence_and_its_time (test_repair_user_profiles.ProfileCaptureRegression.test_sparse_later_event_preserves_prior_identity_evidence_and_its_time) ... ok
-test_application_dies_with_worker_under_real_supported_shells (test_repair_worker_job.WorkerJob.test_application_dies_with_worker_under_real_supported_shells) ... 
+test_application_dies_with_worker_under_real_supported_shells (test_repair_worker_job.WorkerJob.test_application_dies_with_worker_under_real_supported_shells) ...
   test_application_dies_with_worker_under_real_supported_shells (test_repair_worker_job.WorkerJob.test_application_dies_with_worker_under_real_supported_shells) (shell='powershell.exe') ... FAIL
 test_gate_batch_final_openai_blocks_and_model_budget (test_repair_workorder4_integration.FrameworkInputRegression.test_gate_batch_final_openai_blocks_and_model_budget) ... ok
 test_actual_http_transport_started_timeout_remains_unknown (test_repair_workorder4_p2.DeliveryDeadlineRegression.test_actual_http_transport_started_timeout_remains_unknown) ... ok
@@ -453,7 +453,7 @@ During handling of the above exception, another exception occurred:
 Traceback (most recent call last):
   File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_worker_job.py", line 52, in test_application_dies_with_worker_under_real_supported_shells
     self.assertEqual(stopped.returncode,0,stopped.stdout.decode('utf-8',errors='replace'))
-AssertionError: 1 != 0 : 
+AssertionError: 1 != 0 :
 
 ----------------------------------------------------------------------
 Ran 320 tests in 710.875s

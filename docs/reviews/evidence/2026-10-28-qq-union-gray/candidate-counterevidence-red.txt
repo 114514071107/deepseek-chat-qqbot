@@ -1,6 +1,6 @@
 exit=1
 test_missing_sdk_app_preserves_previous_author_proof (__main__.PromotionPersistence.test_missing_sdk_app_preserves_previous_author_proof) ... FAIL
-test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) ... 
+test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) ...
   test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union=None) ... FAIL
   test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union='UNION-A') ... FAIL
 test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof) ... ok
