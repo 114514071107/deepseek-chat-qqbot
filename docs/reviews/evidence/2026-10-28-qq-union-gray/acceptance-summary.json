@@ -1,0 +1,39 @@
+{
+  "receipt_summary": [
+    {
+      "private": true,
+      "new_receipts": 1,
+      "statuses": [
+        "accepted"
+      ],
+      "stages": [
+        "message"
+      ]
+    },
+    {
+      "private": false,
+      "new_receipts": 1,
+      "statuses": [
+        "accepted"
+      ],
+      "stages": [
+        "message"
+      ]
+    }
+  ],
+  "people_total": 7,
+  "people_conflicts": 0,
+  "canary_active": false,
+  "authenticated_get_ok": true,
+  "auth_checks": {
+    "401": true,
+    "403": true
+  },
+  "qq_ready": {
+    "status": "ready",
+    "configured": 1,
+    "ready": 1
+  },
+  "files_verified": 44,
+  "source_commit": "867b733bb1a4c301101649b37eada6e84ef1949b"
+}

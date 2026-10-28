@@ -1,0 +1,266 @@
+[
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\main.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\main.py",
+    "source_sha256": "433a16bb1c1a6d643616d06e9eb0702c938077eed459f81c4b1b8502dab73539",
+    "staged_sha256": "d4c53fff88cda573bb94c06cc8f22be4f56423c7ee0ba8483f6d249412f55dd1"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\websearch.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\websearch.py",
+    "source_sha256": "70511257db05c628e0830c9573b4b573cbb8f42fc47785460c159082df484319",
+    "staged_sha256": "70511257db05c628e0830c9573b4b573cbb8f42fc47785460c159082df484319"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\network_safety.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\network_safety.py",
+    "source_sha256": "603c6de4c3e5fd50d2e8f0abc89ed03e264cde15fddb385b371d833ca1a3a6df",
+    "staged_sha256": "603c6de4c3e5fd50d2e8f0abc89ed03e264cde15fddb385b371d833ca1a3a6df"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\tool_permissions.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\tool_permissions.py",
+    "source_sha256": "58e49488bceaff650af1afc8759df31e97032c89bc71dd43b6fe54fa31375c2c",
+    "staged_sha256": "58e49488bceaff650af1afc8759df31e97032c89bc71dd43b6fe54fa31375c2c"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\file_safety.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\file_safety.py",
+    "source_sha256": "e3c0af5979da7805d6a8821c0b04e85e21b507cd82e6c3d6b75050bd0bae35b8",
+    "staged_sha256": "e3c0af5979da7805d6a8821c0b04e85e21b507cd82e6c3d6b75050bd0bae35b8"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\chat_style.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\chat_style.py",
+    "source_sha256": "b939a2965e075135793d0aed1615ab1d5b784433649180ee088eacac620ba9e5",
+    "staged_sha256": "b939a2965e075135793d0aed1615ab1d5b784433649180ee088eacac620ba9e5"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\session_scope.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\session_scope.py",
+    "source_sha256": "683c7782e1a172d2f79881236ab06d482759d51bf28d3acc96f69e6bbd811b1f",
+    "staged_sha256": "683c7782e1a172d2f79881236ab06d482759d51bf28d3acc96f69e6bbd811b1f"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\task_runtime.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\task_runtime.py",
+    "source_sha256": "166194f56535b36f141ab228385f0ee77ce29dda03a696fdb294b8daca58e63c",
+    "staged_sha256": "166194f56535b36f141ab228385f0ee77ce29dda03a696fdb294b8daca58e63c"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\state_store.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\state_store.py",
+    "source_sha256": "bbc846bc21c5d01412e2975966a78986ac3ce4682374d7fe566de54f40e305d0",
+    "staged_sha256": "bbc846bc21c5d01412e2975966a78986ac3ce4682374d7fe566de54f40e305d0"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\admin_bridge.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\admin_bridge.py",
+    "source_sha256": "14177302a183956e7f0790716bc182b03ee2844886981690a8b35a1f250715ea",
+    "staged_sha256": "14177302a183956e7f0790716bc182b03ee2844886981690a8b35a1f250715ea"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\qq_delivery.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\qq_delivery.py",
+    "source_sha256": "8fe238312b3def21c70f91041d8106e39894e509aaa22a3dbb9a32707592b719",
+    "staged_sha256": "8fe238312b3def21c70f91041d8106e39894e509aaa22a3dbb9a32707592b719"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\reply_completion.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\reply_completion.py",
+    "source_sha256": "f1c4017ad911ec28855e02ea13f78715e4eb6b224909f98d84d04d29528c1474",
+    "staged_sha256": "f1c4017ad911ec28855e02ea13f78715e4eb6b224909f98d84d04d29528c1474"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\reply_integration.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\reply_integration.py",
+    "source_sha256": "7d5094d20e495ace102b4cbbb301d6f4459777af6427cfc5e34d436e6be0b817",
+    "staged_sha256": "7d5094d20e495ace102b4cbbb301d6f4459777af6427cfc5e34d436e6be0b817"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\batch_input.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\batch_input.py",
+    "source_sha256": "ec6ea075e5d4685603db41ff568d0cc623e73906fa9ff096ce1907ee150679f0",
+    "staged_sha256": "ec6ea075e5d4685603db41ff568d0cc623e73906fa9ff096ce1907ee150679f0"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\context_window.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\context_window.py",
+    "source_sha256": "0cc11c144ab3e990a3bf3727ef238e065b4828cf96cf2e9e30a329cd13ae3596",
+    "staged_sha256": "0cc11c144ab3e990a3bf3727ef238e065b4828cf96cf2e9e30a329cd13ae3596"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\model_integration.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\model_integration.py",
+    "source_sha256": "39801ea81df292700f3efd5abde8c57dd2403a0aac5892bf05859d08541cfbef",
+    "staged_sha256": "39801ea81df292700f3efd5abde8c57dd2403a0aac5892bf05859d08541cfbef"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\resource_budget.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\resource_budget.py",
+    "source_sha256": "e4a5bcda7073d8488ffe9fd77119cfc122dc9bab4eaaec9d5889354b549f230b",
+    "staged_sha256": "e4a5bcda7073d8488ffe9fd77119cfc122dc9bab4eaaec9d5889354b549f230b"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\user_profiles.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\user_profiles.py",
+    "source_sha256": "4e8f4450e3b4b9f9dacdbfd927b0f2df0634de26045a8864d4924cece26f9de6",
+    "staged_sha256": "4e8f4450e3b4b9f9dacdbfd927b0f2df0634de26045a8864d4924cece26f9de6"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_ds_balance\\main.py",
+    "runtime": "data\\plugins\\astrbot_plugin_ds_balance\\main.py",
+    "source_sha256": "965d183c47426c193212b1366aa6f03f6ed2f70f10077127a23f7078b82db552",
+    "staged_sha256": "965d183c47426c193212b1366aa6f03f6ed2f70f10077127a23f7078b82db552"
+  },
+  {
+    "source": "console\\server.js",
+    "runtime": "dsh-console\\server.js",
+    "source_sha256": "7ef55cf4bb4d6c24bc7e94c9ba5a8a0900b22b0deac27795e64dc80216d0b527",
+    "staged_sha256": "a46e2e63193aa6da442f472d50dccc77d86191b636ea09fc84ce7360839fba7e"
+  },
+  {
+    "source": "console\\state-bridge.js",
+    "runtime": "dsh-console\\state-bridge.js",
+    "source_sha256": "6329f374056a081cb5b9d539f56c018d45104f925b1644f1747c5024858b2035",
+    "staged_sha256": "6329f374056a081cb5b9d539f56c018d45104f925b1644f1747c5024858b2035"
+  },
+  {
+    "source": "console\\people-sources.js",
+    "runtime": "dsh-console\\people-sources.js",
+    "source_sha256": "65d273aa175b70f8806ebd30007d88aa7f40e63130ab0a647884621067af36ad",
+    "staged_sha256": "65d273aa175b70f8806ebd30007d88aa7f40e63130ab0a647884621067af36ad"
+  },
+  {
+    "source": "console\\user-workbench.js",
+    "runtime": "dsh-console\\user-workbench.js",
+    "source_sha256": "5728553c3c3be34fd0479d82191e23e674709d08e8a1edd10645bf2d4a055e94",
+    "staged_sha256": "5728553c3c3be34fd0479d82191e23e674709d08e8a1edd10645bf2d4a055e94"
+  },
+  {
+    "source": "console\\public\\user-workbench.js",
+    "runtime": "dsh-console\\public\\user-workbench.js",
+    "source_sha256": "8d5be32fad2b6a20f2453c90664b01f57ff7d34c89501d9a180cde5bdcbe9b9c",
+    "staged_sha256": "8d5be32fad2b6a20f2453c90664b01f57ff7d34c89501d9a180cde5bdcbe9b9c"
+  },
+  {
+    "source": "console\\public\\reading-state.js",
+    "runtime": "dsh-console\\public\\reading-state.js",
+    "source_sha256": "d74d85cd1991971995e69560589c2dbceead6ec70389693e0a8868d8cd944d46",
+    "staged_sha256": "d74d85cd1991971995e69560589c2dbceead6ec70389693e0a8868d8cd944d46"
+  },
+  {
+    "source": "console\\public\\index.html",
+    "runtime": "dsh-console\\public\\index.html",
+    "source_sha256": "5bee09d21c3b59f88a50482bbe7126383b39df9da70ba91c424b534e60168b99",
+    "staged_sha256": "5bee09d21c3b59f88a50482bbe7126383b39df9da70ba91c424b534e60168b99"
+  },
+  {
+    "source": "scripts\\start-bot.cmd",
+    "runtime": "start-bot.cmd",
+    "source_sha256": "748df6f06b132ab3e2ec7b71c4d1c15609b575d01432c949df0371c56cb752be",
+    "staged_sha256": "748df6f06b132ab3e2ec7b71c4d1c15609b575d01432c949df0371c56cb752be"
+  },
+  {
+    "source": "scripts\\start-bot.ps1",
+    "runtime": "start-bot.ps1",
+    "source_sha256": "6d4d27e2b84e2c4456f8652979162e2655a79560dfe525d1ea352e2f7abdd83b",
+    "staged_sha256": "6d4d27e2b84e2c4456f8652979162e2655a79560dfe525d1ea352e2f7abdd83b"
+  },
+  {
+    "source": "scripts\\launcher-process.cs",
+    "runtime": "launcher-process.cs",
+    "source_sha256": "3597c769212a7f3cd91336cdd7cb301d1dfa1117e1e31b25a6019bc7a5462d42",
+    "staged_sha256": "3597c769212a7f3cd91336cdd7cb301d1dfa1117e1e31b25a6019bc7a5462d42"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\build_info.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\build_info.py",
+    "source_sha256": "22db4dd40ac8400471c3782e577b379c9981ff0ad7610bbb4c114017315a7674",
+    "staged_sha256": "22db4dd40ac8400471c3782e577b379c9981ff0ad7610bbb4c114017315a7674"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\gallery_policy.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\gallery_policy.py",
+    "source_sha256": "baaf9f593839edf42b0befd35e5da9bcfba77215d3eb763f987918469f03c6ba",
+    "staged_sha256": "baaf9f593839edf42b0befd35e5da9bcfba77215d3eb763f987918469f03c6ba"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\gallery_query.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\gallery_query.py",
+    "source_sha256": "7eaf6915485197e025d237b9af835ffb60d8fcdd1ac9d62f6e6c0f63f2c92e82",
+    "staged_sha256": "7eaf6915485197e025d237b9af835ffb60d8fcdd1ac9d62f6e6c0f63f2c92e82"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\public-gallery-source.json",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\public-gallery-source.json",
+    "source_sha256": "05cc27e1f45ef052c27ee39df0ad5add79c96e684efe02aba0cc74ec5e49b04e",
+    "staged_sha256": "05cc27e1f45ef052c27ee39df0ad5add79c96e684efe02aba0cc74ec5e49b04e"
+  },
+  {
+    "source": "console\\lifecycle.js",
+    "runtime": "dsh-console\\lifecycle.js",
+    "source_sha256": "8a0b60376a4088f800ca80988e34d662cfbc7508cdbc963d4963246189c0e95d",
+    "staged_sha256": "8a0b60376a4088f800ca80988e34d662cfbc7508cdbc963d4963246189c0e95d"
+  },
+  {
+    "source": "scripts\\launcher-shell.ps1",
+    "runtime": "launcher-shell.ps1",
+    "source_sha256": "7ae0b06238ff741a773cbcbdca191bc7381299642e07673c6f009d0db81d11b7",
+    "staged_sha256": "7ae0b06238ff741a773cbcbdca191bc7381299642e07673c6f009d0db81d11b7"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\qq_readiness.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\qq_readiness.py",
+    "source_sha256": "b987b73945677a95e31f7abb36da0e1723774d2a03a7264cd21b5be6bc4f1f2e",
+    "staged_sha256": "b987b73945677a95e31f7abb36da0e1723774d2a03a7264cd21b5be6bc4f1f2e"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\user_directory.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\user_directory.py",
+    "source_sha256": "45677ba87bc50a581c8829d3101f1b619f9bf594231958c7e297ee645941e4a9",
+    "staged_sha256": "45677ba87bc50a581c8829d3101f1b619f9bf594231958c7e297ee645941e4a9"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\event_admission.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\event_admission.py",
+    "source_sha256": "dbd7ef24fc6352edbb4d1e0ebf4fd645b9497e9c31997c4354881fc53fd23956",
+    "staged_sha256": "dbd7ef24fc6352edbb4d1e0ebf4fd645b9497e9c31997c4354881fc53fd23956"
+  },
+  {
+    "source": "console\\start-dsh-console.cmd",
+    "runtime": "dsh-console\\start-dsh-console.cmd",
+    "source_sha256": "0f57931736c1ee2f25f13b7a883d6fae7b2749ec47366f9254f6786e05d26f53",
+    "staged_sha256": "0f57931736c1ee2f25f13b7a883d6fae7b2749ec47366f9254f6786e05d26f53"
+  },
+  {
+    "source": "console\\start-dsh-console.vbs",
+    "runtime": "dsh-console\\start-dsh-console.vbs",
+    "source_sha256": "256de4406a371ad3dd3b96e0c7f5e6be0c22d0b4b104cd7f41a5709dfcc5c123",
+    "staged_sha256": "256de4406a371ad3dd3b96e0c7f5e6be0c22d0b4b104cd7f41a5709dfcc5c123"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\union_user_profiles.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\union_user_profiles.py",
+    "source_sha256": "1156b20efb3281079a342d65c725ed02f2e10a7bdce13ecb222b04bc7951f713",
+    "staged_sha256": "1156b20efb3281079a342d65c725ed02f2e10a7bdce13ecb222b04bc7951f713"
+  },
+  {
+    "source": "plugin\\astrbot_plugin_dsh_soul\\union_rollout.py",
+    "runtime": "data\\plugins\\astrbot_plugin_dsh_soul\\union_rollout.py",
+    "source_sha256": "5b3e4c41ac61bbd19b287003c3b26b281a5b8182cbf6d358631c012d72b59b9e",
+    "staged_sha256": "5b3e4c41ac61bbd19b287003c3b26b281a5b8182cbf6d358631c012d72b59b9e"
+  },
+  {
+    "source": "console\\union-rollout.js",
+    "runtime": "dsh-console\\union-rollout.js",
+    "source_sha256": "51763b77217c2deef86e5981eddb199893bdaf35acccd4d8c726af2284d76004",
+    "staged_sha256": "51763b77217c2deef86e5981eddb199893bdaf35acccd4d8c726af2284d76004"
+  },
+  {
+    "source": "console\\legacy-profile.js",
+    "runtime": "dsh-console\\legacy-profile.js",
+    "source_sha256": "3baba147a69589799fcf174c35c4017cb0e274a0df7af67ffb500d52bdf8f90d",
+    "staged_sha256": "3baba147a69589799fcf174c35c4017cb0e274a0df7af67ffb500d52bdf8f90d"
+  }
+]

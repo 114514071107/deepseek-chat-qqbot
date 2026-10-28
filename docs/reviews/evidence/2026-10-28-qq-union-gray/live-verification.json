@@ -1,0 +1,22 @@
+{
+  "snapshot": {
+    "at": 1793200740.4088683,
+    "lease_age_seconds": 0.056,
+    "stopped": false,
+    "plugin_version": "20261028-union-gray-1",
+    "bot_pid": 27228,
+    "console_pid": 23096,
+    "api_version": "20261028-union-gray-1",
+    "frontend_version": "20261028-union-gray-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  },
+  "files": 44,
+  "hashes_match": true
+}

@@ -1,0 +1,20 @@
+{
+  "count": 2,
+  "observations": [
+    {
+      "private": false,
+      "accepted": true,
+      "union_valid": false,
+      "union_present": true,
+      "union_nonempty": false
+    },
+    {
+      "private": true,
+      "accepted": true,
+      "union_valid": false,
+      "union_present": true,
+      "union_nonempty": false
+    }
+  ],
+  "all_nonempty_same_union": false
+}
