@@ -1,0 +1,15 @@
+exit=1
+test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof) ... FAIL
+
+======================================================================
+FAIL: test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_promotion_persistence.py", line 11, in test_sparse_event_preserves_previous_author_proof
+    self.assertEqual(json.loads(f.read_text())['sources'][s.key].get('previous_identity',{}).get('value'),'P')
+AssertionError: None != 'P'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.034s
+
+FAILED (failures=1)

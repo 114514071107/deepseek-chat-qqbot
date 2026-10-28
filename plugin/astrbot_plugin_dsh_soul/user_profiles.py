@@ -95,7 +95,7 @@ def observe(event, scope):
                 identity=identity, nickname=nickname, group_card=card)
 
 
-def record_profile(event, scope, directory):
+def _record_legacy_profile(event, scope, directory):
     if event.get_extra('_dsh_profile_observed'):
         return
     row = observe(event, scope)
@@ -111,6 +111,12 @@ def record_profile(event, scope, directory):
     if store.get('version') != 1 or not isinstance(store.get('sources'), dict):
         raise ValueError('unsupported management profile store')
     old = store['sources'].get(scope.key, {})
+    if (old.get('identity') or {}).get('namespace') == 'qq_union_openid':
+        # Policy expiry disables new aggregation, not the integrity of saved proof.
+        # The union-aware writer preserves old evidence and checks counterevidence.
+        from union_user_profiles import record_profile as record_existing_union
+        record_existing_union(event, scope, directory)
+        return
     # A sparse later adapter event cannot erase a previously witnessed mapping.
     # Retain its original observation time; it is not a newly witnessed identity.
     if row.get('identity'):
@@ -174,3 +180,20 @@ def record_profile(event, scope, directory):
             if os.path.exists(temporary):
                 os.unlink(temporary)
     event.set_extra('_dsh_profile_observed', True)
+
+
+def record_profile(event, scope, directory):
+    if event.get_extra('_dsh_profile_observed'):
+        return
+    from union_rollout import policy_for, observe_canary
+    policy = policy_for(event, scope, directory)
+    if policy and policy['mode'] == 'apply':
+        from union_user_profiles import record_profile as record_union
+        record_union(event, scope, directory)
+    else:
+        _record_legacy_profile(event, scope, directory)
+    if policy:
+        try:
+            observe_canary(event, scope, directory, policy)
+        except Exception:
+            pass  # Diagnostics must never interrupt a normal reply.

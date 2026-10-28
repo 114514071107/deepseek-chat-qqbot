@@ -1,0 +1,47 @@
+exit=0
+TAP version 13
+# Subtest: same raw sender in different real bot domains cannot merge
+ok 1 - same raw sender in different real bot domains cannot merge
+  ---
+  duration_ms: 15.5104
+  type: 'test'
+  ...
+# Subtest: legacy user proof cannot cross real bot domains
+ok 2 - legacy user proof cannot cross real bot domains
+  ---
+  duration_ms: 6.2987
+  type: 'test'
+  ...
+# Subtest: partial union promotion preserves existing author-pair relation
+ok 3 - partial union promotion preserves existing author-pair relation
+  ---
+  duration_ms: 7.6485
+  type: 'test'
+  ...
+# Subtest: old deny identity-origin aliases remain effective
+ok 4 - old deny identity-origin aliases remain effective
+  ---
+  duration_ms: 7.0315
+  type: 'test'
+  ...
+# Subtest: same union cannot bridge contradictory previous author-user proofs
+ok 5 - same union cannot bridge contradictory previous author-user proofs
+  ---
+  duration_ms: 22.8945
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 148.7342
+test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.020s
+
+OK

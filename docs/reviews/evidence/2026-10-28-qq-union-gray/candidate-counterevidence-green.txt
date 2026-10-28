@@ -1,0 +1,9 @@
+exit=0
+test_missing_sdk_app_preserves_previous_author_proof (__main__.PromotionPersistence.test_missing_sdk_app_preserves_previous_author_proof) ... ok
+test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) ... ok
+test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.080s
+
+OK

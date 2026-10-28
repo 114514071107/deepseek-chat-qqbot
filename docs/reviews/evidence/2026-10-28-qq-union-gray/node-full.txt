@@ -1,0 +1,550 @@
+TAP version 13
+# Subtest: manual merge followed by reliable contradiction isolates histories, notes and directory identities without rewriting decisions
+ok 1 - manual merge followed by reliable contradiction isolates histories, notes and directory identities without rewriting decisions
+  ---
+  duration_ms: 86.974
+  type: 'test'
+  ...
+# Subtest: derived name/ledger key belongs to its exact source instead of a phantom legacy user
+ok 2 - derived name/ledger key belongs to its exact source instead of a phantom legacy user
+  ---
+  duration_ms: 30.8645
+  type: 'test'
+  ...
+# Subtest: existing explicit confirmation through an unambiguous derived alias reaches the actual source
+ok 3 - existing explicit confirmation through an unambiguous derived alias reaches the actual source
+  ---
+  duration_ms: 17.3125
+  type: 'test'
+  ...
+# Subtest: legacy person confirmation keeps its scene unknown and out of private/group projection
+ok 4 - legacy person confirmation keeps its scene unknown and out of private/group projection
+  ---
+  duration_ms: 34.2805
+  type: 'test'
+  ...
+# Subtest: settings-only keys remain metadata while a real new inbound source is automatically registered
+ok 5 - settings-only keys remain metadata while a real new inbound source is automatically registered
+  ---
+  duration_ms: 17.6004
+  type: 'test'
+  ...
+# Subtest: explicit standalone confirmation can be revoked without touching other peoples decisions
+ok 6 - explicit standalone confirmation can be revoked without touching other peoples decisions
+  ---
+  duration_ms: 44.0643
+  type: 'test'
+  ...
+# Subtest: category counts explain confirmed users, pending sources and archives without claiming a total population
+ok 7 - category counts explain confirmed users, pending sources and archives without claiming a total population
+  ---
+  duration_ms: 26.9221
+  type: 'test'
+  ...
+# Subtest: a stable nickname source wins conflicting later sources while its own rename still updates
+ok 8 - a stable nickname source wins conflicting later sources while its own rename still updates
+  ---
+  duration_ms: 27.088
+  type: 'test'
+  ...
+# Subtest: eighteen mixed keys retain separate automatic entries until missing cross-scene mappings are verified
+ok 9 - eighteen mixed keys retain separate automatic entries until missing cross-scene mappings are verified
+  ---
+  duration_ms: 22.0863
+  type: 'test'
+  ...
+# Subtest: ambiguous derived keys do not merge two group domains or silently satisfy a human confirmation
+ok 10 - ambiguous derived keys do not merge two group domains or silently satisfy a human confirmation
+  ---
+  duration_ms: 17.8908
+  type: 'test'
+  ...
+# Subtest: historical private and group rows recover scene without scope table or data writes
+ok 11 - historical private and group rows recover scene without scope table or data writes
+  ---
+  duration_ms: 21.1497
+  type: 'test'
+  ...
+# Subtest: mixed legacy file partitions per record, preserving unknown records and manual person confirmation
+ok 12 - mixed legacy file partitions per record, preserving unknown records and manual person confirmation
+  ---
+  duration_ms: 13.2954
+  type: 'test'
+  ...
+# Subtest: a scope table entry never reassigns mixed records, and bare sender or last route is insufficient
+ok 13 - a scope table entry never reassigns mixed records, and bare sender or last route is insufficient
+  ---
+  duration_ms: 7.8928
+  type: 'test'
+  ...
+# Subtest: overlapping old and v2 stores preserve distinct records and deduplicate identical entry ids
+ok 14 - overlapping old and v2 stores preserve distinct records and deduplicate identical entry ids
+  ---
+  duration_ms: 11.5653
+  type: 'test'
+  ...
+# Subtest: validated v2 keys and unique triggering requests recover source-less rows in the readable projection
+ok 15 - validated v2 keys and unique triggering requests recover source-less rows in the readable projection
+  ---
+  duration_ms: 9.2947
+  type: 'test'
+  ...
+# Subtest: indistinguishable legacy rows keep multiplicity while stable exact copies across stores deduplicate
+ok 16 - indistinguishable legacy rows keep multiplicity while stable exact copies across stores deduplicate
+  ---
+  duration_ms: 7.9644
+  type: 'test'
+  ...
+# Subtest: fully identified mixed archives retain an ambiguous file index without becoming settings-only metadata
+ok 17 - fully identified mixed archives retain an ambiguous file index without becoming settings-only metadata
+  ---
+  duration_ms: 6.4475
+  type: 'test'
+  ...
+# Subtest: source-less assistant-only history is readable outbound evidence and cannot confirm a person
+ok 18 - source-less assistant-only history is readable outbound evidence and cannot confirm a person
+  ---
+  duration_ms: 8.0939
+  type: 'test'
+  ...
+# Subtest: partial unknown mixed-file human references stay unresolved rather than shrink to one subset
+ok 19 - partial unknown mixed-file human references stay unresolved rather than shrink to one subset
+  ---
+  duration_ms: 6.6947
+  type: 'test'
+  ...
+# Subtest: older recovered outbound aliases cannot evict newer inbound records or regress latest activity
+ok 20 - older recovered outbound aliases cannot evict newer inbound records or regress latest activity
+  ---
+  duration_ms: 24.7715
+  type: 'test'
+  ...
+# Subtest: launcher receives the recorded instance Bot port
+ok 21 - launcher receives the recorded instance Bot port
+  ---
+  duration_ms: 9.4099
+  type: 'test'
+  ...
+# Subtest: dispatch timeout cannot overwrite a controller result that already started
+ok 22 - dispatch timeout cannot overwrite a controller result that already started
+  ---
+  duration_ms: 12.2719
+  type: 'test'
+  ...
+# Subtest: lifecycle API exposes pending and final failures without claiming success
+ok 23 - lifecycle API exposes pending and final failures without claiming success
+  ---
+  duration_ms: 70.1123
+  type: 'test'
+  ...
+# Subtest: stable outbound alias deduplicates before recent cap and paging while equal text events survive with conflict audit
+ok 24 - stable outbound alias deduplicates before recent cap and paging while equal text events survive with conflict audit
+  ---
+  duration_ms: 49.7907
+  type: 'test'
+  ...
+# Subtest: assistant-only archive stays inspectable without inventing a pending person or conversation
+ok 25 - assistant-only archive stays inspectable without inventing a pending person or conversation
+  ---
+  duration_ms: 12.1121
+  type: 'test'
+  ...
+# Subtest: a matching frozen receipt recovers an assistant row into its unique existing destination without altering raw history
+ok 26 - a matching frozen receipt recovers an assistant row into its unique existing destination without altering raw history
+  ---
+  duration_ms: 12.4626
+  type: 'test'
+  ...
+# Subtest: verified proactive group delivery remains in its conversation without inventing a user task
+ok 27 - verified proactive group delivery remains in its conversation without inventing a user task
+  ---
+  duration_ms: 35.5911
+  type: 'test'
+  ...
+# Subtest: trusted author mappings auto join private and two groups, including a later source and restart
+ok 28 - trusted author mappings auto join private and two groups, including a later source and restart
+  ---
+  duration_ms: 42.3335
+  type: 'test'
+  ...
+# Subtest: no evidence and equal strings in different domains never guess identity
+ok 29 - no evidence and equal strings in different domains never guess identity
+  ---
+  duration_ms: 17.7936
+  type: 'test'
+  ...
+# Subtest: nickname types and an established source stay visible without using a note as a QQ nickname
+ok 30 - nickname types and an established source stay visible without using a note as a QQ nickname
+  ---
+  duration_ms: 21.095
+  type: 'test'
+  ...
+# Subtest: unlink of automatic sources persists rejection instead of silently rejoining
+ok 31 - unlink of automatic sources persists rejection instead of silently rejoining
+  ---
+  duration_ms: 35.3726
+  type: 'test'
+  ...
+# Subtest: old manual groups stay manual and future reliable source joins without overwriting decisions
+ok 32 - old manual groups stay manual and future reliable source joins without overwriting decisions
+  ---
+  duration_ms: 18.4026
+  type: 'test'
+  ...
+# Subtest: stale revision and a second writer cannot lose an existing mapping
+ok 33 - stale revision and a second writer cannot lose an existing mapping
+  ---
+  duration_ms: 30.5399
+  type: 'test'
+  ...
+# Subtest: deny is visible, survives new evidence, and only explicit reconfirmation removes the block
+ok 34 - deny is visible, survives new evidence, and only explicit reconfirmation removes the block
+  ---
+  duration_ms: 33.5724
+  type: 'test'
+  ...
+# Subtest: application and instance boundaries, mismatched evidence and conflicting claims block auto merge
+ok 35 - application and instance boundaries, mismatched evidence and conflicting claims block auto merge
+  ---
+  duration_ms: 20.0852
+  type: 'test'
+  ...
+# Subtest: OneBot numeric account auto merges while nickname updates remain display only
+ok 36 - OneBot numeric account auto merges while nickname updates remain display only
+  ---
+  duration_ms: 15.4346
+  type: 'test'
+  ...
+# Subtest: same exact original identity can be automatically confirmed even without a nickname
+ok 37 - same exact original identity can be automatically confirmed even without a nickname
+  ---
+  duration_ms: 13.187
+  type: 'test'
+  ...
+# Subtest: exact source strings with conflicting application evidence cannot collapse into one entry
+ok 38 - exact source strings with conflicting application evidence cannot collapse into one entry
+  ---
+  duration_ms: 12.604
+  type: 'test'
+  ...
+# Subtest: verified app and group-member identity survive SDK self-id placeholders without crossing groups
+ok 39 - verified app and group-member identity survive SDK self-id placeholders without crossing groups
+  ---
+  duration_ms: 16.3312
+  type: 'test'
+  ...
+# Subtest: a prior manual denial also blocks a later exact-origin proof
+ok 40 - a prior manual denial also blocks a later exact-origin proof
+  ---
+  duration_ms: 26.0045
+  type: 'test'
+  ...
+# Subtest: mapping capacity is rejected before an unsupported store can be written
+ok 41 - mapping capacity is rejected before an unsupported store can be written
+  ---
+  duration_ms: 23.181
+  type: 'test'
+  ...
+# Subtest: launcher-selected runtime root is used without reading another instance
+ok 42 - launcher-selected runtime root is used without reading another instance
+  ---
+  duration_ms: 77.6365
+  type: 'test'
+  ...
+# Subtest: all pages, history, media and management require credentials
+ok 43 - all pages, history, media and management require credentials
+  ---
+  duration_ms: 22.062
+  type: 'test'
+  ...
+# Subtest: accepted snapshots remain authenticated and unknown formats download only inside sent media
+ok 44 - accepted snapshots remain authenticated and unknown formats download only inside sent media
+  ---
+  duration_ms: 40.8211
+  type: 'test'
+  ...
+# Subtest: history renders accepted image, audio and attachment references as inspectable media
+ok 45 - history renders accepted image, audio and attachment references as inspectable media
+  ---
+  duration_ms: 2.1155
+  type: 'test'
+  ...
+# Subtest: user-initiated cross-site entry navigation reaches login and the console page
+ok 46 - user-initiated cross-site entry navigation reaches login and the console page
+  ---
+  duration_ms: 14.5066
+  type: 'test'
+  ...
+# Subtest: entry navigation exception never exposes APIs, media, frames or cross-site writes
+ok 47 - entry navigation exception never exposes APIs, media, frames or cross-site writes
+  ---
+  duration_ms: 11.5213
+  type: 'test'
+  ...
+# Subtest: authenticated reads work; writes require same origin, JSON and custom header
+ok 48 - authenticated reads work; writes require same origin, JSON and custom header
+  ---
+  duration_ms: 19.0057
+  type: 'test'
+  ...
+# Subtest: startup fails closed without a strong token or with a public bind address
+ok 49 - startup fails closed without a strong token or with a public bind address
+  ---
+  duration_ms: 1.821
+  type: 'test'
+  ...
+# Subtest: status reads an existing Windows UTF-8 BOM config without rewriting or hiding corrupt JSON
+ok 50 - status reads an existing Windows UTF-8 BOM config without rewriting or hiding corrupt JSON
+  ---
+  duration_ms: 275.7794
+  type: 'test'
+  ...
+# Subtest: each operation rechecks executable capability; business failure never retries
+ok 51 - each operation rechecks executable capability; business failure never retries
+  ---
+  duration_ms: 7.1935
+  type: 'test'
+  ...
+# Subtest: offline runtime is an explicit failure; console cannot alter a stale cached file
+ok 52 - offline runtime is an explicit failure; console cannot alter a stale cached file
+  ---
+  duration_ms: 76.6246
+  type: 'test'
+  ...
+# Subtest: private proactive effective default is off without writing an override
+ok 53 - private proactive effective default is off without writing an override
+  ---
+  duration_ms: 17.422
+  type: 'test'
+  ...
+# Subtest: commands wait for matching runtime acknowledgment; expired lease and untyped sends fail
+ok 54 - commands wait for matching runtime acknowledgment; expired lease and untyped sends fail
+  ---
+  duration_ms: 41.7403
+  type: 'test'
+  ...
+# Subtest: real isolated Python state owner acknowledges cache, points, deletion and typed group target
+ok 55 - real isolated Python state owner acknowledges cache, points, deletion and typed group target
+  ---
+  duration_ms: 1119.2149
+  type: 'test'
+  ...
+# Subtest: same raw sender in different real bot domains cannot merge
+ok 56 - same raw sender in different real bot domains cannot merge
+  ---
+  duration_ms: 18.8702
+  type: 'test'
+  ...
+# Subtest: legacy user proof cannot cross real bot domains
+ok 57 - legacy user proof cannot cross real bot domains
+  ---
+  duration_ms: 6.7944
+  type: 'test'
+  ...
+# Subtest: partial union promotion preserves existing author-pair relation
+ok 58 - partial union promotion preserves existing author-pair relation
+  ---
+  duration_ms: 9.569
+  type: 'test'
+  ...
+# Subtest: old deny identity-origin aliases remain effective
+ok 59 - old deny identity-origin aliases remain effective
+  ---
+  duration_ms: 11.7713
+  type: 'test'
+  ...
+# Subtest: same union cannot bridge contradictory previous author-user proofs
+ok 60 - same union cannot bridge contradictory previous author-user proofs
+  ---
+  duration_ms: 7.143
+  type: 'test'
+  ...
+# Subtest: apply is whitelist only; observe or missing policy never merges new union proofs
+ok 61 - apply is whitelist only; observe or missing policy never merges new union proofs
+  ---
+  duration_ms: 26.7311
+  type: 'test'
+  ...
+# Subtest: trusted union groups private plus two groups; history scene and raw address stay distinct
+ok 62 - trusted union groups private plus two groups; history scene and raw address stay distinct
+  ---
+  duration_ms: 25.5317
+  type: 'test'
+  ...
+# Subtest: different unions, missing union, wrong type, other applications instances and real bots never merge
+ok 63 - different unions, missing union, wrong type, other applications instances and real bots never merge
+  ---
+  duration_ms: 20.9135
+  type: 'test'
+  ...
+# Subtest: deny across existing manual component blocks transitive union merge and survives refresh
+ok 64 - deny across existing manual component blocks transitive union merge and survives refresh
+  ---
+  duration_ms: 31.6961
+  type: 'test'
+  ...
+# Subtest: changed union quarantines old self link and does not bridge conflicting domains
+ok 65 - changed union quarantines old self link and does not bridge conflicting domains
+  ---
+  duration_ms: 10.1001
+  type: 'test'
+  ...
+# Subtest: rename new group refresh restart search paging and memory directory use same person
+ok 66 - rename new group refresh restart search paging and memory directory use same person
+  ---
+  duration_ms: 16.1269
+  type: 'test'
+  ...
+# Subtest: legacy pairing names remain readable; unscoped legacy and ambiguous memory not assigned
+ok 67 - legacy pairing names remain readable; unscoped legacy and ambiguous memory not assigned
+  ---
+  duration_ms: 15.7929
+  type: 'test'
+  ...
+# Subtest: bot only archive never creates a person; reads leave business and mapping files byte identical
+ok 68 - bot only archive never creates a person; reads leave business and mapping files byte identical
+  ---
+  duration_ms: 16.2569
+  type: 'test'
+  ...
+# Subtest: no nickname keeps an honest label while trusted union still groups automatically
+ok 69 - no nickname keeps an honest label while trusted union still groups automatically
+  ---
+  duration_ms: 11.6433
+  type: 'test'
+  ...
+# Subtest: multiple person pages and search select identical history and memory directories
+ok 70 - multiple person pages and search select identical history and memory directories
+  ---
+  duration_ms: 38.5263
+  type: 'test'
+  ...
+# Subtest: installed official C2C/group placeholders share only verified app and instance management identity
+ok 71 - installed official C2C/group placeholders share only verified app and instance management identity
+  ---
+  duration_ms: 29.6165
+  type: 'test'
+  ...
+# Subtest: new trusted conversation is automatically a user without owner confirmation; names never join people
+ok 72 - new trusted conversation is automatically a user without owner confirmation; names never join people
+  ---
+  duration_ms: 12.0502
+  type: 'test'
+  ...
+# Subtest: self verified private and two group identities share one named entry after restart and all-history stays scoped
+ok 73 - self verified private and two group identities share one named entry after restart and all-history stays scoped
+  ---
+  duration_ms: 17.9319
+  type: 'test'
+  ...
+# Subtest: memory lists only selected person sources and deduplicates shared memory keys without changing data
+ok 74 - memory lists only selected person sources and deduplicates shared memory keys without changing data
+  ---
+  duration_ms: 19.7553
+  type: 'test'
+  ...
+# Subtest: self proof does not bypass existing deny, foreign app metadata or source mismatch
+ok 75 - self proof does not bypass existing deny, foreign app metadata or source mismatch
+  ---
+  duration_ms: 32.5241
+  type: 'test'
+  ...
+# Subtest: unverified identical memory keys stay unassigned; verification shows the original file only once
+ok 76 - unverified identical memory keys stay unassigned; verification shows the original file only once
+  ---
+  duration_ms: 26.342
+  type: 'test'
+  ...
+# Subtest: legacy metadata stays readable only for an unsplit archive; split unknown metadata is not assigned
+ok 77 - legacy metadata stays readable only for an unsplit archive; split unknown metadata is not assigned
+  ---
+  duration_ms: 20.1476
+  type: 'test'
+  ...
+# Subtest: later contradictory platform evidence separates self linked sources instead of displaying both as one conflicted person
+ok 78 - later contradictory platform evidence separates self linked sources instead of displaying both as one conflicted person
+  ---
+  duration_ms: 15.3708
+  type: 'test'
+  ...
+# Subtest: a legacy archive and a known person cannot both claim the same original notes file without identity proof
+ok 79 - a legacy archive and a known person cannot both claim the same original notes file without identity proof
+  ---
+  duration_ms: 16.24
+  type: 'test'
+  ...
+# Subtest: list contains no message bodies; ambiguous QQ identities and same names remain separate
+ok 80 - list contains no message bodies; ambiguous QQ identities and same names remain separate
+  ---
+  duration_ms: 73.7018
+  type: 'test'
+  ...
+# Subtest: explicit association produces one entry for private and two groups; unlink preserves original stores
+ok 81 - explicit association produces one entry for private and two groups; unlink preserves original stores
+  ---
+  duration_ms: 68.8989
+  type: 'test'
+  ...
+# Subtest: private/group/group-filter projections keep sources, accepted replies and media
+ok 82 - private/group/group-filter projections keep sources, accepted replies and media
+  ---
+  duration_ms: 54.2072
+  type: 'test'
+  ...
+# Subtest: pagination, empty modes, legacy and invalid input have explicit bounds
+ok 83 - pagination, empty modes, legacy and invalid input have explicit bounds
+  ---
+  duration_ms: 33.6209
+  type: 'test'
+  ...
+# Subtest: mapping needs confirmation/current revision; explicit legacy identity confirmation preserves unknown scene
+ok 84 - mapping needs confirmation/current revision; explicit legacy identity confirmation preserves unknown scene
+  ---
+  duration_ms: 58.7056
+  type: 'test'
+  ...
+# Subtest: authentication, cross-origin, media and original scope operations remain protected
+ok 85 - authentication, cross-origin, media and original scope operations remain protected
+  ---
+  duration_ms: 20.4862
+  type: 'test'
+  ...
+# Subtest: aggregate identity cannot become a mutation uid even when a runtime is online
+ok 86 - aggregate identity cannot become a mutation uid even when a runtime is online
+  ---
+  duration_ms: 21.459
+  type: 'test'
+  ...
+# Subtest: nickname changes do not split identity; source caps and unaccepted replies are explicit
+ok 87 - nickname changes do not split identity; source caps and unaccepted replies are explicit
+  ---
+  duration_ms: 26.1963
+  type: 'test'
+  ...
+# Subtest: oversized history is rejected before loading or mutating the file
+ok 88 - oversized history is rejected before loading or mutating the file
+  ---
+  duration_ms: 13.6602
+  type: 'test'
+  ...
+# Subtest: deny API is authenticated, source protected, confirmed and display-only
+ok 89 - deny API is authenticated, source protected, confirmed and display-only
+  ---
+  duration_ms: 27.5967
+  type: 'test'
+  ...
+# Subtest: standalone confirmation preserves authentication, source checks, revision and raw data
+ok 90 - standalone confirmation preserves authentication, source checks, revision and raw data
+  ---
+  duration_ms: 33.3792
+  type: 'test'
+  ...
+1..90
+# tests 90
+# suites 0
+# pass 90
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1576.3999

@@ -1,0 +1,35 @@
+exit=1
+test_missing_sdk_app_preserves_previous_author_proof (__main__.PromotionPersistence.test_missing_sdk_app_preserves_previous_author_proof) ... FAIL
+test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) ... 
+  test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union=None) ... FAIL
+  test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union='UNION-A') ... FAIL
+test_sparse_event_preserves_previous_author_proof (__main__.PromotionPersistence.test_sparse_event_preserves_previous_author_proof) ... ok
+
+======================================================================
+FAIL: test_missing_sdk_app_preserves_previous_author_proof (__main__.PromotionPersistence.test_missing_sdk_app_preserves_previous_author_proof)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_promotion_persistence.py", line 10, in test_missing_sdk_app_preserves_previous_author_proof
+    self.assertEqual(json.loads((Path(root)/'workbench_profiles_v1.json').read_text())['sources'][s.key].get('previous_identity',{}).get('value'),'P')
+AssertionError: None != 'P'
+
+======================================================================
+FAIL: test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_promotion_persistence.py", line 18, in test_new_author_user_counterevidence_is_not_erased_by_union
+    self.assertTrue(row.get('identity_conflict',False))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_new_author_user_counterevidence_is_not_erased_by_union (__main__.PromotionPersistence.test_new_author_user_counterevidence_is_not_erased_by_union) (union='UNION-A')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_promotion_persistence.py", line 18, in test_new_author_user_counterevidence_is_not_erased_by_union
+    self.assertTrue(row.get('identity_conflict',False))
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.072s
+
+FAILED (failures=3)

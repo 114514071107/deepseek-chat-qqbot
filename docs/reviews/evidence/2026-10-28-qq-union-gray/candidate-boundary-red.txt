@@ -1,0 +1,119 @@
+exit=1
+TAP version 13
+# Subtest: same raw sender in different real bot domains cannot merge
+not ok 1 - same raw sender in different real bot domains cannot merge
+  ---
+  duration_ms: 15.9201
+  type: 'test'
+  location: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh-union-rollout-review-20261028-bde6lnmb\\test_union_rollout_regressions.cjs:7:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    1 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_rollout_regressions.cjs:7:187)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: legacy user proof cannot cross real bot domains
+not ok 2 - legacy user proof cannot cross real bot domains
+  ---
+  duration_ms: 5.9223
+  type: 'test'
+  location: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh-union-rollout-review-20261028-bde6lnmb\\test_union_rollout_regressions.cjs:8:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    1 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_rollout_regressions.cjs:8:228)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: partial union promotion preserves existing author-pair relation
+not ok 3 - partial union promotion preserves existing author-pair relation
+  ---
+  duration_ms: 8.3795
+  type: 'test'
+  location: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh-union-rollout-review-20261028-bde6lnmb\\test_union_rollout_regressions.cjs:9:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    2 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 2
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_rollout_regressions.cjs:9:448)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: old deny identity-origin aliases remain effective
+ok 4 - old deny identity-origin aliases remain effective
+  ---
+  duration_ms: 7.3288
+  type: 'test'
+  ...
+# Subtest: same union cannot bridge contradictory previous author-user proofs
+not ok 5 - same union cannot bridge contradictory previous author-user proofs
+  ---
+  duration_ms: 5.5821
+  type: 'test'
+  location: 'C:\\Users\\Rocket\\AppData\\Local\\Temp\\dsh-union-rollout-review-20261028-bde6lnmb\\test_union_rollout_regressions.cjs:11:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    1 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (C:\Users\Rocket\AppData\Local\Temp\dsh-union-rollout-review-20261028-bde6lnmb\test_union_rollout_regressions.cjs:11:343)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 1
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 127.6656

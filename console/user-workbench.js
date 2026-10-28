@@ -2,11 +2,13 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {atomicJson}=require('./state-bridge');
 const {collectSources}=require('./people-sources');
+const {legacyProfileFor}=require('./legacy-profile');
+const {readPolicy,enabled:unionEnabled}=require('./union-rollout');
 const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const at=row=>Number.isFinite(Number(row.ts))?Number(row.ts):0;
 // Recovered aliases can be older than the base file. Select recent rows before paging.
 const recent=rows=>rows.slice().sort((a,b)=>at(a)-at(b)||String(a.id||'').localeCompare(String(b.id||''))||hash(a).localeCompare(hash(b))).slice(-150);
-const decisionKeys=o=>[o.base,...(o.identity_origin?[o.identity_origin]:[]),...(o.decision_aliases||[])];
+const decisionKeys=o=>[o.base,...(o.identity_origin?[o.identity_origin]:[]),...(o.identity_origin_legacy?[o.identity_origin_legacy]:[]),...(o.decision_aliases||[])];
 const managementBot=(s,app)=>s.platform==='qq_official'&&app&&s.instance&&['qq_official','unknown_selfid'].includes(s.bot)?['qq_official_adapter_placeholder']:s.bot;
 const fail=message=>{throw Object.assign(new Error(message),{statusCode:400});};
 function readBounded(file,fallback,max=32*1024*1024){
@@ -27,7 +29,11 @@ function outboundBound(row,source,origin){
 function number(q,key,fallback,max){const raw=q.get(key);if(raw===null)return fallback;
   if(!/^\d{1,6}$/.test(raw)||Number(raw)>max||(key==='limit'&&Number(raw)<1))fail('分页参数无效');return Number(raw);}
 
-function profileFor(s,p){
+function profileFor(s,p,policy){
+  if(!unionEnabled(policy,s,p?.app)){
+    const previous=p?.identity?.namespace==='qq_union_openid'?{...p,identity:p.previous_identity||p.author_user_identity||null}:p;
+    return legacyProfileFor(s,previous);
+  }
   if(!p||!same(s,p.source)||!Number.isFinite(p.observed_at)||p.observed_at<=0)return {};
   const text=v=>typeof v==='string'&&v.length>0&&v.length<=256;
   const field=(value,kind,source)=>value&&value.kind===kind&&value.source===source&&text(value.value)&&
@@ -36,14 +42,22 @@ function profileFor(s,p){
   const nickname=qq?field(p.nickname,'platform_name','qq.author.username'):
     onebot?field(p.nickname,'qq_nickname','onebot.sender.nickname'):null;
   const card=field(p.group_card,'group_card',qq?'qq.member.nick':'onebot.sender.card');
-  const i=p.identity,valid=i&&text(p.app)&&text(i.value)&&(
+  const i=p.identity,union=qq&&i?.namespace==='qq_union_openid'&&i.basis==='qq_author_union'&&typeof i.value==='string'&&/^[A-Za-z0-9_-]{1,256}$/.test(i.value);
+  const valid=i&&text(p.app)&&text(i.value)&&(
+    union||
     (qq&&i.namespace==='qq_user_openid'&&i.basis===(s.private?'qq_author_user':'qq_author_pair')&&(!s.private||i.value===s.sender))||
     (onebot&&i.namespace==='onebot_qq'&&i.basis==='onebot_message_sender'&&i.value===s.sender&&p.app===s.bot&&/^\d+$/.test(i.value)));
+  const domain=namespace=>[s.platform,s.instance,...(qq?[managementBot(s,p.app)]:[]),p.app,namespace];
+  const previous=p.previous_identity,previousValid=valid&&union&&previous?.namespace==='qq_user_openid'&&
+    previous.basis===(s.private?'qq_author_user':'qq_author_pair')&&text(previous.value)&&(!s.private||previous.value===s.sender);
   return {profile:nickname||null,profile_first_seen:Number.isFinite(p.first_seen_at)&&p.first_seen_at>0?p.first_seen_at:p.observed_at,
-    group_card:s.private?null:card,observed_app:text(p.app)?p.app:'',identity_key:valid?hash([s.platform,s.instance,p.app,i.namespace,i.value]):'',
-    identity_origin:qq&&text(p.app)?hash([s.platform,s.instance,p.app,s.private?'user_openid':'member_openid',s.group,s.sender]):'',
-    identity_domain:valid?hash([s.platform,s.instance,p.app,i.namespace]):'',identity_value:valid?i.value:'',
-    identity_basis:valid?(qq?'平台同一 author 的 user_openid 映射（限当前应用/实例）':'OneBot 已核验 QQ 帐号（限当前机器人/实例）'):'',
+    group_card:s.private?null:card,union_observed:!!(valid&&union),observed_app:text(p.app)?p.app:'',identity_key:valid?hash([...domain(i.namespace),i.value]):'',
+    identity_origin:qq&&text(p.app)?hash([s.platform,s.instance,managementBot(s,p.app),p.app,s.private?'user_openid':'member_openid',s.group,s.sender]):'',
+    identity_origin_legacy:qq&&text(p.app)?hash([s.platform,s.instance,p.app,s.private?'user_openid':'member_openid',s.group,s.sender]):'',
+    identity_domain:valid?hash(domain(i.namespace)):'',identity_value:valid?i.value:'',
+    previous_identity_key:previousValid?hash([...domain(previous.namespace),previous.value]):'',
+    previous_identity_domain:previousValid?hash(domain(previous.namespace)):'',previous_identity_value:previousValid?previous.value:'',
+    identity_basis:valid?(union?'平台 author.union_openid（限可信应用、实例与机器人管理域）':qq?'平台同一 author 的 user_openid 映射（限当前应用/实例）':'OneBot 已核验 QQ 帐号（限当前机器人/实例）'):'',
     identity_at:valid?(p.identity_observed_at||p.observed_at):null,identity_message_id:valid?(p.identity_message_id||p.message_id):'',
     identity_conflict_count:Array.isArray(p.identity_conflicts)?p.identity_conflicts.length:0,
     identity_conflict:p.identity_conflict===true};
@@ -56,25 +70,25 @@ function classify(origins,mapping,aliasOwners){
   const membersOf=root=>[...origins.values()].filter(o=>find(o.uid)===find(root));
   const blocked=(left,right)=>{const a=new Set(left.flatMap(decisionKeys)),b=new Set(right.flatMap(decisionKeys));
     return denied.some(([x,y])=>(a.has(x)&&b.has(y))||(a.has(y)&&b.has(x)));};
+  const conflict=rows=>{
+    const domains=new Map();
+    for(const o of rows){if(o.identity_conflict)return true;
+      for(const [domain,value] of [[o.identity_domain,o.identity_value],[o.previous_identity_domain,o.previous_identity_value]])if(domain){
+        if(domains.has(domain)&&domains.get(domain)!==value)return true;domains.set(domain,value);}}
+    return false;
+  };
   const bases=new Map(),conflicted=new Set();
   for(const o of origins.values()){
     const exact=o.identity_origin||hash([o.base,o.observed_app||'']);
     const roots=bases.get(exact)||[];let merged=false;
     for(const previous of roots){
       const left=membersOf(o.uid),right=membersOf(previous);
-      if(blocked(left,right)){[...left,...right].forEach(row=>conflicted.add(row.uid));continue;}
+      if(blocked(left,right)||conflict([...left,...right])){[...left,...right].forEach(row=>conflicted.add(row.uid));continue;}
       join(previous,o.uid);merged=true;break;
     }
     if(!merged)roots.push(o.uid);bases.set(exact,roots);
   }
   const claimed=new Set();
-  const conflict=rows=>{
-    const domains=new Map();
-    for(const o of rows){if(o.identity_conflict)return true;if(o.identity_domain){
-      if(domains.has(o.identity_domain)&&domains.get(o.identity_domain)!==o.identity_value)return true;
-      domains.set(o.identity_domain,o.identity_value);}}
-    return false;
-  };
   for(const group of mapping.groups){
     if(!Array.isArray(group)||group.length>20)fail('人工关联来源上限为20');
     const raw=[...new Set(group)],active=raw.filter(uid=>origins.has(uid)||aliasOwners.get(uid)?.length===1);
@@ -90,7 +104,7 @@ function classify(origins,mapping,aliasOwners){
     }
   }
   const automatic=new Map();
-  for(const o of origins.values())if(!o.legacy)for(const key of [o.identity_key,o.self_identity_key].filter(Boolean)){
+  for(const o of origins.values())if(!o.legacy)for(const key of [o.identity_key,o.previous_identity_key,o.self_identity_key].filter(Boolean)){
     if(!automatic.has(key))automatic.set(key,[]);automatic.get(key).push(o.uid);
   }
   for(const ids of automatic.values()){
@@ -136,7 +150,8 @@ function createUserWorkbench(data){
     const mapping=readBounded(mappingFile,{version:1,groups:[]},1024*1024);
     if(![1,2].includes(mapping.version)||!Array.isArray(mapping.groups)||mapping.groups.length>2000||
       (mapping.denied!==undefined&&(!Array.isArray(mapping.denied)||mapping.denied.length>10000||mapping.denied.some(pair=>!Array.isArray(pair)||pair.length!==2||pair.some(v=>!/^([a-f0-9]{64})$/.test(v))))))fail('管理关联文件格式不受支持');
-    const {origins,metadata,archiveIndexes,aliasOwners,raw_key_count,projectedHistories:histories,projectedSources,outboundArchives}=collectSources({sources,histories:rawHistories,names,friends,points,sourceValid,profileFor,profiles:profiles.sources,receipts:readBounded(path.join(data,'delivery_receipts_v2.json'),{})});
+    const policy=readPolicy(data);
+    const {origins,metadata,archiveIndexes,aliasOwners,raw_key_count,projectedHistories:histories,projectedSources,outboundArchives}=collectSources({sources,histories:rawHistories,names,friends,points,sourceValid,profileFor:(s,p)=>profileFor(s,p,policy),profiles:profiles.sources,receipts:readBounded(path.join(data,'delivery_receipts_v2.json'),{})});
     const directory=readBounded(path.join(data,'user_directory_v1.json'),{version:1,sources:{}},2*1024*1024);
     if(directory.version!==1||!directory.sources||typeof directory.sources!=='object'||Array.isArray(directory.sources))fail('自助身份资料格式不受支持');
     const verified=new Map();
@@ -153,7 +168,8 @@ function createUserWorkbench(data){
       const row=matches[0],a=o.source,n=row.nickname;
       o.self_identity_key=hash([a.platform,a.instance,managementBot(a,row.app),row.app,'dsh_self_verified',row.person]);
       o.observed_app=row.app;
-      o.identity_origin ||= hash([a.platform,a.instance,row.app,a.private?'user_openid':'member_openid',a.group,a.sender]);
+      o.identity_origin ||= hash([a.platform,a.instance,managementBot(a,row.app),row.app,a.private?'user_openid':'member_openid',a.group,a.sender]);
+      o.identity_origin_legacy ||= hash([a.platform,a.instance,row.app,a.private?'user_openid':'member_openid',a.group,a.sender]);
       o.identity_basis=[o.identity_basis,'用户本人完成的本地称呼/关联验证（仅用于管理展示）'].filter(Boolean).join('；');
       if(n?.kind==='self_selected'&&n.source==='dsh.self_selected'&&typeof n.value==='string'&&n.value.trim()&&Array.from(n.value).length<=32&&
         !/[\p{C}]/u.test(n.value)&&Number.isFinite(n.at)&&n.at>0){o.profile={...n};o.profile_first_seen=n.at;}
@@ -165,7 +181,8 @@ function createUserWorkbench(data){
     const people=classify(origins,mapping,aliasOwners).map(({members,manual,manualKeys,rejected,conflict})=>{
       const rows=members.map(uid=>origins.get(uid)).sort((a,b)=>a.uid.localeCompare(b.uid));
       const fields=rows.filter(o=>o.profile).map(o=>({...o.profile,uid:o.uid,first_seen_at:o.profile_first_seen||o.profile.at})).sort((a,b)=>a.first_seen_at-b.first_seen_at||a.uid.localeCompare(b.uid));
-      const chosen=fields.filter(n=>n.kind==='self_selected').sort((a,b)=>b.at-a.at)[0]||fields.find(n=>n.kind==='qq_nickname')||fields[0],legacy=rows.every(o=>o.legacy);
+      const chosen=fields.filter(n=>n.kind==='self_selected').sort((a,b)=>b.at-a.at)[0]||fields.find(n=>n.kind==='qq_nickname')||
+        (rows.some(o=>o.union_observed)?fields.filter(n=>n.kind==='platform_name').sort((a,b)=>b.at-a.at||a.uid.localeCompare(b.uid))[0]:null)||fields[0],legacy=rows.every(o=>o.legacy);
       const exact=rows.length>1&&new Set(rows.map(o=>o.identity_origin||o.base)).size===1;
       const automatic=rows.some(o=>!o.legacy),status=conflict?'pending':manual?'manual_confirmed':legacy?'legacy':automatic?'automatic_confirmed':'pending';
       const label=chosen?chosen.value+(chosen.kind==='platform_name'?'（平台用户名；QQ 昵称未核验）':''):
@@ -179,7 +196,7 @@ function createUserWorkbench(data){
         status_label:({legacy:'来源不明旧档',pending:'关联证据待核对',manual_confirmed:'人工已确认',automatic_confirmed:'自动建档'})[status],
         basis:[...(manual?['维护者明确确认的展示关联']:[]),...(exact&&!legacy?['相同原始身份（平台、实例、应用/机器人及身份域均一致）']:[]),...[...new Set(rows.map(o=>o.identity_basis).filter(Boolean))],...(rejected?['已记录人工解除/否认不关联；仅重新人工确认可移除该限制']:[]),...(conflict?['证据冲突或人工已解除/否认；不自动合回']:[])],
         category:['manual_confirmed','automatic_confirmed'].includes(status)?'confirmed':status==='legacy'?'legacy':'pending',
-        manual,legacy,origin_count:rows.length,last_at:last,sources:rows.map(({source,base,decision_aliases,identity_origin,identity_key,self_identity_key,identity_domain,identity_value,identity_conflict,...o})=>o)};
+        manual,legacy,origin_count:rows.length,last_at:last,sources:rows.map(({source,base,decision_aliases,identity_origin,identity_origin_legacy,identity_key,previous_identity_key,previous_identity_domain,previous_identity_value,self_identity_key,identity_domain,identity_value,identity_conflict,...o})=>o)};
     }).sort((a,b)=>b.last_at-a.last_at||a.id.localeCompare(b.id));
     const counts={confirmed_users:people.filter(p=>p.category==='confirmed').length,
       pending_sources:people.filter(p=>p.category==='pending').flatMap(p=>p.sources).filter(o=>!o.legacy).length,
@@ -246,7 +263,7 @@ function createUserWorkbench(data){
         thoughts:direct&&Array.isArray(allThoughts[uid])?allThoughts[uid].map((row,index)=>({...row,index})).reverse():[],notes,
         session:direct?readBounded(path.join(data,'session_'+safe(uid)+'.json'),{}):{},
         memes:direct?text(path.join(data,'memes',safe(uid)+'.md')):'',
-        notice:ambiguous?'该原记忆键对应多个未关联人物，暂不归属；请由本人验证关联后查看':o.projection_only?'历史派生来源；未带场景的摘要、念头与学习资料不作猜测归属':''};
+        notice:ambiguous?'该原记忆键对应多个未关联人物，暂不归属；需可靠平台身份或维护者核对':o.projection_only?'历史派生来源；未带场景的摘要、念头与学习资料不作猜测归属':''};
     });
     return {ok:true,person:p.id,label:p.label,mode,group,sections,revision:s.revision};
   }

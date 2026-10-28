@@ -18,6 +18,7 @@ from user_profiles import observe
 
 FILE = 'user_directory_v1.json'
 HELP = '称呼设置：发送「设置称呼 你的称呼」。关联群聊与私聊：先在私聊发送「关联身份」，按提示验证一次，以后自动归类。'
+GRAY_HELP = '称呼设置：发送「设置称呼 你的称呼」。可靠平台身份存在时自动归类，证据不足时保留独立来源。'
 
 
 def _hash(value):
@@ -138,12 +139,24 @@ def handle(event, scope, root, text, *, now=None):
     """Return a local reply only for an explicit command; ordinary chat is inert."""
     command = re.fullmatch(r'(设置称呼|关联身份|确认关联|身份帮助|取消关联验证)(?:\s+(.*))?', text.strip(), re.S)
     if not command: return None
-    observed = observe(event, scope)
+    from union_rollout import policy_for
+    policy = policy_for(event, scope, root)
+    gray = bool(policy and policy['mode'] == 'apply')
+    help_text = GRAY_HELP if gray else HELP
+    if gray and command[1] in ('关联身份', '确认关联', '取消关联验证'):
+        return '用户自行取码与确认流程已停用。可靠平台身份存在时自动归类，证据不足时保留独立来源。'
+    if gray and command[1] == '身份帮助':
+        return help_text
+    if gray:
+        from union_user_profiles import observe as observe_selected
+        observed = observe_selected(event, scope)
+    else:
+        observed = observe(event, scope)
     if observed is None or not observed.get('app'):
         return '当前消息身份资料未通过核验，请稍后重试；未修改称呼或关联。'
     now = time.time() if now is None else now
     op, arg = command[1], (command[2] or '').strip()
-    if op == '身份帮助': return HELP
+    if op == '身份帮助': return help_text
     try:
         with _store(root) as store:
             key, row = _row(store, scope, observed, now)
@@ -153,7 +166,7 @@ def handle(event, scope, root, text, *, now=None):
             for k in expired: del pending[k]
             if op == '设置称呼':
                 if not 1 <= len(arg) <= 32 or any(unicodedata.category(c).startswith('C') for c in arg):
-                    return '称呼需为 1–32 个可见字符。'+HELP
+                    return '称呼需为 1–32 个可见字符。'+help_text
                 name = dict(value=arg, kind='self_selected', source='dsh.self_selected', at=now)
                 for r in store['sources'].values():
                     if r['person'] == row['person'] and _domain(r) == _domain(row): r['nickname'] = name
@@ -171,7 +184,7 @@ def handle(event, scope, root, text, *, now=None):
                 code = _code()
                 pending[_hash(code)] = dict(owner=key, domain=_domain(row), expires=now+300)
                 return '请在你本人所在群中向我发送「关联身份 '+code+'」。5 分钟有效。群聊认领后，仍须回到本私聊确认；不要替别人确认。'
-            if not re.fullmatch(r'[A-Z2-7]{16}', arg): return '验证码格式无效。'+HELP
+            if not re.fullmatch(r'[A-Z2-7]{16}', arg): return '验证码格式无效。'+help_text
             if op == '关联身份':
                 if scope.private: return '此步骤需在你本人的群聊中发送；私聊发起请只发「关联身份」。'
                 p = pending.get(_hash(arg))
@@ -195,7 +208,7 @@ def handle(event, scope, root, text, *, now=None):
             for r in rows:
                 r['person'] = row['person']
                 if chosen: r['nickname'] = chosen
-            return '已关联。以后这些来源自动归到同一用户，消息仍分别标记私聊和具体群聊。'+('' if chosen else ' '+HELP)
+            return '已关联。以后这些来源自动归到同一用户，消息仍分别标记私聊和具体群聊。'+('' if chosen else ' '+help_text)
     except (OSError, ValueError, TypeError, KeyError):
         return '身份资料暂时不可用，请稍后重试；未覆盖已有资料。'
 
@@ -210,6 +223,8 @@ def onboarding(event, scope, root, *, now=None):
             _, row = _row(store, scope, observed, now)
             if row.get('nickname') or row.get('hinted_at'): return None
             row['hinted_at'] = now
-            return '我还没有你的称呼。'+HELP
+            from union_rollout import policy_for
+            policy = policy_for(event, scope, root)
+            return '我还没有你的称呼。'+(GRAY_HELP if policy and policy['mode'] == 'apply' else HELP)
     except (OSError, ValueError, TypeError, KeyError):
         return None

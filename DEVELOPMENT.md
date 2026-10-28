@@ -194,3 +194,8 @@ git push origin dev
 ```
 
 如果凭据误入任何提交，仅删除当前文件不能清除历史；应先撤销或轮换该凭据，再清理对应历史。
+# 2026-10-28 QQ union 白名单灰度
+
+构建 `20261028-union-gray-1` 只在 `dsh_data/union_rollout_v1.json` 明确的、带应用与实例域的精确来源名单内启用。无策略、到期或名单不匹配时保留原用户流程；`observe` 仅写有界HMAC观察摘要，`apply` 才使用真实非空平台union进行管理聚合并停用该来源取码。该运行策略及比较键是私有资料，不入Git；不改变模型scope、权限、积分或发送Target。真实平台未返回可靠同union时不得启用apply。
+
+验证：`python -m unittest discover -s tests -p "test_union_*.py" -v`；`node --test console/tests/repair-union-*.test.js`。这些只验证合成路径，不能代替指定QQ账号的实际字段与客户端验收。上线、单次受控重启授权及真实结果见 `docs/reviews/2026-10-28-qq-union-gray.md`，不据本文自动发布或重启。

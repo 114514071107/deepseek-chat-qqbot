@@ -134,7 +134,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261028-repair-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261028-union-gray-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -670,7 +670,7 @@ async function vMemory({refresh=false,manual=false}={}) {
   $('#view').innerHTML='<div class="row"><label for="m-uid">用户</label><select id="m-uid">'+people.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===next.person?'selected':'')+'>'+esc(p.display_name||p.label)+'</option>').join('')+'</select>'+
     '<label for="m-mode">消息来源</label><select id="m-mode">'+[['all','全部消息'],['private','私聊'],['group','群聊'],['legacy','旧档（场景未知）']].map(([key,label])=>'<option value="'+key+'" '+(key===next.mode?'selected':'')+'>'+label+'</option>').join('')+'</select>'+
     (next.mode==='group'?'<label for="m-group">具体群</label><select id="m-group"><option value="">全部群</option>'+groups.map(g=>'<option value="'+esc(g)+'" '+(g===next.group?'selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+'<button class="act" id="m-load">刷新</button></div>'+
-    '<p class="dim">已验证关联的用户共用一个入口；未验证的来源暂时独立建档，无需维护者逐个确认。平台没有提供称呼时，由本人发送「设置称呼 你的称呼」；群聊与私聊可由本人发送「关联身份」验证。旧档没有可靠场景时保留未知标记。</p>'+
+    '<p class="dim">免取码身份功能仅对指定来源灰度启用；其他来源保留原有身份流程。可靠平台证据相同的来源可归到一个入口，并分别保留私聊和具体群聊；证据不足时独立建档。平台没有提供称呼时，可由本人发送「设置称呼 你的称呼」。旧档没有可靠场景时保留未知标记。</p>'+
     '<div id="m-feedback" role="status"></div><div id="m-content"><div class="card"><h3>'+esc(person.display_name||person.label)+' · 聊天记录</h3><p class="dim">每来源近期最多 150 条，本页 '+history.entries.length+' 条；分页和搜索仅覆盖近期滚动记录，不读取完整归档。</p><div id="m-history">'+history.entries.map(row=>'<div data-read-key="memory-history:'+esc(row.view_key)+'"><p class="dim">'+esc(scene(row))+' · '+esc(row.speaker)+'</p>'+histEntryHtml(row)+'</div>').join('')+(history.entries.length?'':'<p class="dim">此筛选暂无记录。</p>')+'</div><div class="row"><button class="act" id="m-first" '+(next.offset?'':'hidden')+'>回到最新</button><button class="act" id="m-more" '+(history.next_offset===null?'hidden':'')+'>下一页记录</button></div></div>'+
     memory.sections.map((section,si)=>'<section class="card" data-read-key="memory-source:'+esc(section.uid)+'"><h3>'+esc(section.label)+'</h3>'+(section.notice?'<p class="dim">'+esc(section.notice)+'</p>':'')+'<div class="grid"><div><h4>念头</h4>'+section.thoughts.map((t,ti)=>'<div class="kv"><span>'+esc(t.text)+' <span class="dim">'+esc(t.src)+' · '+fmtT(t.t)+'</span></span>'+(section.operation_uid?'<button class="act danger" data-memory-delete="'+si+':'+ti+'">删</button>':'')+'</div>').join('')+(section.thoughts.length?'':'<p class="dim">暂无</p>')+'</div><div><h4>长期记忆</h4>'+section.notes.map(n=>'<p class="dim">'+esc(n.note)+'</p><pre>'+esc(n.text)+'</pre>').join('')+(section.notes.length?'':'<p class="dim">暂无独立记忆文件；同一原记忆键在本页只展示一次。</p>')+'</div><div><h4>本来源会话摘要</h4><pre>'+esc(JSON.stringify(section.session,null,2))+'</pre></div><div><h4>本来源学习资料</h4><pre>'+esc(section.memes||'暂无')+'</pre></div></div></section>').join('')+'</div>';
   // The shared HTML cache can skip an unchanged refresh; clear its live
