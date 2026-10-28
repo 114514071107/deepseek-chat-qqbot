@@ -40,7 +40,7 @@ def load_pipeline(root, names=('capture','_clear_text_result','_set_first_bubble
     tree=ast.parse((PLUGIN/'main.py').read_text(encoding='utf-8-sig'))
     cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='DshSoul')
     cls.bases=[]; cls.decorator_list=[]
-    helpers=('_person_key','_reset_request','_close_request','_feedback','_feedback_suppressed','_close_feedback','_settle_feedback','_set_reply_plan','_sticker_budget','_queue_sticker','_scope','_source','_private','_owner','_perm','_group_append',
+    helpers=('_memory_key','_dialogue_rows','_person_key','_reset_request','_close_request','_feedback','_feedback_suppressed','_close_feedback','_settle_feedback','_set_reply_plan','_sticker_budget','_queue_sticker','_scope','_source','_private','_owner','_perm','_group_append',
              '_finish_reply','_complete_reply','_record_assistant_turn','_record_user_turn','_synthesize_voice',
              '_drip_interval','_persist_framework_reply','_text_fallback','_record_delivery_result','_write_media','_retain_sent_media','_thread','_budget','_context_rows')
     cls.body=[n for n in cls.body if getattr(n,'name','') in names+helpers]

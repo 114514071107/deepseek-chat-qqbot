@@ -1,0 +1,160 @@
+TAP version 13
+# Subtest: two groups with multiple actors are two group entries and a private chat stays separate despite old mappings
+ok 1 - two groups with multiple actors are two group entries and a private chat stays separate despite old mappings
+  ---
+  duration_ms: 33.2632
+  type: 'test'
+  ...
+# Subtest: recent cap, paging, search and stable outbound duplicate projection agree without deleting equal text new events
+ok 2 - recent cap, paging, search and stable outbound duplicate projection agree without deleting equal text new events
+  ---
+  duration_ms: 32.0781
+  type: 'test'
+  ...
+# Subtest: private memory remains distinct from group memory; obsolete mappings never grant access
+ok 3 - private memory remains distinct from group memory; obsolete mappings never grant access
+  ---
+  duration_ms: 26.5788
+  type: 'test'
+  ...
+# Subtest: same bare group ID in different bot, platform and instance never merges
+ok 4 - same bare group ID in different bot, platform and instance never merges
+  ---
+  duration_ms: 12.5219
+  type: 'test'
+  ...
+# Subtest: ambiguous old private/member memory is excluded until explicit cleanup
+ok 5 - ambiguous old private/member memory is excluded until explicit cleanup
+  ---
+  duration_ms: 18.2819
+  type: 'test'
+  ...
+# Subtest: unbound accepted group output is excluded and conflicting stable versions stay auditable
+ok 6 - unbound accepted group output is excluded and conflicting stable versions stay auditable
+  ---
+  duration_ms: 15.635
+  type: 'test'
+  ...
+# Subtest: all catalog pages remain reachable and management validation includes objects after 100
+ok 7 - all catalog pages remain reachable and management validation includes objects after 100
+  ---
+  duration_ms: 45.9459
+  type: 'test'
+  ...
+# Subtest: group accepted output must match frozen Target, actor, request and source message
+ok 8 - group accepted output must match frozen Target, actor, request and source message
+  ---
+  duration_ms: 13.2882
+  type: 'test'
+  ...
+# Subtest: launcher receives the recorded instance Bot port
+ok 9 - launcher receives the recorded instance Bot port
+  ---
+  duration_ms: 9.9344
+  type: 'test'
+  ...
+# Subtest: dispatch timeout cannot overwrite a controller result that already started
+ok 10 - dispatch timeout cannot overwrite a controller result that already started
+  ---
+  duration_ms: 11.0197
+  type: 'test'
+  ...
+# Subtest: lifecycle API exposes pending and final failures without claiming success
+ok 11 - lifecycle API exposes pending and final failures without claiming success
+  ---
+  duration_ms: 57.6596
+  type: 'test'
+  ...
+# Subtest: launcher-selected runtime root is used without reading another instance
+ok 12 - launcher-selected runtime root is used without reading another instance
+  ---
+  duration_ms: 210.1093
+  type: 'test'
+  ...
+# Subtest: all pages, history, media and management require credentials
+ok 13 - all pages, history, media and management require credentials
+  ---
+  duration_ms: 17.6452
+  type: 'test'
+  ...
+# Subtest: accepted snapshots remain authenticated and unknown formats download only inside sent media
+ok 14 - accepted snapshots remain authenticated and unknown formats download only inside sent media
+  ---
+  duration_ms: 73.2352
+  type: 'test'
+  ...
+# Subtest: history renders accepted image, audio and attachment references as inspectable media
+ok 15 - history renders accepted image, audio and attachment references as inspectable media
+  ---
+  duration_ms: 1.5262
+  type: 'test'
+  ...
+# Subtest: user-initiated cross-site entry navigation reaches login and the console page
+ok 16 - user-initiated cross-site entry navigation reaches login and the console page
+  ---
+  duration_ms: 11.9735
+  type: 'test'
+  ...
+# Subtest: entry navigation exception never exposes APIs, media, frames or cross-site writes
+ok 17 - entry navigation exception never exposes APIs, media, frames or cross-site writes
+  ---
+  duration_ms: 12.163
+  type: 'test'
+  ...
+# Subtest: authenticated reads work; writes require same origin, JSON and custom header
+ok 18 - authenticated reads work; writes require same origin, JSON and custom header
+  ---
+  duration_ms: 18.2168
+  type: 'test'
+  ...
+# Subtest: startup fails closed without a strong token or with a public bind address
+ok 19 - startup fails closed without a strong token or with a public bind address
+  ---
+  duration_ms: 1.792
+  type: 'test'
+  ...
+# Subtest: status reads an existing Windows UTF-8 BOM config without rewriting or hiding corrupt JSON
+ok 20 - status reads an existing Windows UTF-8 BOM config without rewriting or hiding corrupt JSON
+  ---
+  duration_ms: 246.2686
+  type: 'test'
+  ...
+# Subtest: each operation rechecks executable capability; business failure never retries
+ok 21 - each operation rechecks executable capability; business failure never retries
+  ---
+  duration_ms: 6.4559
+  type: 'test'
+  ...
+# Subtest: offline runtime is an explicit failure; console cannot alter a stale cached file
+ok 22 - offline runtime is an explicit failure; console cannot alter a stale cached file
+  ---
+  duration_ms: 65.6476
+  type: 'test'
+  ...
+# Subtest: private proactive effective default is off without writing an override
+ok 23 - private proactive effective default is off without writing an override
+  ---
+  duration_ms: 17.0357
+  type: 'test'
+  ...
+# Subtest: commands wait for matching runtime acknowledgment; expired lease and untyped sends fail
+ok 24 - commands wait for matching runtime acknowledgment; expired lease and untyped sends fail
+  ---
+  duration_ms: 45.2544
+  type: 'test'
+  ...
+# Subtest: real isolated Python state owner acknowledges cache, points, deletion and typed group target
+ok 25 - real isolated Python state owner acknowledges cache, points, deletion and typed group target
+  ---
+  duration_ms: 1149.4464
+  type: 'test'
+  ...
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1473.6717

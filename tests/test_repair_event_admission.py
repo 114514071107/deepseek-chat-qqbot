@@ -15,6 +15,29 @@ from unittest.mock import patch
 
 
 class EventAdmissionRegression(unittest.IsolatedAsyncioTestCase):
+    async def test_fresh_private_and_group_chat_needs_no_mapping_or_union(self):
+        for union in (None,''):
+            with self.subTest(union=union),tempfile.TemporaryDirectory() as root:
+                obj,ns=load_pipeline(root,names=('gate',))
+                self.addAsyncCleanup(obj.runtime.stop);self.addAsyncCleanup(obj.resources.close)
+                ns.update(MASTER_SWITCH_RE=re.compile('^NEVER$'),REMIND_CMD_RE=re.compile('^NEVER$'),STATUS_RE=re.compile('^NEVER$'),
+                    Image=type('Image',(),{}),File=type('File',(),{}),_conf=lambda k:k=='enabled',
+                    MAX_ITEMS=10,BATCH_DONE_MINLEN=8,BATCH_END_PUNCT='。',BATCH_STREAK_GAP=8)
+                obj.names={};obj.n_path=str(Path(root)/'names.json');obj.sil={};obj._owner=lambda *a:False;obj._perm=lambda *a:True;obj._match_sleep_cmd=lambda *a:None
+                obj.context=SimpleNamespace(get_config=lambda **kw:{})
+                obj.last_msg_at={};obj.batch_skipwait={};obj.batch_buf={}
+                module=SimpleNamespace(normalize_agent_runner=lambda v:{'config':{'misc':{'max_steps':2}}})
+                with patch.dict('sys.modules',{'astrbot.core.config.agent_runner':module}),patch('random.random',return_value=1):
+                    for i,(sender,group) in enumerate([('a','G1'),('b','G1'),('a','G2'),('a','')]):
+                        e=ScopeEvent(sender,group);e.message_obj.message_id=str(i);e.stopped=False;e.stop_event=lambda:setattr(e,'stopped',True)
+                        author={('member_openid' if group else 'user_openid'):sender}
+                        if union is not None:author['union_openid']=union
+                        e.message_obj.raw_message=SimpleNamespace(raw_data={'id':str(i),'author':author,**({'group_openid':group} if group else {})})
+                        await obj.gate(e)
+                        self.assertTrue(e.get_extra('_dsh_admitted'));self.assertFalse(e.stopped)
+                for old in ('user_directory_v1.json','console_people_v1.json','union_rollout_v1.json'):
+                    self.assertFalse((Path(root)/old).exists())
+
     async def test_concurrent_duplicate_local_command_charges_sends_and_records_once(self):
         with tempfile.TemporaryDirectory() as root:
             obj, ns = load_pipeline(root, names=('gate',))
@@ -60,6 +83,8 @@ class EventAdmissionRegression(unittest.IsolatedAsyncioTestCase):
             obj.last_msg_at={};obj.batch_skipwait={};obj.batch_buf={};counts=dict(download=0,model=0,tools=0,send=0)
             async def image(*a):counts['download']+=1;await asyncio.sleep(.02);return ['synthetic.png']
             obj._save_inbox_images=image;obj._spawn=lambda coro:coro.close()
+            async def reaction(*a):pass
+            obj._react_and_send=reaction
             def event(mid):
                 e=ScopeEvent('synthetic');e.message_obj.message_id=mid;e.message_obj.message=[Image()];e.stopped=False;e.stop_event=lambda:setattr(e,'stopped',True);return e
             async def pipeline(e):

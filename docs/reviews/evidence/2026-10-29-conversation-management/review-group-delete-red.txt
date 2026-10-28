@@ -1,0 +1,49 @@
+test_actual_inject_and_group_extraction_never_read_or_create_member_memory (test_repair_conversation_mode.ActualModelConversation.test_actual_inject_and_group_extraction_never_read_or_create_member_memory) ... Executing <Task pending name='Task-2' coro=<ActualModelConversation.test_actual_inject_and_group_extraction_never_read_or_create_member_memory() running at D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_conversation_mode.py:64> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:922, Task.task_wakeup()] created at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.110 seconds
+ok
+test_framework_session_is_group_while_event_target_and_sender_stay_bound (test_repair_conversation_mode.ConversationMode.test_framework_session_is_group_while_event_target_and_sender_stay_bound) ... ok
+test_group_context_shares_speakers_but_not_other_group_or_private (test_repair_conversation_mode.ConversationMode.test_group_context_shares_speakers_but_not_other_group_or_private) ... ok
+test_group_delete_resolves_all_actors_and_keeps_other_conversations (test_repair_conversation_mode.ConversationMode.test_group_delete_resolves_all_actors_and_keeps_other_conversations) ... FAIL
+test_profiles_only_one_group_and_private_no_union_or_member_profiles (test_repair_conversation_mode.ConversationMode.test_profiles_only_one_group_and_private_no_union_or_member_profiles) ... ok
+
+======================================================================
+FAIL: test_group_delete_resolves_all_actors_and_keeps_other_conversations (test_repair_conversation_mode.ConversationMode.test_group_delete_resolves_all_actors_and_keeps_other_conversations)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_conversation_mode.py", line 43, in test_group_delete_resolves_all_actors_and_keeps_other_conversations
+    asyncio.run(run())
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_conversation_mode.py", line 42, in run
+    self.assertEqual(obj._dialogue_rows(a.key),[]);self.assertEqual(obj.groups.get(a.group_key,[]),[]);self.assertFalse((mem/(a.conversation_key+'.md')).exists());self.assertTrue((mem/(p.key+'.md')).exists());await obj.runtime.stop();await obj.resources.close()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'role': 'user', 'text': 'DELETE-ME', 'id[217 chars]58}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'role': 'user', 'text': 'DELETE-ME', 'id': 'del', 'source': {'platform': 'qq_official', 'instance': 'bot-one', 'bot': 'fixture-self', 'sender': 'a', 'group': 'G', 'message_id': 'fixture-msg', 'private': False, 'event_id': '', 'received_at': 1793204670.7854958}}
+
++ []
+- [{'id': 'del',
+-   'role': 'user',
+-   'source': {'bot': 'fixture-self',
+-              'event_id': '',
+-              'group': 'G',
+-              'instance': 'bot-one',
+-              'message_id': 'fixture-msg',
+-              'platform': 'qq_official',
+-              'private': False,
+-              'received_at': 1793204670.7854958,
+-              'sender': 'a'},
+-   'text': 'DELETE-ME'}]
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.405s
+
+FAILED (failures=1)

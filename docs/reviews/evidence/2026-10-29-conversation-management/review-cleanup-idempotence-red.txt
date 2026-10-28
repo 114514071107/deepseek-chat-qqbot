@@ -1,0 +1,28 @@
+test_drift_and_backup_inside_root_refused_without_removing_any_file (test_repair_conversation_cleanup.Cleanup.test_drift_and_backup_inside_root_refused_without_removing_any_file) ... ok
+test_failed_restore_revokes_memory_permission_before_reintroducing_any_old_material (test_repair_conversation_cleanup.Cleanup.test_failed_restore_revokes_memory_permission_before_reintroducing_any_old_material) ... ok
+test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again (test_repair_conversation_cleanup.Cleanup.test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again) ... FAIL
+test_plan_backup_quarantine_idempotence_and_private_chat_preservation (test_repair_conversation_cleanup.Cleanup.test_plan_backup_quarantine_idempotence_and_private_chat_preservation) ... ok
+
+======================================================================
+FAIL: test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again (test_repair_conversation_cleanup.Cleanup.test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_conversation_cleanup.py", line 30, in test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again
+    self.assertEqual(plan(root)['actions'],[]);self.assertEqual(f.read_text(),'NEW-PRIVATE-ONLY')
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [{'relative': 'memories/p2_c4fef369c3007ed[176 chars]er'}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'relative': 'memories/p2_c4fef369c3007ed79d0086ed0e2111937fee6f57bcd5eebf661630ebc16477af.md', 'sha256': '89f4f03a7dd4a41b576f486cd6d4611c9229251d773da0be1e3b7ef20e5df93e', 'size': 16, 'reason': 'confirmed_group_member'}
+
++ []
+- [{'reason': 'confirmed_group_member',
+-   'relative': 'memories/p2_c4fef369c3007ed79d0086ed0e2111937fee6f57bcd5eebf661630ebc16477af.md',
+-   'sha256': '89f4f03a7dd4a41b576f486cd6d4611c9229251d773da0be1e3b7ef20e5df93e',
+-   'size': 16}]
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.165s
+
+FAILED (failures=1)

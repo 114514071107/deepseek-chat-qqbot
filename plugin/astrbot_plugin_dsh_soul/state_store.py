@@ -71,6 +71,9 @@ class StateController:
         return sorted(str(p.relative_to(self.root)).replace('\\','/') for p in files
                       if not p.is_symlink() and p.resolve().is_relative_to(self.root.resolve()))
 
+    def conversation_members(self,key):
+        return [uid for uid,source in self.plugin.scopes.items() if Scope(**source).conversation_key==key]
+
     def preview(self,key):
         return {'uid':key,'layers':list(LAYERS),'backups':self.backups(),
                 'backup_impact':'所列备份可能包含所有用户；删除所选整份文件，不是按用户擦除。外部/系统备份不在本入口范围',
@@ -79,9 +82,42 @@ class StateController:
                            'summary':'会话摘要及临时念头','memory':'长期笔记、学习资料及私有 Markdown 画像',
                            'media':'本会话留存的收件和语音文件；共享表情图库不在此项',
                            'backups':'明确选中的整份备份文件'},
-                'legacy':key not in self.plugin.scopes}
+                'legacy':key not in self.plugin.scopes and not self.conversation_members(key)}
 
     async def delete(self,key,layers,*,backup_files=None,confirm_shared_backups=False):
+        if not isinstance(key,str) or not key or not isinstance(layers,list) or not layers or set(layers)-set(LAYERS):
+            raise ValueError('explicit valid layers and record key are required')
+        members=self.conversation_members(key)
+        if key.startswith('g2_'):
+            async with self.lock:
+                self.plugin.runtime.pause(key)
+                self.plugin.runtime.invalidate(key)
+                members=self.conversation_members(key)
+                for member in members: self.plugin.runtime.pause(member)
+                try:
+                    actor_layers=[layer for layer in layers if layer not in ('memory','summary','backups')]
+                    results=[];shared={}
+                    for member in members:
+                        self.plugin.runtime.invalidate(member)
+                        results.append(await self._delete(member,actor_layers,backup_files=None,confirm_shared_backups=False))
+                    for layer in layers:
+                        try:
+                            if layer=='rolling':
+                                self.plugin.groups[key]=[]
+                                write_json(self.plugin.group_path,self.plugin.groups)
+                                shared[layer]={'status':'done'}
+                            elif layer in ('memory','backups'):
+                                shared[layer]=await self._delete_layer(key,layer,True,[],backup_files,confirm_shared_backups) or {'status':'done'}
+                            elif layer=='summary':
+                                self._unlink(self.path('session_'+key+'.json'))
+                                self._table_remove(self.path('thoughts_v2.json'),key,self.plugin.th)
+                                shared[layer]={'status':'done'}
+                        except Exception as error:
+                            shared[layer]={'status':'failed','error':type(error).__name__}
+                    return {'ok':all(r['ok'] for r in results) and all(r['status']=='done' for r in shared.values()),'uid':key,'scope':'整个群聊','results':results,'layers':shared,'retained':[v for v in LAYERS if v not in layers]}
+                finally:
+                    self.plugin.runtime.resume(key)
+                    for member in members:self.plugin.runtime.resume(member)
         if not isinstance(key,str) or not key or not isinstance(layers,list) or not layers or set(layers)-set(LAYERS):
             raise ValueError('explicit valid layers and record key are required')
         async with self.lock:
@@ -277,6 +313,7 @@ class StateController:
                 name='names_all.json'; table=self.load(name,{}); table[key]=str(body.get('name',''))[:30]; result={'names':table}
             elif operation in ('points','points/grant'):
                 scope=obj.scopes.get(key)
+                if key.startswith('g2_'):raise ValueError('群积分仍按原发言者账本，不支持将整群设为一个账户')
                 name='points_all.json'; table=self.load(name,{})
                 key=person_ledger_key(Scope(**scope),table) if scope else key
                 entry=table.setdefault(key,{'balance':0,'grant':None,'last':'','spent':0,'notified':''})
@@ -293,11 +330,11 @@ class StateController:
             elif operation=='unsilence':
                 name='silence_v2.json' if key in obj.scopes else 'silence_all.json'; table=self.load(name,{}); table.pop(key,None); result={'silence':table}
             elif operation=='thought/del':
-                name='thoughts_v2.json' if key in obj.scopes else 'thoughts_all.json'; table=self.load(name,{})
+                name='thoughts_v2.json' if key in obj.scopes or self.conversation_members(key) else 'thoughts_all.json'; table=self.load(name,{})
                 index=body.get('index'); rows=table.get(key,[])
                 if type(index) is not int or index<0 or index>=len(rows): raise ValueError('invalid thought index')
                 rows.pop(index); result={'thoughts':rows}
-                obj.runtime.invalidate(key)
+                for affected in self.conversation_members(key) or [key]:obj.runtime.invalidate(affected)
             else: raise ValueError('unknown operation')
         self.save(name,table)
         # Publish cache changes only after successful persistence.
@@ -313,7 +350,7 @@ class StateController:
             else: obj.runtime.revoke_feature(body['key'])
         if operation=='user' and body.get('value') is False:
             affected=[body['uid']] if body['uid'] in obj.scopes else [
-                scope for scope,source in obj.scopes.items() if source['sender']==body['uid']
+                scope for scope,source in obj.scopes.items() if (source['sender']==body['uid'] or Scope(**source).conversation_key==body['uid'])
                 and body['key'] not in table.get(scope,{})]
             if body['key']=='reply':
                 for scope in affected:

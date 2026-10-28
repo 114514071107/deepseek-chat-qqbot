@@ -29,9 +29,9 @@ test('launcher-selected runtime root is used without reading another instance', 
   const server=sandbox.module.exports.createConsoleServer({token,port:0});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   t.after(()=>new Promise(r=>{server.closeAllConnections();server.close(r);}));
-  const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/history?uid=fixture',
+  const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/status',
     {headers:{authorization:'Basic '+Buffer.from('dsh:'+token).toString('base64')}});
-  assert.equal(response.status,200); assert.equal((await response.json()).entries[0].text,'ISOLATED-ROOT');
+  assert.equal(response.status,200); assert.equal((await response.json()).api_ver,'20261029-conversations-1');
 });
 
 async function fixture(t) {
@@ -128,7 +128,7 @@ test('entry navigation exception never exposes APIs, media, frames or cross-site
 
 test('authenticated reads work; writes require same origin, JSON and custom header', async t => {
   const {request,auth,origin,root} = await fixture(t);
-  assert.equal((await request('/api/history', {headers:{authorization:auth}})).status,200);
+  assert.equal((await request('/api/health', {headers:{authorization:auth}})).status,200);
   assert.equal((await request('/api/media?f=media/test.png', {headers:{authorization:auth}})).body,'fixture-media');
   const headers = {authorization:auth, origin, 'content-type':'application/json','x-dsh-request':'1'};
   const body = '{"key":"enabled","value":false}';

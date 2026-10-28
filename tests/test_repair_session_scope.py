@@ -67,13 +67,14 @@ class SessionScopeRegression(unittest.IsolatedAsyncioTestCase):
     async def test_final_group_request_excludes_framework_legacy_and_private_memory(self):
         with tempfile.TemporaryDirectory() as tmp:
             plugin,ns=load_pipeline(tmp)
-            ns['_read_notes']=lambda uid:['PRIVATE-NOTE-SENTINEL']
+            ns['_read_notes']=lambda uid:['PRIVATE-NOTE-SENTINEL'] if uid.startswith('p2_') else ['GROUP-NOTE-SENTINEL']
             ( __import__('pathlib').Path(tmp)/'persona.md').write_text('fixture persona',encoding='utf-8')
             req=SimpleNamespace(prompt='new question',system_prompt='',contexts=[{'role':'user','content':'OTHER-SENDER-SENTINEL'}],func_tool=None)
             await plugin.inject(ScopeEvent(group='g1'),req)
             final=str(req.contexts)+req.prompt+req.system_prompt
             self.assertNotIn('OTHER-SENDER-SENTINEL',final)
             self.assertNotIn('PRIVATE-NOTE-SENTINEL',final)
+            self.assertIn('GROUP-NOTE-SENTINEL',final)
 
     async def test_keys_separate_people_groups_private_and_instances(self):
         from session_scope import bind_scope
@@ -83,7 +84,7 @@ class SessionScopeRegression(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(scopes[0].group_key,scopes[1].group_key)
         self.assertNotEqual(scopes[0].group_key,scopes[2].group_key)
         self.assertEqual(scopes[0].memory_key,scopes[3].memory_key)
-        self.assertEqual(events[0].session_id,scopes[0].key)
+        self.assertEqual(events[0].session_id,scopes[0].group_key)
         self.assertEqual(bind_scope(events[0]),scopes[0])
         self.assertEqual(scopes[0].target.address,'g1')
         self.assertEqual(scopes[0].source()['sender'],'a')

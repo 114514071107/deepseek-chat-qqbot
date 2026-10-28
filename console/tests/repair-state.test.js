@@ -68,11 +68,12 @@ test('real isolated Python state owner acknowledges cache, points, deletion and 
     const points=await post('/api/points',{uid:key,mode:'set',value:17});
     assert.equal(points.ok,true,JSON.stringify(points));
     const view=await get("/api/switches");assert.equal(view.points[key].balance,17);
-    const name=await post('/api/name',{uid:key,name:'fixture name'});assert.equal(name.ok,true);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(data,'runtime_fixture.json'))).names[key],'fixture name');
+    const conversation=(await get('/api/people')).people[0].id;
+    const name=await post('/api/name',{uid:conversation,name:'fixture name'});assert.equal(name.ok,true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(data,'runtime_fixture.json'))).names[conversation],'fixture name');
     const sent=await post('/api/admin_send',{target_key:key,kind:'group',instance:'fixture-instance',text:'fixture'});assert.equal(sent.ok,true);
     assert.equal(JSON.parse(fs.readFileSync(path.join(data,'sent_fixture.json'))).kind,'group');
-    const deleted=await post('/api/history/clear',{uid:key,layers:['rolling']});assert.equal(deleted.ok,true);
+    const deleted=await post('/api/history/clear',{uid:conversation,layers:['rolling']});assert.equal(deleted.ok,true);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(data,'runtime_fixture.json'))).h[key],[]);
   }finally{child.kill();await closed;}
 });

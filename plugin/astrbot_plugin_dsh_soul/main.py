@@ -725,6 +725,8 @@ def _notes_path(uid):
 
 
 def _read_notes(uid):
+    from conversation_storage import memory_available
+    if not memory_available(DATA,uid): return []
     try:
         with open(_notes_path(uid), "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
@@ -734,6 +736,8 @@ def _read_notes(uid):
 
 
 def _append_note(uid, line):
+    from conversation_storage import prepare_new_memory
+    if not prepare_new_memory(DATA,uid): return
     line = line.strip().lstrip("-* ").strip()
     if not line or len(line) > 80:
         return
@@ -749,18 +753,22 @@ def _append_note(uid, line):
     kept.append(line)
     lines = kept
     os.makedirs(os.path.dirname(_notes_path(uid)), exist_ok=True)
-    write_text(_notes_path(uid), "# 关于对方的长期记忆（自动整理，可手改）" + NL + NL + NL.join("- " + l for l in lines[-40:]) + NL)
+    write_text(_notes_path(uid), ("# 本群共同记忆（自动整理，可手改）" if uid.startswith("g2_") else "# 本私聊长期记忆（自动整理，可手改）") + NL + NL + NL.join("- " + l for l in lines[-40:]) + NL)
 
 
 def _remove_note(uid, old):
+    from conversation_storage import memory_available
+    if not memory_available(DATA,uid): return
     lines = _read_notes(uid)
     kept = [l for l in lines if l != old and old not in l and l not in old]
     if len(kept) != len(lines):
         os.makedirs(os.path.dirname(_notes_path(uid)), exist_ok=True)
-        write_text(_notes_path(uid), "# 关于对方的长期记忆（自动整理，可手改）" + NL + NL + NL.join("- " + l for l in kept[-40:]) + NL)
+        write_text(_notes_path(uid), ("# 本群共同记忆（自动整理，可手改）" if uid.startswith("g2_") else "# 本私聊长期记忆（自动整理，可手改）") + NL + NL + NL.join("- " + l for l in kept[-40:]) + NL)
 
 
 def _read_memes(uid):
+    from conversation_storage import memory_available
+    if not memory_available(DATA,uid): return []
     try:
         with open(os.path.join(DATA, "memes", uid + ".md"), "r", encoding="utf-8") as f:
             lines = [l.strip() for l in f.read().splitlines() if l.strip() and not l.startswith("#")]
@@ -1110,6 +1118,10 @@ class DshSoul(Star):
                 row["request_state"] = status
                 changed.append(row["id"])
         if changed:
+            for rows in self.groups.values():
+                for row in rows:
+                    if row.get('id') in changed: row['request_state']=status
+            _save(self.group_path,self.groups)
             _save(self.h_path, self.h)
             # Original archive speech stays intact; append an audit transition.
             _archive_append(key, dict(role="request_state", text="", request_id=request,
@@ -1233,7 +1245,7 @@ class DshSoul(Star):
     @managed
     async def _clear_framework_history(self, key):
         scope = Scope(**self.scopes[key])
-        umo = scope.target.umo.rsplit(":", 1)[0] + ":" + key
+        umo = scope.target.umo.rsplit(":", 1)[0] + ":" + scope.conversation_key
         manager = self.context.conversation_manager
         # The broad session deletion API invokes extension cascades. Rolling
         # history must not silently delete a knowledge base or other layers.
@@ -1371,6 +1383,7 @@ class DshSoul(Star):
         if not data:
             return False
         table = _load(os.path.join(DATA, "friends_all.json"), {})
+        if table.get(Scope(**data).conversation_key, {}).get(feature) is False: return False
         flags = table.get(key, {})
         if feature in flags:
             return flags[feature] is not False
@@ -1516,13 +1529,33 @@ class DshSoul(Star):
     def _h(self, uid):
         return self.h.setdefault(uid, [])[-150:]
 
+    def _memory_key(self, uid):
+        return Scope(**self.scopes[uid]).conversation_key
+
+    def _dialogue_rows(self, uid):
+        scope = Scope(**self.scopes[uid])
+        if scope.private: return self._h(uid)
+        # Recover verified group rows from actor rolling buckets as well as the
+        # shared log, so partial older writes do not erase usable group context.
+        rows=list(self.groups.get(scope.group_key, []))
+        for entries in self.h.values(): rows.extend(entries)
+        chosen={}
+        for row in evidence_rows(rows,scope):
+            identity=row.get('id') or fingerprint([row])
+            chosen[identity]=row
+        return sorted(chosen.values(),key=lambda r:(r.get('ts',0),str(r.get('id',''))))[-150:]
+
     def _context_rows(self, uid):
-        return evidence_rows(self._h(uid), Scope(**self.scopes[uid]))
+        return evidence_rows(self._dialogue_rows(uid), Scope(**self.scopes[uid]))
 
     def _th(self, uid):
-        return self.th.setdefault(uid, [])[-10:]
+        from conversation_storage import memory_available
+        if not memory_available(DATA,self._memory_key(uid)):return []
+        return self.th.setdefault(self._memory_key(uid), [])[-10:]
 
     def _pop_thought(self, uid, max_age_s, src, newest=False):
+        from conversation_storage import memory_available
+        if not memory_available(DATA,self._memory_key(uid)):return None
         lst = self._th(uid)
         now = time.time()
         live = [e for e in lst if e.get("src") == src and now - e.get("t", 0) <= max_age_s]
@@ -1530,16 +1563,18 @@ class DshSoul(Star):
         others = [e for e in lst if e.get("src") != src]
         # 默认取最旧（对齐原版 shift）；revive 等场景传 newest=True 取最新
         picked = (live.pop() if newest else live.pop(0)) if live else None
-        self.th[uid] = others + live
+        self.th[self._memory_key(uid)] = others + live
         _save(self.t_path, self.th)
         return picked["text"] if picked else None
 
     def _save_thought(self, uid, text, src):
+        from conversation_storage import prepare_new_memory
+        if not prepare_new_memory(DATA,self._memory_key(uid)):return
         lst = self._th(uid)
         if any(e.get("text") == text for e in lst):
             return
         lst.append({"t": time.time(), "text": text, "src": src})
-        self.th[uid] = lst[-10:]
+        self.th[self._memory_key(uid)] = lst[-10:]
         _save(self.t_path, self.th)
 
     @filter.on_llm_request()
@@ -1659,24 +1694,26 @@ class DshSoul(Star):
             # background. Do not persist injected memory as a new user turn.
             # Only source-bound retained user/accepted assistant records enter
             # contexts. Current batch messages are already in this prompt.
-            rows = copy.deepcopy(self._h(uid))
-            sess = _load(_jf(uid, "session"), {})
+            rows = copy.deepcopy(self._dialogue_rows(uid))
+            from conversation_storage import prepare_new_memory
+            storage_ready = prepare_new_memory(DATA,self._memory_key(uid))
+            sess = _load(_jf(self._memory_key(uid), "session"), {}) if storage_ready else {}
             window = await self._thread(build_window, rows, event.get_extra("_dsh_current_ids", [scope.message_id]),
                                         scope, 10000, sess.get("context"))
             check_current()
             req.contexts = window["messages"]
             event.set_extra("_dsh_context_measurement", {k: window[k] for k in ("source_chars", "context_chars")})
-            if fingerprint(self._h(uid)) == fingerprint(rows):
+            if storage_ready and fingerprint(self._dialogue_rows(uid)) == fingerprint(rows):
                 sess["context"] = window["summary"]
-                _save(_jf(uid, "session"), sess)
+                _save(_jf(self._memory_key(uid), "session"), sess)
             req.session_id = event.unified_msg_origin
             req.system_prompt = NL.join(p for p in parts if p)
             ctx = []
-            notes = _read_notes(uid) if scope.private else []
+            notes = _read_notes(self._memory_key(uid))
             if notes:
-                who = "主人" if is_master else "对方"
+                who = ("主人" if is_master else "对方") if scope.private else "本群共同事项（不含私聊或成员独立画像）"
                 ctx.append("【你长期记住的关于" + who + "的事】" + NL + NL.join("- " + l for l in notes))
-            memes = _read_memes(uid)
+            memes = _read_memes(self._memory_key(uid))
             if memes:
                 ctx.append("【梗图鉴】你已认识的梗/流行语（可自然使用；遇到不认识的梗，先用 web_search 查清，再用 learn_meme 记进来）：" + NL + NL.join(memes[-15:]))
             # Old unversioned generated summaries/moods remain on disk, but
@@ -1782,12 +1819,6 @@ class DshSoul(Star):
                     self.pending_sticker.pop(uid, [])))
                 return
             bubbles = [format_qq_text(b) for b in (_bubbles_napcat(text) or [text])]
-            if not voice and not preserve_literal_message(text) and not sticker_only_request(event.message_str or ""):
-                from user_directory import onboarding
-                hint = onboarding(event, scope, DATA)
-                if hint:
-                    bubbles.append(hint)
-                    text += NL + NL + hint
             rc = getattr(resp, "result_chain", None)
             others = [c for c in (getattr(rc, "chain", None) or []) if not isinstance(c, Plain)]
             rows = self.pending_sticker.pop(uid, [])
@@ -1894,16 +1925,18 @@ class DshSoul(Star):
             hist = self._h(uid)
             # H1：用单调递增的轮次计数器判断触发，避免 _h 封顶 150 后差值恒 0 导致提炼/摘要永久停摆
             tc = self.turn_count.get(uid, 0)
-            if self._private(uid) and len(hist) >= 12 and tc - self.extract_at.get(uid, 0) >= 12:
+            if len(self._context_rows(uid)) >= 12 and tc - self.extract_at.get(uid, 0) >= 12:
                 self.extract_at[uid] = tc
-                self._spawn(self._extract_notes(uid))
-            sess = _load(_jf(uid, "session"), {})
+                self._spawn(self._extract_notes(uid), exclusive="notes:" + self._memory_key(uid))
+            from conversation_storage import prepare_new_memory
+            storage_ready = prepare_new_memory(DATA,self._memory_key(uid))
+            sess = _load(_jf(self._memory_key(uid), "session"), {}) if storage_ready else {}
             sat = sess.get("at", 0)
             if sat > tc:
                 sat = 0  # 重启后计数器清零而旧会话基准更大时，重新累计
-            if tc - sat >= 16:  # §34 降频：会话摘要 8→16 轮
+            if storage_ready and tc - sat >= 16:  # §34 降频：会话摘要 8→16 轮
                 sess["at"] = tc
-                _save(_jf(uid, "session"), sess)
+                _save(_jf(self._memory_key(uid), "session"), sess)
                 self._spawn(self._refresh_summary(uid))
             if any(plan.results):
                 if random.random() < 0.04:
@@ -1927,7 +1960,7 @@ class DshSoul(Star):
             key = event.get_extra("_dsh_work").key
             # F01 uses plugin history as the only model history. Never persist
             # generated assistant/tool traces as though the user had seen them.
-            rows = [{"role": h["role"], "content": h["text"]} for h in self._context_rows(key)]
+            rows = [{"role": h["role"], "content": ("[说话者="+h.get("source",{}).get("sender", "未知")+"] " if h["role"]=="user" else "")+h["text"]} for h in self._context_rows(key)]
             await self.context.conversation_manager.update_conversation(event.unified_msg_origin,
                 req.conversation.cid, history=rows)
             check_current()
@@ -2050,16 +2083,20 @@ class DshSoul(Star):
     async def _refresh_summary(self, uid):
         """Versioned local excerpts: no paid generation, no invented facts."""
         try:
-            rows = copy.deepcopy(self._h(uid))
+            rows = copy.deepcopy(self._dialogue_rows(uid))
             version = fingerprint(rows)
-            sess = _load(_jf(uid, "session"), {})
+            from conversation_storage import prepare_new_memory
+            storage_ready = prepare_new_memory(DATA,self._memory_key(uid))
+            sess = _load(_jf(self._memory_key(uid), "session"), {}) if storage_ready else {}
             window = await self._thread(build_window, rows, [], Scope(**self.scopes[uid]), 10000, sess.get("context"))
             check_current()
-            if fingerprint(self._h(uid)) != version:
+            if not storage_ready or fingerprint(self._dialogue_rows(uid)) != version:
                 return  # a newer turn won; never overwrite it with old excerpts
-            sess = _load(_jf(uid, "session"), {})
+            from conversation_storage import prepare_new_memory
+            storage_ready = prepare_new_memory(DATA,self._memory_key(uid))
+            sess = _load(_jf(self._memory_key(uid), "session"), {}) if storage_ready else {}
             sess["context"] = window["summary"]
-            _save(_jf(uid, "session"), sess)
+            _save(_jf(self._memory_key(uid), "session"), sess)
         except Exception as e:
             self._err("summary", e)
 
@@ -2196,19 +2233,19 @@ class DshSoul(Star):
     @managed
     async def _extract_notes(self, uid):
         try:
-            who = "主人" if self._owner(uid) else "对方"
-            existing = _read_notes(uid)
+            who = ("主人" if self._owner(uid) else "对方") if self._private(uid) else "本群共同事项（不建立成员个人画像）"
+            existing = _read_notes(self._memory_key(uid))
             ex = NL.join("- " + l for l in existing) if existing else "（还什么都没有）"
             lt = time.localtime()
             today = str(lt.tm_year) + "年" + str(lt.tm_mon) + "月" + str(lt.tm_mday) + "日"
             hist = self._context_rows(uid)[-8:]
-            recent = NL.join((who + "说：" if h["role"] == "user" else "你说：") + h["text"][:150] for h in hist)
+            recent = NL.join((("发言者="+h.get("source",{}).get("sender", "未知")+"：") if h["role"] == "user" else "你说：") + h["text"][:150] for h in hist)
             out = await self._chat("extract",
                 prompt=("今天是" + today + "。" + NL + NL
                         + "你的长期记忆备忘录里现在有：" + NL + ex + NL + NL
                         + "刚刚的对话——" + NL + recent + NL + NL
                         + "想想备忘录有没有要增删的。"),
-                system_prompt=_extract_system(who),
+                system_prompt=(_extract_system(who) if self._private(uid) else "只整理当前群共同的长期事项、群约定、公共知识与待办。不建立或总结任何成员个人画像、作息、爱好或私聊资料。不确定则不记；最多新增一条，输出增：内容或删：原文，没有则无。"),
                 max_tokens=300)
             if out is None:
                 return
@@ -2219,11 +2256,11 @@ class DshSoul(Star):
                     continue
                 dm = re.match(r"^删[：:] *(.+)$", line)
                 if dm:
-                    _remove_note(uid, dm.group(1).strip())
+                    _remove_note(self._memory_key(uid), dm.group(1).strip())
                     continue
                 line = line.replace("增：", "", 1)
                 if line and len(line) <= 80:
-                    _append_note(uid, line)
+                    _append_note(self._memory_key(uid), line)
         except Exception as e:
             self._err("extract", e)
 
@@ -2243,9 +2280,9 @@ class DshSoul(Star):
             return sum(1 for tok in toks if tok in t)
 
         pool = []
-        for l in (_read_notes(uid) if scope.private else []):
+        for l in (_read_notes(self._memory_key(uid))):
             pool.append("长期记忆：" + l)
-        for l in _read_memes(uid):
+        for l in _read_memes(self._memory_key(uid)):
             pool.append("梗图鉴：" + l)
         # 搜索池 = 归档全量（该 uid 全部历史，不受 150 条滚动窗口限制）；
         # 性能保护：超 3000 行先按关键词粗筛（任一 token 命中）再评分
@@ -2267,7 +2304,7 @@ class DshSoul(Star):
                 ts = ""
             source = h.get("source", {})
             if scope.private:
-                if source and not __import__('context_window').same_scope(h, scope): continue
+                if not __import__('context_window').same_scope(h, scope): continue
             elif (source.get("group") != scope.group or source.get("instance") != scope.instance
                   or source.get("platform") != scope.platform or source.get("bot") != scope.bot): continue
             if h.get("role") == "assistant" and h.get("delivery", {}).get("status") != "accepted": continue
@@ -2834,12 +2871,14 @@ class DshSoul(Star):
         if not term or not meaning:
             return "（term/meaning 为空）"
         uid = self._scope(event).key
-        lines = _read_memes(uid)
+        from conversation_storage import prepare_new_memory
+        if not prepare_new_memory(DATA,self._memory_key(uid)):return "（旧资料归属待清理，未修改学习资料）"
+        lines = _read_memes(self._memory_key(uid))
         if any(("梗：" + term) in l for l in lines):
             return "（这个梗已经在图鉴里了）"
         lines.append("梗：" + term + " —— " + meaning)
         os.makedirs(DATA, exist_ok=True)
-        write_text(os.path.join(DATA, "memes", uid + ".md"), NL.join(lines[-60:]) + NL)
+        write_text(os.path.join(DATA, "memes", self._memory_key(uid) + ".md"), NL.join(lines[-60:]) + NL)
         return "（已学会梗「" + term + "」，以后能听懂并使用）"
 
     @filter.llm_tool(name="record_thought")
@@ -2865,7 +2904,7 @@ class DshSoul(Star):
         content = content.strip()[:80]
         if not content:
             return "（记录内容为空）"
-        _append_note(uid, content)
+        _append_note(self._memory_key(uid), content)
         return "（已记录到长期记忆）"
 
     @filter.llm_tool(name="delete_note")
@@ -2878,9 +2917,9 @@ class DshSoul(Star):
         pattern = pattern.strip()[:80]
         if not pattern:
             return "（删除目标为空）"
-        before = len(_read_notes(uid))
-        _remove_note(uid, pattern)
-        if len(_read_notes(uid)) < before:
+        before = len(_read_notes(self._memory_key(uid)))
+        _remove_note(self._memory_key(uid), pattern)
+        if len(_read_notes(self._memory_key(uid))) < before:
             return "（已删除匹配的记忆）"
         return "（没找到包含该文字的记忆）"
 
@@ -3186,7 +3225,7 @@ class DshSoul(Star):
                 nm = event.get_sender_name() or ""
             except Exception:
                 nm = ""
-            if nm and self.names.get(scope.memory_key) != nm:
+            if scope.private and nm and self.names.get(scope.memory_key) != nm:
                 self.names[scope.memory_key] = nm
                 _save(self.n_path, self.names)
             if float(self.sil.get(uid, 0) or 0) > now:
@@ -3203,7 +3242,7 @@ class DshSoul(Star):
             if not self._perm(uid, "reply"):
                 event.stop_event()
                 return
-            # Pairing codes stay out of model inputs, points and chat archives.
+            # Retired identity commands receive a local migration notice.
             from user_directory import handle as identity_command
             identity_ack = identity_command(event, scope, DATA, trimmed)
             if identity_ack is not None:
@@ -3688,7 +3727,7 @@ class DshSoul(Star):
                 mode_line = "灵感模式【话题跳跃】：从最近聊天里挑一个不起眼的细节当跳板，彻底跳到一个不同的话题、领域或问题上去。"
                 seed_line = ("注意：最近聊天只能当跳板，禁止复述或改写其中的内容。" if history else "（没有最近聊天，直接天马行空）")
             elif roll < 0.45:
-                mems = _read_notes(uid) if self._private(uid) else []
+                mems = _read_notes(self._memory_key(uid))
                 pick = random.choice(mems) if mems else None
                 mode_line = "灵感模式【旧事新想】：从下面这条旧记忆出发，产生一个崭新的联想、疑问、或突然想做的事。"
                 seed_line = "出发点：" + (pick[:100] if pick else "（没有旧记忆可用，直接天马行空）")
@@ -3741,7 +3780,11 @@ class DshSoul(Star):
             return
         now = time.time()
         hh = time.localtime(now).tm_hour
+        seen_conversations = set()
         for uid, data in list(self.scopes.items()):
+            conversation = Scope(**data).conversation_key
+            if conversation in seen_conversations: continue
+            seen_conversations.add(conversation)
             umo = Scope(**data).target
             try:
                 if uid in self.blocked:

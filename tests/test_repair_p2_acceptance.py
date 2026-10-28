@@ -161,7 +161,7 @@ async def policy_case():
     await sp.put_async(scope='umo',scope_id=original,key='session_service_config',value={'llm_enabled':False,'tts_enabled':False,'session_enabled':False})
     await sp.put_async(scope='umo',scope_id=original,key='session_plugin_config',value={original:{'disabled_plugins':['fixture-plugin']}})
     for event in (first,second,private):bind_scope(event)
-    assert first.unified_msg_origin!=second.unified_msg_origin
+    assert first.unified_msg_origin==second.unified_msg_origin  # entire group owns one session
     assert not await Services.should_process_llm_request(first),'rekey reopened disabled LLM'
     assert not await Services.should_process_tts_request(first),'rekey reopened disabled TTS'
     assert not await Services.is_session_enabled(first.unified_msg_origin),'rekey reopened stopped session'
@@ -192,8 +192,26 @@ async def policy_case():
     bind_scope(unique)
     assert unique.get_extra('_dsh_original_umo')==unique_original
     assert not await Services.should_process_llm_request(unique)
+    # Two actors can have different original unique-session policies, while
+    # sharing a group history. The last event must never choose A's policy.
+    restricted=real_event('restricted','policy-group');restricted.session_id='policy-group_restricted'
+    allowed=real_event('allowed','policy-group');allowed.session_id='policy-group_allowed'
+    restricted_origin=restricted.unified_msg_origin
+    await sp.put_async(scope='umo',scope_id=restricted_origin,key='session_service_config',value={'llm_enabled':False})
+    bind_scope(restricted);bind_scope(allowed)
+    assert restricted.unified_msg_origin==allowed.unified_msg_origin
+    assert not await Services.should_process_llm_request(restricted),'same-group later actor reopened earlier actor policy'
+    assert await Services.should_process_llm_request(allowed)
+    from task_runtime import work_context
+    mgr.ucr.get_conf_id_for_umop=lambda umo:'limited' if umo==restricted_origin else None
+    with work_context(None,restricted):assert ctx.get_config(restricted.unified_msg_origin)['provider_settings']['enable'] is False
+    with work_context(None,allowed):assert ctx.get_config(allowed.unified_msg_origin)['provider_settings']['enable'] is True
+    await sp.put_async(scope='umo',scope_id=restricted_origin,key='session_plugin_config',value={restricted_origin:{'disabled_plugins':['fixture-plugin']}})
+    with patch.dict(star_map,fixture_policy=SimpleNamespace(name='fixture-plugin',reserved=False)):
+        assert await Plugins.filter_handlers_by_session(restricted,[handler])==[]
+        assert await Plugins.filter_handlers_by_session(allowed,[handler])==[handler]
     # Admission stages run before the plugin gate: one group rate limit must
-    # still apply even though admitted members subsequently get separate locks.
+    # still apply before admitted members share the group's session lock.
     from astrbot.core.pipeline.rate_limit_check.stage import RateLimitStage
     rate=RateLimitStage()
     await rate.initialize(SimpleNamespace(astrbot_config={'platform_settings':{'rate_limit':{'count':1,'time':60,'strategy':'discard'}}}))

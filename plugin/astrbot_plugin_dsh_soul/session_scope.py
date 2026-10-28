@@ -16,7 +16,24 @@ _policy_origins={}
 
 def policy_origin(umo):
     """Only trusted events register aliases; history/workspace keys never change."""
+    from task_runtime import current_event
+    event=current_event()
+    if event is not None and event.unified_msg_origin==umo:
+        origin=event.get_extra('_dsh_original_umo')
+        if origin:return origin
     return _policy_origins.get(str(umo),umo) if umo is not None else None
+
+
+def _wrap_event_policy(cls,name):
+    original=getattr(cls,name)
+    if getattr(original,'_dsh_event_policy',False):return
+    @functools.wraps(original)
+    async def run(event,*args,**kwargs):
+        from task_runtime import work_context,current_token
+        with work_context(current_token(),event):
+            return await original(event,*args,**kwargs)
+    run._dsh_event_policy=True
+    setattr(cls,name,staticmethod(run))
 
 
 def _wrap_policy_method(cls,name):
@@ -40,8 +57,8 @@ def _guard_profile_routes(cls,name,single):
         value=signature.bind(self,*args,**kwargs).arguments['umo' if single else 'routing']
         for pattern in ([value] if single else value):
             session=str(pattern).split(':',2)[-1]
-            reserved=(re.fullmatch(r'[cp]2_[0-9a-f]{64}',session)
-                      or (session.startswith(('c2_','p2_')) and any(c in session for c in '*?[')))
+            reserved=(re.fullmatch(r'[cpg]2_[0-9a-f]{64}',session)
+                      or (session.startswith(('c2_','p2_','g2_')) and any(c in session for c in '*?[')))
             if reserved or any(self.ucr._is_umo_match(pattern,alias) and not self.ucr._is_umo_match(pattern,origin)
                    for alias,origin in _policy_origins.items()):
                 raise ValueError('内部会话仅隔离历史；配置文件请绑定原始会话或平台，未修改配置')
@@ -69,6 +86,8 @@ def install_policy_adapters():
     stored.update(_policy_origins);_policy_origins=stored;Context._dsh_policy_origins=stored
     for name in ('is_llm_enabled_for_session','is_tts_enabled_for_session','is_session_enabled'):
         _wrap_policy_method(SessionServiceManager,name)
+    for name in ('should_process_llm_request','should_process_tts_request'):
+        _wrap_event_policy(SessionServiceManager,name)
     _wrap_policy_method(SessionPluginManager,'is_plugin_enabled_for_session')
     original=SessionPluginManager.filter_handlers_by_session
     if not getattr(original,'_dsh_policy_origin',False):
@@ -80,6 +99,7 @@ def install_policy_adapters():
             return await original(event,inherited)
         filter_handlers._dsh_policy_origin=True
         SessionPluginManager.filter_handlers_by_session=staticmethod(filter_handlers)
+    _wrap_event_policy(SessionPluginManager,'filter_handlers_by_session')
     get_config=Context.get_config
     if not getattr(get_config,'_dsh_policy_origin',False):
         @functools.wraps(get_config)
@@ -153,6 +173,8 @@ class Scope:
     @property
     def group_key(self): return '' if self.private else _key('g2_',self.platform,self.instance,self.bot,self.group)
     @property
+    def conversation_key(self): return self.memory_key if self.private else self.group_key
+    @property
     def target(self): return Target(self.platform,self.instance,self.bot,'private' if self.private else 'group',self.sender if self.private else self.group,self.message_id,self.event_id,self.received_at)
     def source(self): return asdict(self)
 
@@ -182,11 +204,13 @@ def bind_scope(event):
                 str(getattr(getattr(obj,'raw_message',None),'event_id','') or ''),stamp)
     origin=event.get_extra('_dsh_original_umo') or event.unified_msg_origin
     event.set_extra('_dsh_original_umo',origin)
-    event.session_id=scope.key
+    event.session_id=scope.conversation_key
     module=sys.modules.get('astrbot.core.platform.astr_message_event')
     framework_event=getattr(module,'AstrMessageEvent',None)
     if framework_event is not None and isinstance(event,framework_event):
         install_policy_adapters()
-        _policy_origins[event.unified_msg_origin]=origin
+        # Dashboard's shared alias anchors to the whole group. Event-bound
+        # policy calls retain their original actor policy via work_context.
+        _policy_origins[event.unified_msg_origin]=origin if scope.private else scope.target.umo
     event.set_extra('_dsh_scope',scope)
     return scope

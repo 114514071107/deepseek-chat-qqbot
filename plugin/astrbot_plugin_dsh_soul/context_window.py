@@ -14,7 +14,7 @@ def fingerprint(rows):
 
 
 def same_scope(row, scope):
-    try: return Scope(**row['source']).key == scope.key
+    try: return Scope(**row['source']).conversation_key == scope.conversation_key
     except (KeyError, TypeError, ValueError): return False
 
 
@@ -53,14 +53,14 @@ def build_window(rows, current_ids, scope, limit=10000, previous=None):
     limit = max(1000, min(24000, int(limit)))
     valid = [row for row in evidence_rows(rows, scope)
              if not (row['role']=='user' and row.get('source',{}).get('message_id') in current_ids)]
-    summary = dict(version=VERSION, scope=scope.key, source_version=fingerprint(rows), entries=[], omitted=0,
+    summary = dict(version=VERSION, scope=scope.conversation_key, source_version=fingerprint(rows), entries=[], omitted=0,
                    retained_ids=[row['id'] for row in evidence_rows(rows, scope)[-12:] if row.get('id')])
     previous = previous or {}
     # Continuity needs actual retained entry IDs. Clearing rolling history
     # breaks that chain, even when the separate summary layer was kept.
     current_ids_set = {row.get('id') for row in rows if row.get('id') and same_scope(row, scope)}
     eligible_ids = {row.get('id') for row in valid if row.get('id')}
-    continuous = previous.get('scope') == scope.key and bool(eligible_ids.intersection(previous.get('retained_ids', [])))
+    continuous = previous.get('scope') == scope.conversation_key and bool(eligible_ids.intersection(previous.get('retained_ids', [])))
     inherited_gaps = []
     unresolved = 0
     if previous.get('version') == VERSION and continuous:

@@ -1,0 +1,63 @@
+# 2026-10-29 私聊与整群管理
+
+本次用户明确撤销此前跨场景人物聚合、身份绑定、共享画像及Union灰度要求，以当前源码与本次产品规则为准。开发基线：`dev / 2adfbc7203f56e7761e974d358600f6f43afb1b5`。构建：`20261029-conversations-1`。未覆盖其他对话原有未跟踪审阅文件，未重写历史真实验收记录。
+
+## 现在如何使用
+
+基本QQ官方接入、模型及必要访问配置完成后即可聊天。私聊直接发消息，群沿用现有触发规则；不等待取码、认领、确认身份或统一身份接口。缺少/空 `union_openid` 不影响正常 gate 放行。后台用户页与记忆页使用相同目录，可筛选私聊用户、群聊；一个群无论多少人发言只显示一个完整群入口。只在群发言的人不会生成私聊入口。平台提供可靠名称则显示，否则显示明确的类型和短标识；管理备注只修改当前会话。
+
+| 键/数据 | 私聊 | 群聊 |
+| --- | --- | --- |
+| conversation_key | 平台/实例/Bot/私聊对象哈希 p2 | 平台/实例/Bot/群哈希 g2 |
+| 框架会话、模型上下文 | 本私聊 | 本群所有可信发言，逐条保留说话者 |
+| memories / memes / session / thoughts | 本私聊会话键 | 本群会话键 |
+| 原 actor Scope.key | p2 | 每个发言来源 c2，继续用于原权限/请求/积分/取消关联 |
+| 发送 Target | 原事件私聊目标 | 原事件群目标，不把发送者替换成群 ID |
+
+同一人同时在群和私聊出现也不关联；不同平台、实例、Bot 即使裸 ID 相同也不混合。group2、private、retired-member 标记不能进入 group1 模型请求或检索，反向也一样。群自动笔记只生成群共同事项，不建立成员独立画像。主动逻辑按整群去重，仍保留原发送和权限判断。订阅、付费套餐、群等级和统一身份扩展框架均未引入。
+
+## 代码范围
+
+- `session_scope.py`、`context_window.py`、`main.py`：新增会话所有权，框架同群共享上下文；笔记/学习资料/摘要/念头/检索/模型注入全部按私聊或整群读取写入。原 actor 权限、积分、消息接收、请求关联、并发取消保留。
+- `state_store.py`、`task_runtime.py`、`tool_permissions.py`：整群管理可准确撤销群内在途任务，删除所选层并报告部分失败；允许受原权限约束的群记忆工具，禁止群获得主人权限。删除不触及其他私聊、群或恢复目录。
+- `user_profiles.py`、新 `conversation_storage.py`：只记录可靠私聊名/群名；旧成员与私聊共用键的歧义文件默认不可读取，明确清理后或确无旧文件才允许新私聊存储。
+- `console/user-workbench.js`、`people-sources.js`、`server.js`、`public/user-workbench.js`、`public/index.html`：复用来源核验，移除人物/资料别名聚合；分类、检索、分页、刷新、备注、功能开关、删除都定位同一个p2/g2对象。历史最多保留近期150条供页面搜索分页；完整归档保持原文件，模型检索受原资源预算约束。
+- 删除 Python `union_rollout.py`、`union_user_profiles.py` 及 Console `union-rollout.js`，移除身份/人工合并HTTP入口。`user_directory.py` 只对旧命令返回退役说明，不存码、不认领、不绑定。正常SDK原始消息字段保留。废弃配置即使还留盘上，也不能使新目录恢复聚合。
+- 新增 `scripts/conversation_cleanup.py`、行为/清理/Node/浏览器测试；README、开发说明、修改声明、清理发布步骤同步更新。已撤销产品合同测试保存在 `tests/historical/person-directory`，来源证明、权限与生命周期合同继续验证。
+
+## 旧数据
+
+实际结构先按 scopes、history、groups、memory/session/thought 索引核实，未猜测昵称或裸ID归属。停止实例后显式运行清理工具，按哈希清单先完整备份，再隔离成员独立或无法拆分的旧记忆；不会把旧个人笔记搬成群记忆。原聊天、归档、群上下文、积分、媒体及SQLite均不在清理动作中。
+
+本机只读Plan：私聊键3、整群键3、歧义私聊/成员键0，拟处理15项：退役身份/无作用域资料4、来源不明混合文件1、旧actor/未知摘要8、念头索引替换2。没有原聊天清理动作；本轮前后核对的3个聊天文件哈希相同。**生产Apply未执行，不能把15项计划计为已清理。** 完整路径、原文件哈希和原因只保存在受保护的本机清单，不入Git。公开证据仅保留计数。
+
+合成离线实例已验证备份、隔离、恢复、漂移拒绝、异常恢复先撤销可信标记、重复Plan无动作、新私聊笔记不再误清理。后续群笔记写到g2，不会重新生成成员p2/c2文件。备份根与业务根互不包含，扫描只读明确的业务文件，不递归读取恢复目录。[操作与恢复](../tooling/conversation-data-cleanup.md)。
+
+## 审阅与验证
+
+采用 writing-plans、systematic-debugging、test-driven-development、python-resource-management、frontend-design-review、webapp-testing 和 verification-before-completion。先失败复现再实现。独立审阅发现8项重要问题：整群滚动记录删除不全、共享层失败返回、出站证明、恢复中断标记、新私聊重复清理、100条目录/分页、空清理初始化、等待锁期间新成员任务；均已修复并补充回归。未通过放宽访问控制或跳过关键用例处理失败。
+
+最终执行结果见 [evidence](evidence/2026-10-29-conversation-management)：
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 受影响Python集合（含真实框架请求/锁/权限、状态、隔离、清理） | 131/131通过，75秒 |
+| 完整Python `test_repair_*.py` | 292项：287通过、4失败、1原有跳过，752秒 |
+| 当前Node全部集合 | 25/25通过 |
+| Edge真实浏览器 + 临时HTTP服务 | 12组通过：分类、群搜索、编辑对象、失败重试、窄屏键盘、109对象、草稿刷新、延迟删除预览和精确删除 |
+| 余额插件 | 2/2通过 |
+| 语法/差异 | 19个Python AST、8个JS/CJS及HTML内联脚本检查通过；git diff --check通过 |
+
+完整集合执行后，最后的权限边界补修另复跑扩大后的131项受影响集合全部通过：同群共享历史时，按当前事件保留原成员框架策略、插件限制和配置档，不再让最后一位发言者替换其他成员的访问限制。完整集合未因该补修重复执行；其4处失败均发生在未改动的启动器检查：`test_repair_launcher` 的双Shell启动、`test_repair_startup_ownership` 的冷启动与双组件汇总、`test_repair_worker_job` 的worker死亡测试。Windows PowerShell 5.1返回 `AuthorizationManager check failed / UnauthorizedAccess`，pwsh路径运行；本轮未改Shell策略或放宽断言。原有跳过是R01停止未知图片自动采集后的旧额度路径，非本轮新增。完整集合未全绿，不能写成全部通过。
+
+浏览器补测还复现并修正了HTML缓存导致成功删除后面板残留、草稿保护使旧按钮失效的问题；页面请求版本与已显示对象版本分别守卫，保留草稿后仍能保存，迟到预览不能落到另一对象。已实看390px截图，320/390无横向溢出，沿用既有组件与布局。
+
+这些测试验证实际构造的模型请求/工具读取及合成提供商边界，不能等同远端付费模型调用，也不能把离线成功写成真实QQ验收。
+
+## 运行状态与下一步
+
+本轮**未部署、未重启、未执行生产清理或ACL变更**。只读检查确认运行插件/Console/前端仍是 `20261028-union-gray-1`，原发布44/44文件哈希匹配，Bot有效心跳、QQ ready 1/1；本轮没有改变运行Bot行为。父目录DACL继续留待独立权限窗口。
+
+具体交付位置：本机受保护的 `D:\dsbot\deployment-backups\20261028-user-directory\independent-repair\union-gray\conversation-change` 下有 `reviewed-cleanup-plan.json`、`code-release-plan.json`、`runtime-readonly-final.json`。代码清单共18项（安装15、退役3），逐文件列源/目标、原哈希及安装/退役动作；运行常量/凭据必须沿用，不能拿模板覆盖。
+
+按本次用户“不能重复使用此前单次重启许可”的边界，旧Union灰度记录中的Bot/Console各一次窗口已消耗；没有复用它来安装本轮版本。取得新的本轮停写发布窗口后：重核清单与变化→同版备份→清理→配套安装→完整启动并核版本/就绪→沿用已授权测试账号和群做真实QQ/模型验收。**本轮真实QQ收发与付费模型隔离验收尚未执行。** 未push远端、未合并main。

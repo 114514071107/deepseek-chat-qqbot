@@ -94,10 +94,10 @@
   .scene-button[aria-pressed="true"] { background:var(--acc); color:#fff; border-color:var(--acc); }
   .source-list { padding-left:20px; overflow-wrap:anywhere; }
   #people-detail select { max-width:100%; }
-  #m-uid,#m-mode,#m-group { max-width:100%; min-width:0; }
-  #m-content,#m-feedback { overflow-wrap:anywhere; min-width:0; }
-  #m-content .grid { grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); }
-  #m-content .grid > * { min-width:0; }
+  #conversation-kind,#conversation-search,#conversation-name,#conversation-history-search { max-width:100%; min-width:0; }
+  #conversation-content,#conversation-feedback { overflow-wrap:anywhere; min-width:0; }
+  #conversation-content .grid { grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr)); }
+  #conversation-content .grid > * { min-width:0; }
   .people-section { margin:18px 0; border-top:1px solid var(--line); padding-top:12px; }
   .people-section h3 { margin:0; font-size:15px; }
   #people-review { color:var(--fg); background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px; width:min(640px,calc(100% - 24px)); max-height:85vh; overflow:auto; }
@@ -134,7 +134,7 @@
 <script src="/assets/user-workbench.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
-const FE_VER = "20261028-union-gray-1"; // 与 server.js 的 API_VER 同步递增
+const FE_VER = "20261029-conversations-1"; // 与 server.js 的 API_VER 同步递增
 const api = async (p, opt = {}) => (await fetch(p, {...opt, headers: {...opt.headers, 'X-DSH-Request':'1'}})).json();
 const post = async (p, body) => {
   const result=await api(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -152,9 +152,8 @@ const fmtT = (ts) => { const d = new Date(ts > 1e12 ? ts : ts * 1000); const p =
 const ago = (ms) => { if (!ms) return "无"; const s = Math.max(0, (Date.now() - ms) / 1000 | 0); return s < 60 ? s + "秒前" : s < 3600 ? (s/60|0) + "分钟前" : (s/3600|0) + "小时前"; };
 
 const TABS = [ ["status","状态"], ["users","用户"], ["logs","日志"], ["memory","记忆"], ["stickers","图库"], ["notify","通知"] ];
-let cur = "status", timer = null, curUid = null, logFilter = { file: "dsh", q: "", lines: 300 };
+let cur = "status", timer = null, logFilter = { file: "dsh", q: "", lines: 300 };
 let swCache = null; // /api/switches 缓存（用户页用）
-let scopeDetailVersion = 0;
 let memoryVersion = 0;
 const botOperation={busy:false,message:''};
 function paintBotOperation(){
@@ -454,139 +453,6 @@ async function vUsers(options={}) {
   return window.UserWorkbench.render(options);
 }
 
-async function renderUserDetail() {
-  const chosenVersion=++scopeDetailVersion;
-  const chosenUid=curUid;
-  const r = swCache;
-  const users = r.users || [];
-  const u = users.find((x) => x.uid === curUid);
-  if (!u) { $("#u-detail").innerHTML = '<div class="card dim">请选择用户</div>'; return; }
-  const ent = (r.friends || {})[u.uid] || {};
-  const pt = (r.points || {})[u.uid] || {};
-  const today = new Date().toISOString().slice(0, 10);
-  const effDaily = pt.grant != null ? pt.grant : r.points_daily;
-  const grantTxt = pt.last === today ? "已赠 +" + effDaily : "未赠";
-  $("#u-detail").innerHTML =
-    '<div class="card"><div class="uhead">' +
-      (u.master ? '<span class="badge">主人</span>' : "") +
-      '<span class="nm" id="u-name" title="点击编辑备注名">' + esc(u.name || "未备注") + ' <span class="ed">✎ 点击改备注</span></span>' +
-      '<span class="mono dim">' + esc(u.uid.slice(0, 12)) + "…</span>" +
-      '<span class="tag dim">余额 ' + (pt.balance == null ? 0 : pt.balance) + "</span>" +
-      '<span class="tag dim">今日赠送 ' + esc(grantTxt) + "</span>" +
-      '<span class="tag dim">累计消耗 ' + (pt.spent || 0) + "</span>" +
-      '<span class="saved" id="u-saved">✓ 已保存</span></div></div>' +
-    '<div class="ucols">' +
-      '<div class="card"><h3>积分</h3>' +
-        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px"><span style="font-size:26px;font-weight:800;color:var(--acc)">' + (pt.balance == null ? 0 : pt.balance) + '</span><span class="dim">当前余额</span></div>' +
-        '<div class="row"><button class="act" data-ptadd="10">+10</button><button class="act" data-ptadd="50">+50</button>' +
-        '<input id="pt-set" type="number" min="0" placeholder="设为" style="width:70px"><button class="act" id="pt-set-btn">设置</button></div>' +
-        '<div class="row"><span class="dim">每日赠送覆盖</span><input id="pt-grant" type="number" min="0" style="width:70px" placeholder="跟随全局(' + esc(r.points_daily) + ')"' + (pt.grant != null ? ' value="' + pt.grant + '"' : "") + '>' +
-        '<button class="act" id="pt-grant-btn">保存</button><button class="act" id="pt-grant-clear">跟随全局</button></div>' +
-        '<h3 style="margin-top:12px">功能开关（全局 AND 用户 同时开才生效）</h3><div class="ukeys">' +
-        (r.user_keys || []).map((k) => tg(ent[k] !== false, 'data-scope="user" data-k="' + k + '" data-uid="' + esc(u.uid) + '"'+(!u.master?' data-ordinary="1"':''), false, esc(USER_KEY_CN[k] || k))).join("") +
-      "</div></div>" +
-      '<div class="card"><div class="row" style="justify-content:space-between"><h3 style="margin:0">聊天记录 <span class="dim" id="h-info"></span></h3>' +
-      '<span><button class="act" id="h-load">刷新</button> <button class="act danger" id="h-clear">选择删除范围</button></span></div>' +
-      '<div id="h-list">加载中…</div></div>' +
-    "</div>";
-  // 备注名编辑：点击名字 → 输入框，Enter/失焦保存
-  $("#u-name").onclick = () => {
-    const cur2 = u.name || "";
-    $("#u-name").outerHTML = '<input id="u-name-edit" value="' + esc(cur2) + '" placeholder="输入备注名，留空删除" style="font-size:15px;font-weight:700;width:200px">';
-    const inp = $("#u-name-edit");
-    inp.focus(); inp.select();
-    const save = async () => {
-      const name = inp.value.trim();
-      if (name === cur2) { renderUserDetail(); return; }
-      const resp = await post("/api/name", { uid: u.uid, name });
-      if (resp.ok) { u.name = name; swCache.names = resp.names; vUsers(); }
-      else { alert("保存失败"); renderUserDetail(); }
-    };
-    inp.onkeydown = (e) => { if (e.key === "Enter") inp.blur(); if (e.key === "Escape") { inp.onblur = null; renderUserDetail(); } };
-    inp.onblur = save;
-  };
-  // 用户十键
-  document.querySelectorAll('input[data-scope="user"]').forEach((cb) => (cb.onchange = async () => {
-    if(cb.disabled)return;const uid=cb.dataset.uid,key=cb.dataset.k,value=cb.checked;cb.disabled=true;
-    const resp = await post("/api/user", { uid, key, value });cb.disabled=false;
-    if (!resp.ok) { if(cb.isConnected)cb.checked = !value; alert("保存失败"); return; }
-    (swCache.friends[uid] = swCache.friends[uid] || {})[key] = value;
-    if(!cb.isConnected||curUid!==uid)return;
-    const tip = $("#u-saved");
-    if (tip) { tip.style.opacity = 1; setTimeout(() => (tip.style.opacity = 0), 1200); }
-  }));
-  // 积分面板：+10/+50/设置/每日赠送覆盖
-  document.querySelectorAll("[data-ptadd]").forEach((b) => (b.onclick = async () => {
-    const resp = await post("/api/points", { uid: u.uid, mode: "add", value: parseInt(b.dataset.ptadd, 10) });
-    if (resp.ok) vUsers(); else alert("保存失败");
-  }));
-  $("#pt-set-btn").onclick = async () => {
-    const v = parseInt($("#pt-set").value, 10);
-    if (isNaN(v)) return alert("请输入数值");
-    const resp = await post("/api/points", { uid: u.uid, mode: "set", value: v });
-    if (resp.ok) vUsers(); else alert("保存失败");
-  };
-  $("#pt-grant-btn").onclick = async () => {
-    const raw = $("#pt-grant").value.trim();
-    const resp = await post("/api/points/grant", { uid: u.uid, value: raw === "" ? null : parseInt(raw, 10) });
-    if (resp.ok) vUsers(); else alert("保存失败：" + (resp.error || ""));
-  };
-  $("#pt-grant-clear").onclick = async () => {
-    const resp = await post("/api/points/grant", { uid: u.uid, value: null });
-    if (resp.ok) vUsers(); else alert("保存失败");
-  };
-  // 聊天记录
-  const loadHist = async () => {
-    try {
-    const h = await api("/api/history?uid=" + encodeURIComponent(chosenUid) + "&limit=150");
-    if(cur!=='users'||curUid!==chosenUid||chosenVersion!==scopeDetailVersion||!$("#h-list"))return;
-    if(!Array.isArray(h.entries))throw Error(h.error||'未取得有效来源历史');
-    $("#h-info").textContent = "共 " + h.count + " 条，新→旧";
-    $("#h-list").innerHTML = h.entries.length ? h.entries.map(histEntryHtml).join("") : '<div class="dim">暂无记录</div>';
-    hydrateStickerSamples($("#h-list"));
-    } catch(error) {
-      if(cur==='users'&&curUid===chosenUid&&chosenVersion===scopeDetailVersion&&$("#h-list"))
-        $("#h-list").innerHTML='<p role="alert">所选来源记录加载失败：'+esc(error.message)+'。可点刷新重试。</p>';
-    }
-  };
-  $("#h-load").onclick = loadHist;
-  $("#h-clear").onclick = async () => {
-    const selectedUid = curUid;
-    const preview = await post("/api/delete/preview", {uid: selectedUid});
-    if(cur!=='users'||curUid!==selectedUid||chosenVersion!==scopeDetailVersion||!$("#h-clear"))return;
-    if (!preview.ok) return alert(preview.error || "运行态未确认，未打开删除操作");
-    let panel = $("#delete-panel");
-    if (panel) panel.remove();
-    panel = document.createElement("div"); panel.id = "delete-panel"; panel.className = "card";
-    panel.innerHTML = '<h3>删除所选来源的数据</h3><p class="dim">未选择的层会保留。删除不自动生成新备份。' +
-      (preview.legacy ? '此为来源未定旧档，框架旧历史无法准确定位，会保留并报告部分完成。' : '') + '</p>' +
-      Object.entries(preview.mapping).map(([key,desc]) => '<label style="display:block;margin:10px 0"><input type="checkbox" data-delete-layer="'+esc(key)+'"> '+esc(desc)+'</label>').join('') +
-      '<button class="act" id="delete-all">全选六层及所列备份</button><p>'+esc(preview.backup_impact)+'</p>' +
-      (preview.backups.length ? preview.backups.map(file=>'<label style="display:block"><input type="checkbox" data-delete-backup="'+esc(file)+'"> '+esc(file)+'</label>').join('') : '<p class="dim">声明范围内没有备份文件</p>') +
-      '<label style="display:block;margin:12px 0"><input type="checkbox" id="delete-backup-confirm"> 我确认：所选整份备份可能包含其他用户，删除会影响整份文件</label>' +
-      '<button class="act danger" id="delete-apply">删除所选层</button> <button class="act" id="delete-cancel">取消</button><pre id="delete-result" aria-live="polite"></pre>';
-    $("#h-clear").closest('.card').after(panel);
-    panel.querySelector('#delete-all').onclick=()=>panel.querySelectorAll('[data-delete-layer],[data-delete-backup]').forEach(c=>c.checked=true);
-    panel.querySelector('#delete-cancel').onclick=()=>panel.remove();
-    panel.querySelector('#delete-apply').onclick=async()=>{
-      const layers=Array.from(panel.querySelectorAll('[data-delete-layer]:checked')).map(c=>c.dataset.deleteLayer);
-      const backup_files=Array.from(panel.querySelectorAll('[data-delete-backup]:checked')).map(c=>c.dataset.deleteBackup);
-      const confirm_shared_backups=panel.querySelector('#delete-backup-confirm').checked;
-      if (!layers.length) return alert('请先选择至少一层');
-      if (layers.includes('backups') && !confirm_shared_backups) return alert('请选择备份文件，并确认整份备份的影响');
-      if (!confirm('确认删除所选来源的 '+layers.join('、')+'？未选择的层保留')) return;
-      const button=panel.querySelector('#delete-apply'); button.disabled=true;
-      try {
-        const result=await post('/api/history/clear',{uid:selectedUid,layers,backup_files,confirm_shared_backups});
-        panel.querySelector('#delete-result').textContent=(result.ok?'所选层处理完成':'未完全完成，请核对逐层结果')+'\n'+JSON.stringify(result,null,2);
-        await loadHist();
-      } catch(error) {panel.querySelector('#delete-result').textContent='未取得确认，请刷新核对：'+error.message;}
-      finally {button.disabled=false;}
-    };
-  };
-  await loadHist();
-}
-
 // ---------- 日志页 ----------
 async function vLogs() {
   $("#view").innerHTML =
@@ -625,85 +491,7 @@ async function uidSelector() {
   return (swCache.users || []).map((u) => ({ uid: u.uid, master: u.master, name: u.name }));
 }
 
-const memoryState={person:null,anchor:null,mode:'all',group:'',offset:0};
-let memorySaving=false;
-let memoryCommitted='';
-const memoryKey=state=>JSON.stringify([state.person,state.mode,state.group,state.offset]);
-function showMemoryFailure(node){
-  node.setAttribute('role','alert');
-  const selected=$('#m-uid')?.selectedOptions[0]?.textContent||'当前人物';
-  node.textContent=selected+'：资料加载失败。'+(memoryCommitted===memoryKey(memoryState)?'下方保留该人物上次成功加载的快照。':'未显示其他人物正文。')+($('#auto-ref').checked?'自动刷新已开启，将在下次刷新时重试。':'自动刷新已关闭，请点击重试。');
-  const retry=document.createElement('button');retry.className='act';retry.textContent='重试';retry.onclick=()=>vMemory({refresh:true,manual:true});node.append(retry);
-}
-$('#auto-ref').addEventListener('change',()=>{const node=$('#m-feedback');if(cur==='memory'&&node?.getAttribute('role')==='alert')showMemoryFailure(node);});
-async function vMemory({refresh=false,manual=false}={}) {
-  if(memorySaving&&refresh)return;
-  const version=++memoryVersion;
-  const alive=()=>version===memoryVersion&&cur==='memory';
-  const content=$('#m-content');
-  if(content&&memoryCommitted!==memoryKey(memoryState)){content.replaceChildren();_lastHtml='';}
-  let feedback=$('#m-feedback');
-  if(!feedback){feedback=document.createElement('div');feedback.id='m-feedback';$('#view').prepend(feedback);}
-  feedback.setAttribute('role','status');feedback.textContent='正在加载所选人物资料…';
-  try {
-  const people=[];let offset=0;
-  do {
-    const page=await api('/api/people?limit=100&offset='+offset);
-    if(!alive())return;
-    if(!page.ok)throw Error(page.error||'用户目录加载失败');
-    people.push(...page.people);offset=page.next_offset;
-  }while(offset!==null&&people.length<10000);
-  let person=people.find(p=>p.id===memoryState.person)||people.find(p=>p.sources.some(o=>o.uid===memoryState.anchor))||people[0];
-  if(!person){$('#view').innerHTML='<div class="card">还没有聊天用户。</div>';return;}
-  const next={...memoryState,person:person.id,anchor:person.sources[0]?.uid};
-  if(next.group&&!person.sources.some(o=>o.kind==='group'&&o.group===next.group))next.group='';
-  const q=new URLSearchParams({person:person.id,mode:next.mode,group:next.group,offset:String(next.offset),limit:'150'});
-  const [memory,history]=await Promise.all([api('/api/people/memory?'+q),api('/api/people/history?'+q)]);
-  if(!alive()||refresh&&!manual&&(window.ReadingState.hasDraft($('#view'))||/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)))return;
-  if(!memory.ok||!history.ok)throw Error(memory.error||history.error||'人物资料加载失败');
-  Object.assign(memoryState,next);
-  memoryCommitted=memoryKey(next);
-  $('#hdr-status').textContent='人物资料已更新';
-  const reading=refresh?window.ReadingState.capture($('#view')):null;
-  const groups=[...new Set(person.sources.filter(o=>o.kind==='group').map(o=>o.group))];
-  const scene=row=>row.scene==='private'?'私聊':row.scene==='group'?'群聊 · '+row.group:'旧档 · 场景未知';
-  $('#view').innerHTML='<div class="row"><label for="m-uid">用户</label><select id="m-uid">'+people.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===next.person?'selected':'')+'>'+esc(p.display_name||p.label)+'</option>').join('')+'</select>'+
-    '<label for="m-mode">消息来源</label><select id="m-mode">'+[['all','全部消息'],['private','私聊'],['group','群聊'],['legacy','旧档（场景未知）']].map(([key,label])=>'<option value="'+key+'" '+(key===next.mode?'selected':'')+'>'+label+'</option>').join('')+'</select>'+
-    (next.mode==='group'?'<label for="m-group">具体群</label><select id="m-group"><option value="">全部群</option>'+groups.map(g=>'<option value="'+esc(g)+'" '+(g===next.group?'selected':'')+'>'+esc(g)+'</option>').join('')+'</select>':'')+'<button class="act" id="m-load">刷新</button></div>'+
-    '<p class="dim">免取码身份功能仅对指定来源灰度启用；其他来源保留原有身份流程。可靠平台证据相同的来源可归到一个入口，并分别保留私聊和具体群聊；证据不足时独立建档。平台没有提供称呼时，可由本人发送「设置称呼 你的称呼」。旧档没有可靠场景时保留未知标记。</p>'+
-    '<div id="m-feedback" role="status"></div><div id="m-content"><div class="card"><h3>'+esc(person.display_name||person.label)+' · 聊天记录</h3><p class="dim">每来源近期最多 150 条，本页 '+history.entries.length+' 条；分页和搜索仅覆盖近期滚动记录，不读取完整归档。</p><div id="m-history">'+history.entries.map(row=>'<div data-read-key="memory-history:'+esc(row.view_key)+'"><p class="dim">'+esc(scene(row))+' · '+esc(row.speaker)+'</p>'+histEntryHtml(row)+'</div>').join('')+(history.entries.length?'':'<p class="dim">此筛选暂无记录。</p>')+'</div><div class="row"><button class="act" id="m-first" '+(next.offset?'':'hidden')+'>回到最新</button><button class="act" id="m-more" '+(history.next_offset===null?'hidden':'')+'>下一页记录</button></div></div>'+
-    memory.sections.map((section,si)=>'<section class="card" data-read-key="memory-source:'+esc(section.uid)+'"><h3>'+esc(section.label)+'</h3>'+(section.notice?'<p class="dim">'+esc(section.notice)+'</p>':'')+'<div class="grid"><div><h4>念头</h4>'+section.thoughts.map((t,ti)=>'<div class="kv"><span>'+esc(t.text)+' <span class="dim">'+esc(t.src)+' · '+fmtT(t.t)+'</span></span>'+(section.operation_uid?'<button class="act danger" data-memory-delete="'+si+':'+ti+'">删</button>':'')+'</div>').join('')+(section.thoughts.length?'':'<p class="dim">暂无</p>')+'</div><div><h4>长期记忆</h4>'+section.notes.map(n=>'<p class="dim">'+esc(n.note)+'</p><pre>'+esc(n.text)+'</pre>').join('')+(section.notes.length?'':'<p class="dim">暂无独立记忆文件；同一原记忆键在本页只展示一次。</p>')+'</div><div><h4>本来源会话摘要</h4><pre>'+esc(JSON.stringify(section.session,null,2))+'</pre></div><div><h4>本来源学习资料</h4><pre>'+esc(section.memes||'暂无')+'</pre></div></div></section>').join('')+'</div>';
-  // The shared HTML cache can skip an unchanged refresh; clear its live
-  // loading/error node even when no template replacement was needed.
-  $('#m-feedback').replaceChildren();$('#m-feedback').setAttribute('role','status');
-  $('#m-uid').onchange=()=>{memoryState.person=$('#m-uid').value;memoryState.anchor=null;memoryState.offset=0;memoryState.group='';vMemory();};
-  $('#m-mode').onchange=()=>{memoryState.mode=$('#m-mode').value;memoryState.group='';memoryState.offset=0;vMemory();};
-  if($('#m-group'))$('#m-group').onchange=()=>{memoryState.group=$('#m-group').value;memoryState.offset=0;vMemory();};
-  $('#m-load').onclick=()=>vMemory({refresh:true,manual:true});
-  $('#m-first').onclick=()=>{memoryState.offset=0;vMemory();};
-  $('#m-more').onclick=()=>{memoryState.offset=history.next_offset;vMemory();};
-  document.querySelectorAll('[data-memory-delete]').forEach(button=>button.onclick=async()=>{
-    const [si,ti]=button.dataset.memoryDelete.split(':').map(Number),section=memory.sections[si],thought=section.thoughts[ti],personId=person.id;
-    if(memorySaving||cur!=='memory'||memoryState.person!==personId||!button.isConnected||!section.operation_uid)return;
-    if(!confirm('删除「'+person.label+'」'+section.label+'的这条念头？'))return;
-    button.disabled=true;memorySaving=true;memoryVersion++;
-    // Freeze the concrete source and index from this rendered item, never curUid.
-    let result;
-    try{result=await post('/api/thought/del',{uid:section.operation_uid,index:thought.index});}
-    catch(error){result={ok:false,error:error.message};}
-    finally{memorySaving=false;}
-    if(!result.ok)alert(result.error||'运行态未确认删除');
-    if(cur==='memory'&&memoryState.person===personId)await vMemory({refresh:true,manual:true});
-  });
-  hydrateStickerSamples($('#m-history'));
-  if(reading&&alive())reading.restore();
-  } catch(error) {
-    if(!alive())return;
-    const node=$('#m-feedback')||feedback;
-    showMemoryFailure(node);
-    $('#hdr-status').textContent='人物资料加载失败';
-  }
-}
+async function vMemory(options={}) {return window.UserWorkbench.render({...options,memory:true});}
 
 // ---------- 图库页 ----------
 async function vStickers() {

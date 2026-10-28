@@ -1,0 +1,1 @@
+{"passed":12,"checks":["private and groups only","category count","group history search","edit group target","memory uses same catalog","503 removes other object content and retries","320/390 and keyboard","no page errors","catalog beyond 100","refresh preserves draft","late delete preview cannot switch target","delete freezes selected object and layers"]}

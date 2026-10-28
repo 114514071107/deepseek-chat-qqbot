@@ -1,14 +1,22 @@
 # 本地开发与发布
 
+## 2026-10-29：私聊用户与整个群聊分别管理
+
+当前开发构建 `20261029-conversations-1`。基本接入后可聊天，不需要统一身份能力、取码、认领或私聊确认。用户页、记忆页共用私聊 p2 / 整群 g2 目录；多人群聊只有一个群入口，消息仍保留 sender、时间与来源。群成员 c2 只用于原权限、积分、请求及发送关联，不生成个人档案和独立记忆。私聊与群、不同群的模型上下文/笔记/学习资料/摘要/念头独立。
+
+`conversation_profiles_v1.json` 只保存可靠私聊名称或群名；`conversation_storage_v1.json` 记录旧歧义存储清理状态。废弃 console_people / user_directory / workbench_profiles / union 配置不再参与新目录或模型读取。历史混合文件必须用离线清理工具备份后隔离，不整份迁给群或私聊。已有生产实例仍运行旧版；本轮代码未部署、数据未清理，详见[验证记录](docs/reviews/2026-10-29-conversation-management.md)、[清理及发布步骤](docs/tooling/conversation-data-cleanup.md)。
+
+当前检查：Python `-m unittest discover -s tests -p 'test_repair_*.py' -v`；Node `node --test console/tests/*.test.js`；浏览器 `node tests/conversation_browser.cjs`（现有 Playwright + Edge，合成临时实例）。已撤销人物/Union合同测试保留在 `tests/historical/person-directory`，禁止用旧要求阻止新会话模式；来源绑定、隔离、权限和生命周期检查继续运行。
+
+以下按日期保留开发历史；已撤销的身份与Union方案不再是部署或使用要求。
+
 ## 2026-10-28：独立评审补修
 
 当前补修构建 `20261028-repair-1`：真实QQ占位self_id的受限管理域、可靠反证实际隔离、入站副作用前有界去重、出站只读稳定投影、记忆页失败恢复、独立Console受管入口。源码/红绿回归、完整Python失败与环境缺口见[修复记录](docs/reviews/2026-10-28-independent-repair.md)，实际提交/部署/回退见[发布记录](docs/releases/2026-10-28-independent-repair.md)。D03生产ACL、真实QQ/付费验收及旧档核验均未因此自动完成；不push/main晋级。
 
 ## 2026-10-28：用户与记忆目录
 
-构建 `20261028-identity-1`：平台资料优先读取，未获取称呼时本人发送「设置称呼 你的称呼」；私聊发送「关联身份」，在群提交一次性码后回原私聊确认，同一来源以后自动归类。新可信来源无需维护者逐个确认。两个页面按同一人物展示，消息保留原场景；不改变 QQ 发送、鉴权或模型记忆边界。[修复与平台限制](docs/reviews/2026-10-28-user-directory-memory.md)、[发布状态和回退](docs/releases/2026-10-28-user-directory-memory.md)持续记录，不把离线测试等同真实 QQ 验收。
-
-当前补充构建 `20261028-identity-2` 进一步阻止来源未知旧档与已知人物重复占用同一个长期记忆文件；归属歧义先保留待核，不猜测合并。
+该人物关联方案及 identity-2 已于2026-10-29退役。历史证据保留在[原记录](docs/reviews/2026-10-28-user-directory-memory.md)，不可照此启用取码或恢复聚合。
 
 ## 2026-10-27：S01—S09启动流程补修
 
@@ -43,11 +51,7 @@ Console 前后端版本 `20261026-lifecycle-1`；新增 `public/reading-state.js
 唯一用户 Bot cmd 为 `scripts/start-bot.cmd`，两个旧兼容 cmd 已从开发仓库删除；生产旧文件尚未移除。
 对应生产清理、完整文件清单和回退限制见记录，不能仅复制 cmd 或仅重启 Bot 更新控制台。
 
-管理工作台的用户/待确认/旧档分区、可靠身份及资料别名规则和本轮回归见
-[用户身份盘点记录](docs/reviews/2026-10-25-user-identity-triage.md)。配套发布 Console 时新增
-`console/people-sources.js` 必须与 `user-workbench.js`、server 和 public 页面整套复制；只重启 Bot 不会更新 Node 或页面。
-`console_people_v1.json` 是仅供管理展示的映射（兼容 v1，写 v2）；来源不明旧档关联人物后仍保留未知场景。
-生产数据、映射、昵称及原始截图不得加入 Git，不因改展示而迁移原 scope/历史/账本。
+管理工作台配套发布 `console/people-sources.js`（仅复用来源核验）、`user-workbench.js`、server、public 页面及 reading-state.js。旧人物映射文件退出使用，不向新会话目录迁移人工关联。生产数据、昵称及原始截图不得加入 Git。
 
 在源码目录打开 PowerShell：
 
@@ -82,18 +86,7 @@ git log --oneline -5
 
 ## 检查
 
-2026-10-25 用户自动归类与资料来源见[本轮记录](docs/reviews/2026-10-25-user-auto-group-review.md)。
-新版本前后端标识为 `20261025-auto-1`；插件新增 `user_profiles.py`，必须随 `main.py` 与 Console 配套发布。
-`workbench_profiles_v1.json` 是本机受保护的管理资料观察，`console_people_v1.json` 兼容旧人工组，首次人工修改后写 v2 的组及否认记录；两者均是运行数据，禁止入 Git。
-关联只改变管理展示。平台原始资料不足时显示“待人工确认”“昵称未获取”，不从昵称或正文猜测身份。人工解除会阻止同一旧证据重新关联。
-专项命令：`node --test console/tests/repair-people-auto.test.js console/tests/repair-workbench.test.js`，Python `-m unittest discover -s tests -p test_repair_user_profiles.py -v`。
-使用已有 Playwright 模块路径后运行 `node tests/user_auto_browser.cjs`，全部使用合成临时目录；原浏览器集合可设 `DSH_BROWSER_EVIDENCE` 到忽略的 local 目录以保留历史截图。
-
-2026-10-25 请求内表情数量及管理工作台聚合见
-[实施、身份关联规则、后台使用与测试](docs/reviews/2026-10-25-sticker-count-users-workbench.md)。
-用户页人工关联只影响管理展示，原 scope、身份/权限、积分账本和发送目标继续独立；旧档不猜测合并。
-Console 新增 `user-workbench.js` 与 `public/user-workbench.js`，须与 server.js、index.html 同版发布（`20261025-users-1`）；开发交付本身不授权部署。
-除下列旧集合，运行 `node --test console/tests/repair-workbench.test.js`；浏览器脚本为 `tests/workbench_browser.cjs`，使用已有 Node Playwright 和已安装 Edge，详见记录，不自动安装依赖。
+2026-10-25人物聚合及资料别名属于历史功能，已退出当前产品。原记录继续保留，当前专项改用会话管理测试和 `tests/conversation_browser.cjs`；不要运行历史绑定流程初始化新实例。
 
 2026-10-24 真实 QQ 验收补修及双解释器启动器见
 [本轮补修记录](docs/reviews/2026-10-24-real-qq-repair.md)和[一键启动说明](docs/tooling/one-click-bot-startup.md)。
@@ -110,7 +103,7 @@ Console 新增 `user-workbench.js` 与 `public/user-workbench.js`，须与 serve
 控制台写入需要新版插件在线确认，离线不会直接改文件。`admin_v2` 与插件、控制台应使用同一数据根，
 保护该目录的本机账号权限。部署需要整套辅助模块及前后端同版，不能只复制 main.py 或 server.js。
 第二单验收补修见 [P2 补修记录](docs/reviews/2026-10-22-workorder-2-p2.md)：框架配置档继续绑定原始会话或平台，
-`c2_…` / `p2_…` 内部键不支持独立绑定配置档；新内部会话的拒绝不会放宽原会话限制。
+`c2_…` / `p2_…` / `g2_…` 内部键不支持独立绑定配置档；新内部会话的拒绝不会放宽原会话限制。
 [启动时机补修](docs/reviews/2026-10-22-workorder-2-startup.md) 将守卫安装提前到插件构造阶段，首条消息前即可保护配置入口；
 main.py 和 session_scope.py 必须配套更新。
 
@@ -119,7 +112,7 @@ main.py 和 session_scope.py 必须配套更新。
 ```powershell
 D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_repair_*.py'
 D:\dsbot\venv\Scripts\python.exe -B -m unittest discover -s plugin\astrbot_plugin_ds_balance -p test_balance.py
-node --test console/tests/repair-security.test.js console/tests/repair-state.test.js
+node --test console/tests/*.test.js
 node --check console\server.js
 node --check console\state-bridge.js
 git diff --check
@@ -194,8 +187,6 @@ git push origin dev
 ```
 
 如果凭据误入任何提交，仅删除当前文件不能清除历史；应先撤销或轮换该凭据，再清理对应历史。
-# 2026-10-28 QQ union 白名单灰度
+## 2026-10-28 Union 灰度（已退役）
 
-构建 `20261028-union-gray-1` 只在 `dsh_data/union_rollout_v1.json` 明确的、带应用与实例域的精确来源名单内启用。无策略、到期或名单不匹配时保留原用户流程；`observe` 仅写有界HMAC观察摘要，`apply` 才使用真实非空平台union进行管理聚合并停用该来源取码。该运行策略及比较键是私有资料，不入Git；不改变模型scope、权限、积分或发送Target。真实平台未返回可靠同union时不得启用apply。
-
-验证：`python -m unittest discover -s tests -p "test_union_*.py" -v`；`node --test console/tests/repair-union-*.test.js`。这些只验证合成路径，不能代替指定QQ账号的实际字段与客户端验收。上线、单次受控重启授权及真实结果见 `docs/reviews/2026-10-28-qq-union-gray.md`，不据本文自动发布或重启。
+2026-10-29已移除灰度策略实现，旧策略文件不能重新启用人物聚合。既有真实字段与单次启停记录保留在[历史记录](docs/reviews/2026-10-28-qq-union-gray.md)。本轮不复用已消耗的单次窗口，不修改运行目录权限。

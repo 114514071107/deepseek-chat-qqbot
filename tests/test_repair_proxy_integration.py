@@ -143,7 +143,7 @@ async def framework_case():
         scope=scoped._scope(current);scoped.h[scope.key]=[{'role':'user','text':'ONLY-SCOPE-'+str(index),
             'source':dict(scope.source(),message_id='previous-'+str(index))}]
         events.append(current)
-    scope_ns['_read_notes']=lambda key:['PRIVATE-MEMORY-SENTINEL']
+    scope_ns['_read_notes']=lambda key:['PRIVATE-MEMORY-SENTINEL'] if key.startswith('p2_') else ['GROUP-MEMORY-SENTINEL']
     for index,current in enumerate(events):
         req=ProviderRequest(prompt='new question',contexts=[{'role':'user','content':'LEGACY-GROUP-SENTINEL'}])
         await metadata.handler(scoped,current,req)
@@ -152,13 +152,18 @@ async def framework_case():
         assert 'LEGACY-GROUP-SENTINEL' not in wire
         assert ('PRIVATE-MEMORY-SENTINEL' in wire)==(index==3)
         assert 'ONLY-SCOPE-'+str(index) in wire
-        assert all('ONLY-SCOPE-'+str(other) not in wire for other in range(5) if other!=index)
-    assert len({default_workspace_root(e.unified_msg_origin) for e in events})==5
+        allowed={0,1} if index in (0,1) else {index}
+        assert all(('ONLY-SCOPE-'+str(other) in wire)==(other in allowed) for other in range(5))
+        assert ('GROUP-MEMORY-SENTINEL' in wire)==(index!=3)
+    assert len({default_workspace_root(e.unified_msg_origin) for e in events})==4
     locks=SessionLockManager()
     async with locks.acquire_lock(events[0].unified_msg_origin):
         async def other_sender():
             async with locks.acquire_lock(events[1].unified_msg_origin): return True
-        assert await asyncio.wait_for(other_sender(),0.2)
+        task=asyncio.create_task(other_sender())
+        await asyncio.sleep(.02)
+        assert not task.done(), 'same-group sender bypassed shared session lock'
+    assert await asyncio.wait_for(task,.2)
     # The framework's passive first bubble also awaits outside plugin _send.
     # Disabling reply must cancel the borrowed event task before event.send.
     from astrbot.core.pipeline.respond.stage import RespondStage

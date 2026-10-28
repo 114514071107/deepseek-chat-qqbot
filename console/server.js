@@ -19,13 +19,18 @@ const MASTER = options.master || "YOUR_MASTER_OPENID";
 // ============================================================
 const DATA = path.join(DSH, "dsh_data");
 const workbench = createUserWorkbench(DATA);
-const applyState = createStateBridge(DATA, options.bridgeTimeout ?? 5000);
+const stateBridge = createStateBridge(DATA, options.bridgeTimeout ?? 5000);
+const applyState = (operation,body) => {
+ if(['preview','delete','name','user','thought/del'].includes(operation)&&!workbench.objects().some(p=>p.id===body.uid))
+   return Promise.resolve({ok:false,error:'请选择私聊用户或整个群聊，旧成员/人物入口不可操作'});
+ return stateBridge(operation,body);
+};
 const RUN_LOG = path.join(DSH, "astrbot-run.log");
 const ERR_LOG = path.join(DATA, "dsh_err.log");
 const CMD_CONFIG = path.join(DSH, "data", "cmd_config.json");
 const VENV_PY = path.join(DSH, "venv", "Scripts", "python.exe");
 // 后端代码版本指纹：每次改 server.js 递增；前端带同名常量，不一致时提示用户重开控制台（防"新页面+旧进程"错位）
-const API_VER = "20261028-union-gray-1";
+const API_VER = "20261029-conversations-1";
 // 全局开关键（dsh_soul_conf.json）：enabled 为总开关，其余为各功能全局开关
 // 20260902-3 新增 kimi（Kimi Code 外包总闸，缺省开）
 const SWITCH_KEYS = ["enabled", "desire", "proactive", "sprinkle", "revive", "harvest", "safety", "reminders", "kimi"];
@@ -151,7 +156,6 @@ const api = {
   "GET /api/people": async q => workbench.list(q),
   "GET /api/people/history": async q => workbench.history(q),
   "GET /api/people/memory": async q => workbench.memory(q),
-  "GET /api/people/outbound": async q => workbench.outbound(q),
   "GET /api/admin/result": async q => {
     const id=q.get("id") || "";
     if (!/^[a-f0-9]{32}$/.test(id)) return {ok:false,error:"无效命令编号"};
@@ -166,11 +170,7 @@ const api = {
     const running = processState.running === true;
     const hist = histories();
     const th = thoughts();
-    const users = Object.keys(hist).map((uid) => ({
-      uid, master: uid === MASTER,
-      history: (hist[uid] || []).length,
-      thoughts: (th[uid] || []).length,
-    }));
+    const users = workbench.objects().map(p=>({uid:p.id,kind:p.kind,name:p.display_name,history:workbench.history(new URLSearchParams({person:p.id})).count,thoughts:0}));
     const cfg = readJson(CMD_CONFIG, {});
     const prov = (cfg.provider || []).find((p) => p.id === "deepseek") || {};
     const ps = cfg.provider_settings || {};
@@ -206,65 +206,16 @@ const api = {
     return { file: q.get("file") === "run" ? "run" : "dsh", lines: arr };
   },
   // 聊天记录（含主动消息），新→旧
-  "GET /api/history": async (q) => {
-    const uid = q.get("uid") || MASTER;
-    const limit = Math.min(parseInt(q.get("limit") || "120", 10) || 120, 500);
-    const hist = histories();
-    const entries = (hist[uid] || []).slice(-limit).reverse();
-    return { uid, master: uid === MASTER, count: (hist[uid] || []).length, entries };
-  },
-  "GET /api/thoughts": async (q) => {
-    const uid = q.get("uid") || MASTER;
-    const th = thoughts();
-    return { uid, thoughts: (th[uid] || []).slice().reverse() };
-  },
-  "GET /api/notes": async (q) => {
-    const uid = q.get("uid") || MASTER;
-    const safe = String(uid).replace(/[^A-Za-z0-9_-]/g, "_");
-    let text = "";
-    try { text = fs.readFileSync(path.join(DATA, "memories", safe + ".md"), "utf-8"); } catch (e) { text = "（暂无长期记忆）"; }
-    return { uid, text };
-  },
-  "GET /api/memes": async (q) => {
-    let text = "";
-    try { text = fs.readFileSync(scopes()[q.get("uid")] ? path.join(DATA,"memes",String(q.get("uid"))+".md") : path.join(DATA,"memes.md"), "utf-8"); } catch (e) { text = "（梗图鉴为空）"; }
-    return { text };
-  },
-  "GET /api/session": async (q) => {
-    const uid = q.get("uid") || MASTER;
-    return { uid, session: readJson(jf(uid, "session"), {}) };
-  },
-  // 开关面板数据（conf=全局开关，friends=按用户开关原始表，users=用户列表：主人排最前）
+  "GET /api/history": async q => workbench.history(new URLSearchParams({person:q.get('uid')||'',limit:q.get('limit')||'150'})),
+  "GET /api/thoughts": async q => ({uid:q.get('uid'),thoughts:workbench.memory(new URLSearchParams({person:q.get('uid')||''})).sections[0].thoughts}),
+  "GET /api/notes": async q => ({uid:q.get('uid'),text:workbench.memory(new URLSearchParams({person:q.get('uid')||''})).sections[0].notes.map(n=>n.text).join('\n')}),
+  "GET /api/memes": async q => ({text:workbench.memory(new URLSearchParams({person:q.get('uid')||''})).sections[0].memes}),
+  "GET /api/session": async q => ({session:workbench.memory(new URLSearchParams({person:q.get('uid')||''})).sections[0].session}),
   "GET /api/switches": async () => {
-    const friends = readJson(path.join(DATA, "friends_all.json"), {});
-    for (const [key,source] of Object.entries(scopes())) {
-      const overrides=friends[key] || {}, legacy=friends[source.sender] || {};
-      friends[key]={...overrides};
-      for(const feature of USER_KEYS) friends[key][feature]=feature in overrides ? overrides[feature] : legacy[feature]===false ? false : !(source.private && feature==="proactive");
-    }
-    const hist = histories();
-    const names = readJson(path.join(DATA, "names_all.json"), {});
-    // 用户列表 = 聊天记录键 ∪ friends_all 键 ∪ {主人}，每项 {uid, name, master}，主人排最前
-    const uids = Array.from(new Set([MASTER].concat(Object.keys(hist), Object.keys(friends), Object.keys(scopes()))));
-    const users = uids
-      .map((uid) => ({ uid, name: names[uid] || (scopes()[uid] ? ((scopes()[uid].private ? "私聊" : "群 "+scopes()[uid].group)+" · "+scopes()[uid].sender+" · "+scopes()[uid].instance) : "旧档（来源未定）"), master: uid === MASTER }))
-      .sort((a, b) => (b.master ? 1 : 0) - (a.master ? 1 : 0));
-    const conf2 = readJson(path.join(DATA, "dsh_soul_conf.json"), {});
-    return {
-      conf: conf2,
-      conf_keys: SWITCH_KEYS,
-      friends,
-      user_keys: USER_KEYS,
-      users,
-      // 积分系统：points_all 全量 + 全局默认（points_daily 数值 / points_enabled 布尔，缺省 30/true）
-      points: pointsView(),
-      points_daily: typeof conf2.points_daily === "number" ? conf2.points_daily : 30,
-      points_enabled: conf2.points_enabled !== false,
-      blocked: readJson(path.join(DATA, "blocked_all.json"), []),
-      silence: {...readJson(path.join(DATA,"silence_all.json"),{}),...readJson(path.join(DATA,"silence_v2.json"),{})},
-      names,
-      master: MASTER,
-    };
+    const users=workbench.objects().map(p=>({uid:p.id,name:p.display_name,kind:p.kind,master:false}));
+    return {users,conf:readJson(path.join(DATA,'dsh_soul_conf.json'),{}),conf_keys:SWITCH_KEYS,user_keys:USER_KEYS,
+      friends:Object.fromEntries(users.map(u=>[u.uid,{...Object.fromEntries(USER_KEYS.map(k=>[k,!(u.kind==='private'&&k==='proactive')])),...(readJson(path.join(DATA,'friends_all.json'),{})[u.uid]||{})}])),points:pointsView(),names:readJson(path.join(DATA,'names_all.json'),{}),master:MASTER,
+      points_daily:readJson(path.join(DATA,'dsh_soul_conf.json'),{}).points_daily||30,points_enabled:true,blocked:[],silence:{}};
   },
   "GET /api/stickers": async () => {
     const r=await execFileP(VENV_PY,["-B",path.join(DSH,"data/plugins/astrbot_plugin_dsh_soul/gallery_query.py"),DATA,"stats"]);
@@ -279,10 +230,6 @@ const api = {
 };
 
 const post = {
-  "/api/people/link": async body => workbench.link(body),
-  "/api/people/unlink": async body => workbench.unlink(body),
-  "/api/people/deny": async body => workbench.deny(body),
-  "/api/people/confirm": async body => workbench.confirm(body),
   "/api/bot": async b => lifecycle.request("Bot", String(b.action || "")),
   "/api/console": async b => String(b.action || "") === "restart" ? lifecycle.request("Console","restart") : {ok:false,status:"failed",error:"action 须为 restart"},
 

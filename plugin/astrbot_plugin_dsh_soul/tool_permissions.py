@@ -51,8 +51,6 @@ def authorize(event, name, master, user_perm, *, owner_instance='', consume=True
     if name in OWNER_PRIVATE and not (owner and who.private):
         return DENIED
     # Legacy archive/memory has no trustworthy group provenance; F01 supplies it.
-    if name in ('record_note', 'delete_note', 'record_thought') and not who.private:
-        return DENIED
     if name in ('set_alarm', 'list_alarms', 'cancel_alarm') and not user_perm(who.sender, 'alarm'):
         return DENIED
     if name in OWNER_PRIVATE - {'retag_sticker', 'delete_sticker'} and not user_perm(who.sender, 'files'):

@@ -1,0 +1,14 @@
+test_actual_inject_and_group_extraction_never_read_or_create_member_memory (test_repair_conversation_mode.ActualModelConversation.test_actual_inject_and_group_extraction_never_read_or_create_member_memory) ... Executing <Task pending name='Task-2' coro=<ActualModelConversation.test_actual_inject_and_group_extraction_never_read_or_create_member_memory() running at D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_conversation_mode.py:106> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\tasks.py:922, Task.task_wakeup()] created at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:448> cb=[_run_until_complete_cb() at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:181] created at %USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:100> took 0.235 seconds
+ok
+test_framework_session_is_group_while_event_target_and_sender_stay_bound (test_repair_conversation_mode.ConversationMode.test_framework_session_is_group_while_event_target_and_sender_stay_bound) ... ok
+test_group_context_shares_speakers_but_not_other_group_or_private (test_repair_conversation_mode.ConversationMode.test_group_context_shares_speakers_but_not_other_group_or_private) ... ok
+test_group_delete_resolves_all_actors_and_keeps_other_conversations (test_repair_conversation_mode.ConversationMode.test_group_delete_resolves_all_actors_and_keeps_other_conversations) ... ok
+test_group_partial_memory_failure_is_not_success_and_invalid_layers_rejected (test_repair_conversation_mode.ConversationMode.test_group_partial_memory_failure_is_not_success_and_invalid_layers_rejected) ... ok
+test_member_arriving_while_delete_waits_for_state_lock_is_revoked (test_repair_conversation_mode.ConversationMode.test_member_arriving_while_delete_waits_for_state_lock_is_revoked) ... ok
+test_profiles_only_one_group_and_private_no_union_or_member_profiles (test_repair_conversation_mode.ConversationMode.test_profiles_only_one_group_and_private_no_union_or_member_profiles) ... ok
+test_new_private_note_with_same_bare_group_sender_can_be_written_without_binding (test_repair_conversation_mode.NewStorage.test_new_private_note_with_same_bare_group_sender_can_be_written_without_binding) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.837s
+
+OK

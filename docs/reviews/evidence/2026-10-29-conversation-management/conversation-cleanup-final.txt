@@ -1,0 +1,10 @@
+test_drift_and_backup_inside_root_refused_without_removing_any_file (test_repair_conversation_cleanup.Cleanup.test_drift_and_backup_inside_root_refused_without_removing_any_file) ... ok
+test_empty_legacy_material_still_initializes_ambiguous_storage_and_restores (test_repair_conversation_cleanup.Cleanup.test_empty_legacy_material_still_initializes_ambiguous_storage_and_restores) ... ok
+test_failed_restore_revokes_memory_permission_before_reintroducing_any_old_material (test_repair_conversation_cleanup.Cleanup.test_failed_restore_revokes_memory_permission_before_reintroducing_any_old_material) ... ok
+test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again (test_repair_conversation_cleanup.Cleanup.test_new_private_memory_after_cleaning_ambiguous_key_is_never_cleaned_again) ... ok
+test_plan_backup_quarantine_idempotence_and_private_chat_preservation (test_repair_conversation_cleanup.Cleanup.test_plan_backup_quarantine_idempotence_and_private_chat_preservation) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.283s
+
+OK

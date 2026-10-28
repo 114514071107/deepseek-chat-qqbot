@@ -1,0 +1,34 @@
+test_rekey_preserves_live_framework_session_policies (test_repair_p2_acceptance.FrameworkAcceptance.test_rekey_preserves_live_framework_session_policies) ... FAIL
+
+======================================================================
+FAIL: test_rekey_preserves_live_framework_session_policies (test_repair_p2_acceptance.FrameworkAcceptance.test_rekey_preserves_live_framework_session_policies)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_p2_acceptance.py", line 82, in test_rekey_preserves_live_framework_session_policies
+    def test_rekey_preserves_live_framework_session_policies(self):self.isolated('--policy-case')
+                                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_p2_acceptance.py", line 79, in isolated
+    self.assertEqual(result.returncode,0,result.stdout[-6500:])
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_p2_acceptance.py", line 328, in <module>
+    elif '--policy-case' in sys.argv:asyncio.run(policy_case())
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "%USERPROFILE%\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\DSH Workspace\deepseek-chat-qqbot\tests\test_repair_p2_acceptance.py", line 203, in policy_case
+    assert not await Services.should_process_llm_request(restricted),'same-group later actor reopened earlier actor policy'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: same-group later actor reopened earlier actor policy
+
+
+----------------------------------------------------------------------
+Ran 1 test in 5.716s
+
+FAILED (failures=1)

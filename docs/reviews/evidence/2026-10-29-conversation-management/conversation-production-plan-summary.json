@@ -1,0 +1,17 @@
+{
+  "private_keys": 3,
+  "group_keys": 3,
+  "ambiguous_keys": 0,
+  "raw_chat_action_count": 0,
+  "planned_actions": 15,
+  "reasons": {
+    "retired_identity_or_unscoped_shared_material": 4,
+    "mixed_or_unattributed": 1,
+    "retired_actor_or_unattributed_summary": 8,
+    "remove_retired_actor_thought_index": 2
+  },
+  "apply_executed": false,
+  "at": 1793211988.1217802,
+  "before_selected_chat_files": 3,
+  "selected_chat_hashes_still_equal": 3
+}

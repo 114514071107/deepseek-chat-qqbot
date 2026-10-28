@@ -180,6 +180,7 @@ def managed(fn):
                 if name=='gate':
                     instance=self.runtime.token()
                     self.runtime.borrow(instance)
+                    await self.runtime.ready(scope.conversation_key)
                     await self.runtime.ready(scope.key)
                     self.runtime.check(instance)
                 token=event.get_extra('_dsh_work')
