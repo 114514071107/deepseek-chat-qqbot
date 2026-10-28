@@ -1,0 +1,33 @@
+{
+  "at": 1793219543.605,
+  "account_verified_in_native_profile": true,
+  "group_verified_in_native_group_details": true,
+  "qq_client_cases": [
+    {
+      "case": "private-retired-help",
+      "received": true
+    },
+    {
+      "case": "group-retired-help",
+      "received": true
+    },
+    {
+      "case": "C1029-P1",
+      "received": true
+    },
+    {
+      "case": "C1029-G1",
+      "received": true
+    },
+    {
+      "case": "C1029-G2",
+      "received": true
+    },
+    {
+      "case": "C1029-P2",
+      "received": true
+    }
+  ],
+  "screenshots_persisted": false,
+  "targets_redacted": true
+}

@@ -1,0 +1,132 @@
+{
+  "at": 1793219175.752575,
+  "cases": [
+    {
+      "case": "C1029-P1",
+      "private": true,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "assistant_statuses": [
+        "accepted"
+      ],
+      "receipt_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true,
+      "expected_reply_present": true
+    },
+    {
+      "case": "C1029-G1",
+      "private": false,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "assistant_statuses": [
+        "accepted"
+      ],
+      "receipt_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true,
+      "expected_reply_present": true
+    },
+    {
+      "case": "C1029-G2",
+      "private": false,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "assistant_statuses": [
+        "accepted"
+      ],
+      "receipt_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true,
+      "expected_reply_present": true
+    },
+    {
+      "case": "C1029-P2",
+      "private": true,
+      "inbound": 1,
+      "source_matches_authorized": true,
+      "request_state": "finished",
+      "assistant_rows": 1,
+      "assistant_statuses": [
+        "accepted"
+      ],
+      "receipt_statuses": [
+        "accepted"
+      ],
+      "original_target_retained": true,
+      "expected_reply_present": true
+    }
+  ],
+  "context_summaries": [
+    {
+      "private": true,
+      "summary_present": true,
+      "scope_matches": true,
+      "retained_ids": 12,
+      "retained_rows_resolved": 12,
+      "retained_source_scopes_match": true,
+      "retained_private_marker": true,
+      "retained_group_marker": false
+    },
+    {
+      "private": false,
+      "summary_present": true,
+      "scope_matches": true,
+      "retained_ids": 12,
+      "retained_rows_resolved": 12,
+      "retained_source_scopes_match": true,
+      "retained_private_marker": false,
+      "retained_group_marker": true
+    }
+  ],
+  "cohort_receipts": [
+    {
+      "private": true,
+      "since_restart": [
+        "accepted",
+        "accepted",
+        "accepted"
+      ]
+    },
+    {
+      "private": false,
+      "since_restart": [
+        "accepted",
+        "accepted",
+        "accepted"
+      ]
+    }
+  ],
+  "catalog": {
+    "total": 6,
+    "private": 3,
+    "group": 3
+  },
+  "snapshot": {
+    "at": 1793219183.138962,
+    "lease_age_seconds": 0.032,
+    "stopped": false,
+    "plugin_version": "20261029-conversations-1",
+    "bot_pid": 57620,
+    "console_pid": 55532,
+    "api_version": "20261029-conversations-1",
+    "frontend_version": "20261029-conversations-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  }
+}

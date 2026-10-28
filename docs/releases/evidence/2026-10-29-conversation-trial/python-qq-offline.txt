@@ -1,0 +1,9 @@
+test_control_correction_without_late_incidental_cue (acceptance_real_qq_20261025.IndependentAcceptance.test_control_correction_without_late_incidental_cue) ... ok
+test_control_unquoted_sticker_preamble (acceptance_real_qq_20261025.IndependentAcceptance.test_control_unquoted_sticker_preamble) ... ok
+test_correction_not_lost_to_late_incidental_cue (acceptance_real_qq_20261025.IndependentAcceptance.test_correction_not_lost_to_late_incidental_cue) ... ok
+test_explicit_sticker_only_with_ordinary_quoted_word (acceptance_real_qq_20261025.IndependentAcceptance.test_explicit_sticker_only_with_ordinary_quoted_word) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.472s
+
+OK

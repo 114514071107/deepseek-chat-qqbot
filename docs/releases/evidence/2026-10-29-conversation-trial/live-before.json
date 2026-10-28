@@ -1,0 +1,26 @@
+{
+  "files_verified": 44,
+  "snapshot": {
+    "at": 1793218242.8603442,
+    "lease_age_seconds": 0.103,
+    "stopped": false,
+    "plugin_version": "20261028-union-gray-1",
+    "bot_pid": 27228,
+    "console_pid": 23096,
+    "api_version": "20261028-union-gray-1",
+    "frontend_version": "20261028-union-gray-1",
+    "qq": {
+      "status": "ready",
+      "configured": 1,
+      "ready": 1
+    },
+    "bot_running": true,
+    "bot_state": "succeeded",
+    "bot_readiness": "ready"
+  },
+  "security": {
+    "unauth": 401,
+    "cross_origin": 403,
+    "authenticated_html_hash": true
+  }
+}

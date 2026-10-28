@@ -1,0 +1,15 @@
+{
+  "source_commit": "b25728194f1bcdf12a53dfd5ee9c9961cad5bdbf",
+  "build": "20261029-conversations-1",
+  "trial_scope": "single-instance code switch; QQ tests restricted to authorized account/private/group",
+  "python": 131,
+  "node": 25,
+  "synthetic_browser_groups": 12,
+  "real_qq_client_cases": 6,
+  "real_model_cases": 4,
+  "data_cleanup": false,
+  "product_source_modified_in_this_task": false,
+  "pushed": false,
+  "main_merged": false,
+  "final_sample_seconds_after_start": 842.7
+}

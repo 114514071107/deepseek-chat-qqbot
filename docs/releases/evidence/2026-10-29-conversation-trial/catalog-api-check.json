@@ -1,0 +1,86 @@
+[
+  {
+    "entry": 0,
+    "kind": "private",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 76
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  },
+  {
+    "entry": 1,
+    "kind": "group",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 54
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  },
+  {
+    "entry": 2,
+    "kind": "private",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 67
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  },
+  {
+    "entry": 3,
+    "kind": "private",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 150
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  },
+  {
+    "entry": 4,
+    "kind": "group",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 64
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  },
+  {
+    "entry": 5,
+    "kind": "group",
+    "history": {
+      "ok": true,
+      "sections": 0,
+      "entries": 3
+    },
+    "memory": {
+      "ok": true,
+      "sections": 1,
+      "entries": 0
+    }
+  }
+]

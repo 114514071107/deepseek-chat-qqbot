@@ -1,0 +1,7 @@
+{
+  "synthetic_only": true,
+  "rows_before": 1,
+  "delete_reported_ok": true,
+  "rows_after": 1,
+  "orphan_still_in_model_dialogue": true
+}

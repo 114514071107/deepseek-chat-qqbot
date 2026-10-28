@@ -1,0 +1,15 @@
+{
+  "synthetic_only": true,
+  "configured": {
+    "points_enabled": false,
+    "points_daily": 0,
+    "blocked_count": 1,
+    "silenced_count": 1
+  },
+  "reported": {
+    "points_enabled": true,
+    "points_daily": 30,
+    "blocked_count": 0,
+    "silenced_count": 0
+  }
+}

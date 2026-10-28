@@ -1,0 +1,13 @@
+{
+  "main_usage_delta": {
+    "calls": 4,
+    "in": 37452,
+    "out": 116,
+    "hit": 8192,
+    "miss": 29260
+  },
+  "existing_memory_material_files": 3,
+  "existing_memory_materials_unchanged": true,
+  "synthetic_markers_in_long_term_material_files": 0,
+  "billing_amount_verified": false
+}
